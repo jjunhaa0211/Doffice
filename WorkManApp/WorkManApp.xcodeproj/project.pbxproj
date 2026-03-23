@@ -19,6 +19,8 @@
 		A10010 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10010; };
 		A10011 /* GameSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10011; };
 		A10012 /* CharacterSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012; };
+		A10013 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10013; };
+		A10014 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = B10014; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +39,8 @@
 		D10001 /* WorkManApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WorkManApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E10001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E10002 /* WorkManApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WorkManApp.entitlements; sourceTree = "<group>"; };
+		B10013 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B10014 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -48,6 +52,18 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXResourcesBuildPhase section */
+		R10001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10013 /* Assets.xcassets in Resources */,
+				A10014 /* AppIcon.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXGroup section */
 		G10001 = {
@@ -83,6 +99,8 @@
 			children = (
 				E10001 /* Info.plist */,
 				E10002 /* WorkManApp.entitlements */,
+				B10013 /* Assets.xcassets */,
+				B10014 /* AppIcon.icns */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -104,6 +122,7 @@
 			buildPhases = (
 				S10001 /* Sources */,
 				F10001 /* Frameworks */,
+				R10001 /* Resources */,
 			);
 			buildRules = (
 			);

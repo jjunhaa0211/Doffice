@@ -831,7 +831,15 @@ class TerminalTab: ObservableObject, Identifiable {
     static func shellSync(_ command: String) -> String? {
         let p = Process(); let pipe = Pipe()
         p.standardOutput = pipe; p.standardError = FileHandle.nullDevice
-        p.executableURL = URL(fileURLWithPath: "/bin/zsh"); p.arguments = ["-c", command]
+        p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        p.arguments = ["-l", "-c", command]
+        // GUI 앱에서 PATH 보장
+        var env = ProcessInfo.processInfo.environment
+        let existing = env["PATH"] ?? "/usr/bin:/bin"
+        let extra = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/homebrew/sbin",
+                     NSHomeDirectory() + "/.local/bin", "/usr/local/opt/node/bin"]
+        env["PATH"] = (extra + [existing]).joined(separator: ":")
+        p.environment = env
         do { try p.run(); p.waitUntilExit()
             let d = pipe.fileHandleForReading.readDataToEndOfFile()
             let o = String(data: d, encoding: .utf8); return o?.isEmpty == true ? nil : o

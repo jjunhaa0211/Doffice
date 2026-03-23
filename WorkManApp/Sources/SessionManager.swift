@@ -574,7 +574,14 @@ class SessionManager: ObservableObject {
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-c", command]
+        process.arguments = ["-l", "-c", command]
+        // GUI 앱에서 PATH 보장
+        var env = ProcessInfo.processInfo.environment
+        let existing = env["PATH"] ?? "/usr/bin:/bin"
+        let extra = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/homebrew/sbin",
+                     NSHomeDirectory() + "/.local/bin"]
+        env["PATH"] = (extra + [existing]).joined(separator: ":")
+        process.environment = env
 
         do {
             try process.run()

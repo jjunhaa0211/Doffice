@@ -18,6 +18,9 @@ struct SavedSession: Codable {
     let summaryFiles: [String]?
     let summaryDuration: TimeInterval?
     let summaryTokens: Int?
+    // 강제 종료 시 복원용
+    let wasProcessing: Bool?
+    let lastPrompt: String?
 }
 
 struct SessionHistory: Codable {
@@ -36,6 +39,15 @@ class SessionStore {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("sessions.json")
     }()
+    private let ioQueue = DispatchQueue(label: "workman.session-store", qos: .utility)
+    private let stateLock = NSLock()
+    private var cachedHistory = SessionHistory()
+    private var hasLoadedCache = false
+    private var saveWorkItem: DispatchWorkItem?
+
+    var sessionCount: Int {
+        snapshot().sessions.count
+    }
 
     func save(tabs: [TerminalTab]) {
         let saved = tabs.map { tab in
@@ -51,34 +63,28 @@ class SessionStore {
                 initialPrompt: tab.initialPrompt,
                 summaryFiles: tab.summary?.filesModified,
                 summaryDuration: tab.summary?.duration,
-                summaryTokens: tab.summary?.tokenCount
+                summaryTokens: tab.summary?.tokenCount,
+                wasProcessing: tab.isProcessing,
+                lastPrompt: tab.lastPromptText
             )
         }
 
         let history = SessionHistory(sessions: saved, lastSaved: Date())
+        updateCache(history, postNotification: true)
+        scheduleWrite(history)
+    }
 
-        do {
-            let data = try JSONEncoder().encode(history)
-            try data.write(to: fileURL, options: .atomicWrite)
-        } catch {
-            print("[WorkMan] Failed to save sessions: \(error)")
-        }
+    func snapshot() -> SessionHistory {
+        loadHistory()
     }
 
     func load() -> [SavedSession] {
-        guard let data = try? Data(contentsOf: fileURL),
-              let history = try? JSONDecoder().decode(SessionHistory.self, from: data) else {
-            return []
-        }
-        return history.sessions
+        snapshot().sessions
     }
 
     func loadLastSaved() -> Date? {
-        guard let data = try? Data(contentsOf: fileURL),
-              let history = try? JSONDecoder().decode(SessionHistory.self, from: data) else {
-            return nil
-        }
-        return history.lastSaved
+        let history = snapshot()
+        return history.sessions.isEmpty ? nil : history.lastSaved
     }
 
     private func colorToHex(_ color: Color) -> String {
@@ -88,5 +94,58 @@ class SessionStore {
         let g = Int(nsColor.greenComponent * 255)
         let b = Int(nsColor.blueComponent * 255)
         return String(format: "%02x%02x%02x", r, g, b)
+    }
+
+    private func loadHistory() -> SessionHistory {
+        stateLock.lock()
+        if hasLoadedCache {
+            let history = cachedHistory
+            stateLock.unlock()
+            return history
+        }
+        stateLock.unlock()
+
+        let loadedHistory: SessionHistory
+        if let data = try? Data(contentsOf: fileURL),
+           let decoded = try? JSONDecoder().decode(SessionHistory.self, from: data) {
+            loadedHistory = decoded
+        } else {
+            loadedHistory = SessionHistory()
+        }
+
+        stateLock.lock()
+        cachedHistory = loadedHistory
+        hasLoadedCache = true
+        let history = cachedHistory
+        stateLock.unlock()
+        return history
+    }
+
+    private func updateCache(_ history: SessionHistory, postNotification: Bool) {
+        stateLock.lock()
+        cachedHistory = history
+        hasLoadedCache = true
+        stateLock.unlock()
+
+        guard postNotification else { return }
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .workmanSessionStoreDidChange, object: nil)
+        }
+    }
+
+    private func scheduleWrite(_ history: SessionHistory) {
+        saveWorkItem?.cancel()
+        let snapshot = history
+        let destination = fileURL
+        let workItem = DispatchWorkItem {
+            do {
+                let data = try JSONEncoder().encode(snapshot)
+                try data.write(to: destination, options: .atomicWrite)
+            } catch {
+                print("[WorkMan] Failed to save sessions: \(error)")
+            }
+        }
+        saveWorkItem = workItem
+        ioQueue.asyncAfter(deadline: .now() + 0.75, execute: workItem)
     }
 }

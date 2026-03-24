@@ -1,0 +1,450 @@
+import SwiftUI
+
+// ═══════════════════════════════════════════════════════
+// MARK: - Office Scene View (메인 씬 뷰)
+// ═══════════════════════════════════════════════════════
+
+struct OfficeSceneView: View {
+    @EnvironmentObject var manager: SessionManager
+    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var registry = CharacterRegistry.shared
+    @ObservedObject private var store: OfficeSceneStore
+    @ObservedObject private var controller: OfficeCharacterController
+    @State private var selectedFurnitureId: String?
+    @State private var draggingAnchorId: String?
+    @State private var dragFurnitureOffset = TileCoord(col: 0, row: 0)
+
+    private let map: OfficeMap
+    let timer = Timer.publish(every: 1.0 / OfficeConstants.fps, on: .main, in: .common).autoconnect()
+    let chromeTimer = Timer.publish(every: 5.0, on: .main, in: .common).autoconnect()
+
+    init(store: OfficeSceneStore = .shared) {
+        self._store = ObservedObject(wrappedValue: store)
+        self._controller = ObservedObject(wrappedValue: store.controller)
+        self.map = store.map
+    }
+
+    private var sceneTheme: BackgroundTheme {
+        resolvedOfficeSceneTheme(settings)
+    }
+
+    private var scenePalette: OfficeScenePalette {
+        OfficeScenePalette(theme: sceneTheme, dark: settings.isDarkMode)
+    }
+
+    private var isFocusMode: Bool {
+        settings.officeViewMode == "side"
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .topLeading) {
+                Canvas { context, size in
+                    let metrics = sceneMetrics(for: size)
+                    var renderer = OfficeSpriteRenderer(
+                        map: map,
+                        characters: controller.characters,
+                        tabs: manager.userVisibleTabs,
+                        frame: store.frame,
+                        dark: settings.isDarkMode,
+                        theme: sceneTheme,
+                        selectedTabId: manager.activeTabId,
+                        selectedFurnitureId: selectedFurnitureId
+                    )
+                    renderer.chromeScreenshots = store.chromeScreenshots
+                    if let background = store.backgroundSnapshot {
+                        var bgContext = context
+                        bgContext.translateBy(x: metrics.offsetX, y: metrics.offsetY)
+                        bgContext.scaleBy(x: metrics.scale, y: metrics.scale)
+                        bgContext.draw(
+                            Image(decorative: background, scale: 1),
+                            in: CGRect(
+                                x: 0,
+                                y: 0,
+                                width: CGFloat(map.cols) * OfficeConstants.tileSize,
+                                height: CGFloat(map.rows) * OfficeConstants.tileSize
+                            )
+                        )
+                        renderer.renderDynamicLayers(
+                            context: context,
+                            scale: metrics.scale,
+                            offsetX: metrics.offsetX,
+                            offsetY: metrics.offsetY
+                        )
+                    } else {
+                        renderer.render(
+                            context: context,
+                            scale: metrics.scale,
+                            offsetX: metrics.offsetX,
+                            offsetY: metrics.offsetY
+                        )
+                    }
+                }
+                .background(Color(hex: scenePalette.backdropBottom))
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            handleDragChanged(value, size: geometry.size)
+                        }
+                        .onEnded { value in
+                            handleDragEnded(value, size: geometry.size)
+                        }
+                )
+
+                if let activeTab = manager.activeTab {
+                    selectionPanel(tab: activeTab)
+                        .padding(14)
+                }
+
+                if let boss = registry.activeBossCharacter {
+                    bossTicker(character: boss)
+                        .padding(.top, 14)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                }
+
+                if settings.isEditMode {
+                    editPanel
+                        .padding(14)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                }
+            }
+        }
+        .background(Color(hex: scenePalette.backdropBottom))
+        .clipped()
+        .task(id: "\(sceneTheme.rawValue)-\(settings.isDarkMode)-\(store.currentPreset.rawValue)") {
+            await MainActor.run {
+                store.prepareBackgroundSnapshot(theme: sceneTheme, dark: settings.isDarkMode)
+            }
+        }
+        .onReceive(timer) { _ in
+            store.advance(with: manager.userVisibleTabs, activeTabId: manager.activeTab?.id, focusMode: isFocusMode)
+        }
+        .onReceive(chromeTimer) { _ in
+            Task { @MainActor in
+                store.prepareBackgroundSnapshot(theme: sceneTheme, dark: settings.isDarkMode)
+                await store.refreshChromeScreenshots(for: manager.userVisibleTabs, activeTabId: manager.activeTab?.id)
+            }
+        }
+        .onChange(of: settings.isEditMode) { _, isEditMode in
+            if !isEditMode {
+                draggingAnchorId = nil
+                selectedFurnitureId = nil
+            }
+        }
+        .onChange(of: settings.officePreset) { _, newValue in
+            guard let preset = OfficePreset(rawValue: newValue),
+                  preset != store.currentPreset else { return }
+            store.applyPreset(preset, with: manager.userVisibleTabs)
+            selectedFurnitureId = nil
+            draggingAnchorId = nil
+        }
+    }
+
+    // MARK: - Overlay Panels
+
+    private func selectionPanel(tab: TerminalTab) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(tab.workerColor)
+                    .frame(width: 10, height: 10)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(tab.workerName)
+                        .font(Theme.mono(11, weight: .bold))
+                        .foregroundColor(Theme.textPrimary)
+                    Text(tab.projectName)
+                        .font(Theme.mono(9))
+                        .foregroundColor(Theme.textDim)
+                }
+                Text(tab.workerJob.displayName)
+                    .font(Theme.mono(8, weight: .bold))
+                    .foregroundColor(roleTint(for: tab.workerJob))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(roleTint(for: tab.workerJob).opacity(0.12))
+                    )
+                Spacer()
+                if let badge = tab.officeLatestToolBadge {
+                    Text(badge.label)
+                        .font(Theme.mono(8, weight: .bold))
+                        .foregroundColor(badge.tint)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(badge.tint.opacity(0.12))
+                        )
+                }
+            }
+
+            HStack(spacing: 12) {
+                infoStat(title: "상태", value: tab.officeSelectionSubtitle, tint: tab.officeActivityTint)
+                infoStat(title: "토큰", value: tab.officeCompactTokenText, tint: Theme.accent)
+                infoStat(title: "파일", value: "\(tab.fileChanges.count)", tint: Theme.green)
+            }
+
+            if let parallelSummary = tab.officeParallelSummary {
+                HStack(spacing: 6) {
+                    Image(systemName: "point.3.connected.trianglepath.dotted")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Theme.purple)
+                    Text(parallelSummary)
+                        .font(Theme.mono(8, weight: .bold))
+                        .foregroundColor(Theme.purple)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(Theme.purple.opacity(0.1))
+                )
+            }
+
+            if !tab.officeRecentFileNames.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("최근 변경")
+                        .font(Theme.mono(8, weight: .bold))
+                        .foregroundColor(Theme.textDim)
+                    ForEach(tab.officeRecentFileNames, id: \.self) { name in
+                        Text("• \(name)")
+                            .font(Theme.mono(9))
+                            .foregroundColor(Theme.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+
+            if let pendingApproval = tab.pendingApproval {
+                Text("승인 대기: \(pendingApproval.command)")
+                    .font(Theme.mono(8))
+                    .foregroundColor(Theme.yellow)
+                    .lineLimit(2)
+            }
+        }
+        .padding(12)
+        .frame(width: 250, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Theme.bgCard.opacity(0.92))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(tab.workerColor.opacity(0.26), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(settings.isDarkMode ? 0.22 : 0.10), radius: 12, y: 6)
+    }
+
+    private func bossTicker(character: WorkerCharacter) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "crown.fill")
+                .font(.system(size: 11))
+                .foregroundColor(Theme.orange)
+            Text("\(character.name) 사장: \(registry.bossLine(frame: store.frame))")
+                .font(Theme.mono(9, weight: .bold))
+                .foregroundColor(Theme.textPrimary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            Capsule()
+                .fill(Theme.bgCard.opacity(0.94))
+                .overlay(
+                    Capsule()
+                        .stroke(Theme.orange.opacity(0.3), lineWidth: 1)
+                )
+        )
+        .shadow(color: Color.black.opacity(settings.isDarkMode ? 0.18 : 0.08), radius: 10, y: 4)
+    }
+
+    private var editPanel: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            Text("LAYOUT EDIT")
+                .font(Theme.mono(9, weight: .bold))
+                .foregroundColor(Theme.textDim)
+
+            if let selectedFurnitureId,
+               let furniture = map.furniture.first(where: { $0.id == selectedFurnitureId }) {
+                Text(furniture.type.rawValue.uppercased())
+                    .font(Theme.mono(9, weight: .bold))
+                    .foregroundColor(Theme.yellow)
+            } else {
+                Text("가구를 눌러 이동")
+                    .font(Theme.mono(9))
+                    .foregroundColor(Theme.textSecondary)
+            }
+
+            HStack(spacing: 6) {
+                Button("저장") {
+                    store.saveCurrentLayout()
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Theme.accent.opacity(0.16)))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.accent.opacity(0.36), lineWidth: 1))
+
+                Button("초기화") {
+                    store.resetCurrentLayout(with: manager.userVisibleTabs)
+                    selectedFurnitureId = nil
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Theme.bgCard.opacity(0.9)))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.border.opacity(0.7), lineWidth: 1))
+
+                Button("완료") {
+                    settings.isEditMode = false
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Theme.yellow.opacity(0.14)))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.yellow.opacity(0.34), lineWidth: 1))
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Theme.bgCard.opacity(0.92))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Theme.border.opacity(0.8), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(settings.isDarkMode ? 0.18 : 0.08), radius: 10, y: 4)
+    }
+
+    private func infoStat(title: String, value: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(Theme.mono(7, weight: .bold))
+                .foregroundColor(Theme.textDim)
+            Text(value)
+                .font(Theme.mono(9, weight: .bold))
+                .foregroundColor(tint)
+                .lineLimit(1)
+        }
+    }
+
+    private func roleTint(for role: WorkerJob) -> Color {
+        switch role {
+        case .developer: return Theme.accent
+        case .qa: return Theme.green
+        case .reporter: return Theme.purple
+        case .boss: return Theme.orange
+        case .planner: return Theme.cyan
+        case .reviewer: return Theme.yellow
+        case .designer: return Theme.pink
+        case .sre: return Theme.red
+        }
+    }
+
+    // MARK: - Interaction
+
+    private func handleDragChanged(_ value: DragGesture.Value, size: CGSize) {
+        let tile = tileCoord(for: value.location, size: size)
+
+        if settings.isEditMode {
+            if draggingAnchorId == nil {
+                guard let tappedFurniture = map.selectedFurniture(at: tile) else {
+                    selectedFurnitureId = nil
+                    return
+                }
+
+                let anchorId = map.movableAnchorId(for: tappedFurniture.id)
+                guard let anchor = map.furniture.first(where: { $0.id == anchorId }) else { return }
+                draggingAnchorId = anchorId
+                selectedFurnitureId = anchorId
+                dragFurnitureOffset = TileCoord(
+                    col: tile.col - anchor.position.col,
+                    row: tile.row - anchor.position.row
+                )
+                return
+            }
+
+            guard let draggingAnchorId else { return }
+            let newOrigin = TileCoord(
+                col: tile.col - dragFurnitureOffset.col,
+                row: tile.row - dragFurnitureOffset.row
+            )
+            if map.placeFurnitureGroup(anchorId: draggingAnchorId, at: newOrigin) {
+                store.refreshLayout(with: manager.userVisibleTabs)
+            }
+            return
+        }
+
+        draggingAnchorId = nil
+    }
+
+    private func handleDragEnded(_ value: DragGesture.Value, size: CGSize) {
+        defer {
+            draggingAnchorId = nil
+        }
+
+        if settings.isEditMode {
+            if selectedFurnitureId != nil {
+                store.saveCurrentLayout()
+                store.refreshLayout(with: manager.userVisibleTabs)
+            }
+            return
+        }
+
+        let movement = hypot(value.translation.width, value.translation.height)
+        guard movement < 8 else { return }
+
+        let scenePoint = scenePoint(for: value.location, size: size)
+        guard let tabId = hitTestCharacter(at: scenePoint) else { return }
+        manager.selectTab(tabId)
+        selectedFurnitureId = nil
+    }
+
+    private func hitTestCharacter(at point: CGPoint) -> String? {
+        charactersSortedByDistance(from: point)
+            .first(where: { $0.distance < 12 })?
+            .id
+    }
+
+    private func charactersSortedByDistance(from point: CGPoint) -> [(id: String, distance: CGFloat)] {
+        controller.characters.map { id, character in
+            let distance = hypot(character.pixelX - point.x, character.pixelY - point.y)
+            return (id: id, distance: distance)
+        }
+        .sorted { $0.distance < $1.distance }
+    }
+
+    // MARK: - Scene Coordinates
+
+    private func sceneMetrics(for size: CGSize) -> (scale: CGFloat, offsetX: CGFloat, offsetY: CGFloat) {
+        let worldWidth = CGFloat(map.cols) * OfficeConstants.tileSize
+        let worldHeight = CGFloat(map.rows) * OfficeConstants.tileSize
+        let overviewScale = min(size.width / worldWidth, size.height / worldHeight)
+        let scale = isFocusMode ? min(max(overviewScale * store.cameraZoom, overviewScale), overviewScale * 2.2) : overviewScale
+
+        let rawOffsetX = size.width / 2 - store.cameraCenter.x * scale
+        let rawOffsetY = size.height / 2 - store.cameraCenter.y * scale
+        let minOffsetX = min(0, size.width - worldWidth * scale)
+        let minOffsetY = min(0, size.height - worldHeight * scale)
+        let offsetX = worldWidth * scale < size.width ? (size.width - worldWidth * scale) / 2 : min(0, max(minOffsetX, rawOffsetX))
+        let offsetY = worldHeight * scale < size.height ? (size.height - worldHeight * scale) / 2 : min(0, max(minOffsetY, rawOffsetY))
+        return (scale, offsetX, offsetY)
+    }
+
+    private func scenePoint(for location: CGPoint, size: CGSize) -> CGPoint {
+        let metrics = sceneMetrics(for: size)
+        let x = (location.x - metrics.offsetX) / metrics.scale
+        let y = (location.y - metrics.offsetY) / metrics.scale
+        return CGPoint(x: x, y: y)
+    }
+
+    private func tileCoord(for location: CGPoint, size: CGSize) -> TileCoord {
+        let point = scenePoint(for: location, size: size)
+        let col = min(max(Int(point.x / OfficeConstants.tileSize), 0), map.cols - 1)
+        let row = min(max(Int(point.y / OfficeConstants.tileSize), 0), map.rows - 1)
+        return TileCoord(col: col, row: row)
+    }
+}

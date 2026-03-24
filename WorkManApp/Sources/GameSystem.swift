@@ -227,6 +227,9 @@ class AchievementManager: ObservableObject {
     @Published var nightDays: Set<String> = []   // 심야 작업한 날
 
     private let saveKey = "WorkManAchievements"
+    private var saveDebounceWork: DispatchWorkItem?
+    private var toastQueue: [Achievement] = []
+    private var toastDismissWork: DispatchWorkItem?
     private let dayFormatter: DateFormatter = {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f
     }()
@@ -240,17 +243,22 @@ class AchievementManager: ObservableObject {
         guard let idx = achievements.firstIndex(where: { $0.id == id && !$0.unlocked }) else { return }
         achievements[idx].unlocked = true
         achievements[idx].unlockedAt = Date()
-        recentUnlock = achievements[idx]
-        addXP(achievements[idx].xpReward)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
-            if self?.recentUnlock?.id == id { self?.recentUnlock = nil }
-        }
+        let unlockedAchievement = achievements[idx]
+        enqueueRecentUnlock(unlockedAchievement)
+        addXP(unlockedAchievement.xpReward)
         NSSound(named: "Hero")?.play()
         saveState()
 
         // 완벽주의자 체크: 전설 등급 외 모든 업적 달성 시
         let nonLegendary = achievements.filter { $0.rarity != .legendary }
         if nonLegendary.allSatisfy({ $0.unlocked }) { unlock("perfectionist") }
+    }
+
+    func dismissRecentUnlock() {
+        toastDismissWork?.cancel()
+        toastDismissWork = nil
+        recentUnlock = nil
+        showNextRecentUnlockIfNeeded()
     }
 
     func addXP(_ amount: Int) {
@@ -479,6 +487,16 @@ class AchievementManager: ObservableObject {
     }
 
     private func saveState() {
+        // 디바운스: 연속 호출 시 마지막 호출만 실행 (2초 후)
+        saveDebounceWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.saveStateNow()
+        }
+        saveDebounceWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: work)
+    }
+
+    private func saveStateNow() {
         let data: [String: Any] = [
             "totalXP": totalXP,
             "commandCount": commandCount,
@@ -521,6 +539,33 @@ class AchievementManager: ObservableObject {
             }
         }
     }
+
+    private func enqueueRecentUnlock(_ achievement: Achievement) {
+        toastQueue.append(achievement)
+        showNextRecentUnlockIfNeeded()
+    }
+
+    private func showNextRecentUnlockIfNeeded() {
+        guard recentUnlock == nil, !toastQueue.isEmpty else { return }
+        let nextAchievement = toastQueue.removeFirst()
+        recentUnlock = nextAchievement
+        scheduleRecentUnlockDismiss(for: nextAchievement.id)
+    }
+
+    private func scheduleRecentUnlockDismiss(for id: String) {
+        toastDismissWork?.cancel()
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.recentUnlock?.id == id else { return }
+            self.recentUnlock = nil
+            self.toastDismissWork = nil
+            self.showNextRecentUnlockIfNeeded()
+        }
+
+        toastDismissWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: work)
+    }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -529,100 +574,58 @@ class AchievementManager: ObservableObject {
 
 struct AchievementToastView: View {
     let achievement: Achievement
-    @State private var shimmerOffset: CGFloat = -200
-    @State private var iconScale: CGFloat = 0.3
-    @State private var xpVisible = false
+    let onDismiss: () -> Void
+    @State private var isVisible = false
 
     var body: some View {
-        HStack(spacing: 14) {
-            // 아이콘 + 이중 글로우
-            ZStack {
-                // 외곽 글로우 링
-                Circle()
-                    .stroke(achievement.rarity.color.opacity(0.3), lineWidth: 2)
-                    .frame(width: 52, height: 52)
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [achievement.rarity.color.opacity(0.25), achievement.rarity.color.opacity(0.05), .clear],
-                            center: .center, startRadius: 0, endRadius: 28
-                        )
-                    )
-                    .frame(width: 52, height: 52)
-                Text(achievement.icon).font(.system(size: 26))
-                    .scaleEffect(iconScale)
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text("UNLOCKED")
-                        .font(Theme.mono(7, weight: .heavy))
-                        .foregroundColor(Theme.yellow)
-                        .tracking(2)
-                    rarityBadge(achievement.rarity)
+        Button(action: onDismiss) {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(achievement.rarity.color.opacity(0.16))
+                    Text(achievement.icon)
+                        .font(.system(size: 15))
                 }
-                Text(achievement.name)
-                    .font(Theme.mono(13, weight: .bold))
-                    .foregroundColor(Theme.textPrimary)
-                Text(achievement.description)
-                    .font(Theme.monoSmall)
-                    .foregroundColor(Theme.textSecondary)
-            }
-            Spacer()
+                .frame(width: 28, height: 28)
 
-            // XP 보상
-            VStack(spacing: 2) {
-                Text("+\(achievement.xpReward)")
-                    .font(Theme.mono(16, weight: .black))
-                    .foregroundColor(Theme.yellow)
-                Text("XP")
-                    .font(Theme.mono(7, weight: .bold))
-                    .foregroundColor(Theme.yellow.opacity(0.6))
-            }
-            .opacity(xpVisible ? 1 : 0)
-            .offset(y: xpVisible ? 0 : 8)
-        }
-        .padding(16)
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 14).fill(Theme.bgCard)
-                // 시머 효과
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(
-                        LinearGradient(
-                            colors: [.clear, achievement.rarity.color.opacity(0.08), .clear],
-                            startPoint: .leading, endPoint: .trailing
-                        )
-                    )
-                    .offset(x: shimmerOffset)
-                    .clipped()
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(
-                        LinearGradient(
-                            colors: [achievement.rarity.color.opacity(0.6), achievement.rarity.color.opacity(0.2), achievement.rarity.color.opacity(0.6)],
-                            startPoint: .leading, endPoint: .trailing
-                        ), lineWidth: 1.5
-                    )
-            }
-        )
-        .shadow(color: achievement.rarity.color.opacity(0.4), radius: 20, y: 5)
-        .transition(.move(edge: .top).combined(with: .opacity))
-        .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) { iconScale = 1.0 }
-            withAnimation(.easeOut(duration: 0.4).delay(0.2)) { xpVisible = true }
-            withAnimation(.easeInOut(duration: 1.2).delay(0.3)) { shimmerOffset = 400 }
-        }
-    }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(achievement.name)
+                        .font(Theme.mono(10, weight: .bold))
+                        .foregroundColor(Theme.textPrimary)
+                        .lineLimit(1)
+                    Text("도전과제 달성")
+                        .font(Theme.mono(8, weight: .medium))
+                        .foregroundColor(achievement.rarity.color)
+                }
 
-    private func rarityBadge(_ rarity: AchievementRarity) -> some View {
-        Text(rarity.rawValue)
-            .font(Theme.mono(7, weight: .heavy))
-            .foregroundColor(rarity.color)
-            .padding(.horizontal, 5).padding(.vertical, 2)
+                Spacer(minLength: 8)
+
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(Theme.textDim.opacity(0.8))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(minWidth: 180, maxWidth: 240, alignment: .leading)
             .background(
-                Capsule().fill(rarity.color.opacity(0.15))
-                    .overlay(Capsule().stroke(rarity.color.opacity(0.3), lineWidth: 0.5))
+                RoundedRectangle(cornerRadius: 13)
+                    .fill(Theme.bgCard.opacity(0.98))
             )
+            .overlay(
+                RoundedRectangle(cornerRadius: 13)
+                    .stroke(achievement.rarity.color.opacity(0.28), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.16), radius: 12, y: 6)
+        }
+        .buttonStyle(.plain)
+        .help("클릭해서 닫기")
+        .scaleEffect(isVisible ? 1 : 0.97)
+        .opacity(isVisible ? 1 : 0)
+        .onAppear {
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                isVisible = true
+            }
+        }
     }
 }
 
@@ -866,13 +869,13 @@ struct AchievementCollectionView: View {
             Spacer()
 
             Button(action: { withAnimation(.easeInOut(duration: 0.15)) { showUnlockedOnly.toggle() } }) {
-                HStack(spacing: 4) {
-                    Image(systemName: showUnlockedOnly ? "eye.fill" : "eye").font(.system(size: 9))
+                HStack(spacing: 5) {
+                    Image(systemName: showUnlockedOnly ? "eye.fill" : "eye").font(.system(size: 11))
                     Text(showUnlockedOnly ? "달성만" : "전부 보기")
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
                 }
                 .foregroundColor(showUnlockedOnly ? Theme.accent : Theme.textDim)
-                .padding(.horizontal, 10).padding(.vertical, 5)
+                .padding(.horizontal, 12).padding(.vertical, 7)
                 .background(
                     Capsule().fill(showUnlockedOnly ? Theme.accent.opacity(0.12) : Theme.bgSurface)
                         .overlay(Capsule().stroke(showUnlockedOnly ? Theme.accent.opacity(0.3) : Theme.border.opacity(0.2), lineWidth: 0.5))
@@ -886,15 +889,15 @@ struct AchievementCollectionView: View {
         let color = rarity?.color ?? Theme.yellow
 
         return Button(action: { withAnimation(.easeInOut(duration: 0.15)) { selectedRarity = rarity } }) {
-            HStack(spacing: 5) {
-                if let r = rarity { Circle().fill(r.color).frame(width: 6, height: 6) }
-                Text(label).font(.system(size: 9, weight: isSelected ? .bold : .medium, design: .monospaced))
+            HStack(spacing: 6) {
+                if let r = rarity { Circle().fill(r.color).frame(width: 7, height: 7) }
+                Text(label).font(.system(size: 11, weight: isSelected ? .bold : .medium, design: .monospaced))
                 Text("\(unlocked)/\(count)")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(isSelected ? color : Theme.textDim)
             }
             .foregroundColor(isSelected ? color : Theme.textSecondary)
-            .padding(.horizontal, 10).padding(.vertical, 6)
+            .padding(.horizontal, 12).padding(.vertical, 7)
             .background(
                 Capsule()
                     .fill(isSelected ? color.opacity(0.12) : .clear)

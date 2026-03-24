@@ -6,8 +6,10 @@ struct PixelStripView: View {
     @State private var frame: Int = 0
     @State private var dragPositions: [String: CGPoint] = [:]
     @State private var draggingId: String? = nil
+    @State private var cachedGroups: [ProjectGroup] = []
+    @State private var cachedTabSignature: String = ""
 
-    let timer = Timer.publish(every: 1.0 / 14.0, on: .main, in: .common).autoconnect()
+    let timer = Timer.publish(every: 1.0 / 8.0, on: .main, in: .common).autoconnect()
 
     // backgroundTheme, isDarkMode를 읽어야 Canvas가 변경 시 다시 그려짐
     private var bgKey: String { "\(settings.backgroundTheme)_\(settings.isDarkMode)" }
@@ -24,7 +26,16 @@ struct PixelStripView: View {
                 editModeOverlay
             }
         }
-        .onReceive(timer) { _ in frame += 1 }
+        .onReceive(timer) { _ in
+            frame += 1
+            // Rebuild groups only when tab count or active tab changes
+            let sig = "\(manager.userVisibleTabCount)|\(manager.activeTab?.id ?? "")"
+            if sig != cachedTabSignature {
+                cachedTabSignature = sig
+                cachedGroups = buildGroups()
+            }
+        }
+        .onAppear { cachedGroups = buildGroups() }
     }
 
     private var canvasBgColor: Color {
@@ -56,7 +67,7 @@ struct PixelStripView: View {
     private func buildGroups() -> [ProjectGroup] {
         var dict: [String: [TerminalTab]] = [:]
         var order: [String] = []
-        for tab in manager.tabs {
+        for tab in manager.userVisibleTabs {
             if dict[tab.projectPath] == nil { order.append(tab.projectPath) }
             dict[tab.projectPath, default: []].append(tab)
         }
@@ -79,7 +90,7 @@ struct PixelStripView: View {
 
         drawBackground(context: context, size: size, floorY: floorY)
 
-        // Floor
+        // Floor — 타일 패턴
         let theme = BackgroundTheme(rawValue: settings.backgroundTheme) ?? .auto
         let floorBase: Color
         let dotColor: Color
@@ -92,19 +103,35 @@ struct PixelStripView: View {
         }
         context.fill(Path(CGRect(x: 0, y: floorY, width: size.width, height: size.height - floorY)),
                      with: .color(floorBase))
+        // 바닥 경계선
         var floorLine = Path()
         floorLine.move(to: CGPoint(x: 0, y: floorY))
         floorLine.addLine(to: CGPoint(x: size.width, y: floorY))
         context.stroke(floorLine, with: .color(dotColor.opacity(0.5)), lineWidth: 1)
-        for gx in stride(from: CGFloat(20), to: size.width, by: 30) {
-            for gy in stride(from: floorY + 15, to: size.height, by: 15) {
-                context.fill(Path(CGRect(x: gx, y: gy, width: 1, height: 1)),
-                             with: .color(dotColor.opacity(0.3)))
+        // 타일 그리드
+        let tileSize: CGFloat = 20
+        let floorH = size.height - floorY
+        for gx in stride(from: CGFloat(0), to: size.width, by: tileSize) {
+            for gy in stride(from: floorY, to: size.height, by: tileSize) {
+                let isAlt = (Int(gx / tileSize) + Int((gy - floorY) / tileSize)) % 2 == 0
+                if isAlt {
+                    context.fill(Path(CGRect(x: gx, y: gy, width: tileSize, height: tileSize)),
+                                 with: .color(dotColor.opacity(0.08)))
+                }
             }
         }
+        // 타일 선
+        for gx in stride(from: CGFloat(0), to: size.width, by: tileSize) {
+            context.fill(Path(CGRect(x: gx, y: floorY, width: 0.5, height: floorH)),
+                         with: .color(dotColor.opacity(0.12)))
+        }
+        for gy in stride(from: floorY, to: size.height, by: tileSize) {
+            context.fill(Path(CGRect(x: 0, y: gy, width: size.width, height: 0.5)),
+                         with: .color(dotColor.opacity(0.12)))
+        }
 
-        // Groups (중앙 정렬)
-        let groups = buildGroups()
+        // Groups (중앙 정렬) - use cached groups to avoid rebuilding every frame
+        let groups = cachedGroups
         guard !groups.isEmpty else { return }
         let spacing = min(CGFloat(200), (size.width - 40) / max(1, CGFloat(groups.count)))
         let totalW = spacing * CGFloat(groups.count)
@@ -171,7 +198,7 @@ struct PixelStripView: View {
             // Layered clouds (with shadow)
             for i in 0..<7 {
                 let fi = CGFloat(i)
-                let cx = (fi * 140 + CGFloat(frame) * (0.06 + fi * 0.015) + fi * 35).truncatingRemainder(dividingBy: w + 80) - 40
+                let cx = (fi * 140 + CGFloat(frame / 2) * (0.06 + fi * 0.015) + fi * 35).truncatingRemainder(dividingBy: w + 80) - 40
                 let cy = 5 + fi * 7; let cw = 30 + fi * 5; let depth = 0.48 - fi * 0.035
                 context.fill(Path(ellipseIn: CGRect(x: cx + 1, y: cy + 2, width: cw, height: 9)), with: .color(Color(hex: "4a90d9").opacity(0.05)))
                 context.fill(Path(ellipseIn: CGRect(x: cx, y: cy, width: cw, height: 9)), with: .color(.white.opacity(depth)))
@@ -230,7 +257,7 @@ struct PixelStripView: View {
                 let fi = CGFloat(i)
                 let sx = (fi * 59 + 17).truncatingRemainder(dividingBy: w)
                 let sy = (fi * 21 + 5).truncatingRemainder(dividingBy: max(1, h * 0.7))
-                let a = 0.06 + sin(Double(frame) * 0.04 + Double(i) * 1.3) * 0.08
+                let a = 0.06 + sin(Double(frame / 2) * 0.04 + Double(i) * 1.3) * 0.08
                 if a > 0.04 { context.fill(Path(CGRect(x: sx, y: sy, width: 1, height: 1)), with: .color(.white.opacity(a))) }
             }
             // Crescent moon
@@ -256,7 +283,7 @@ struct PixelStripView: View {
             for i in 0..<25 {
                 let fi = CGFloat(i); let sx = (fi * 43 + 11).truncatingRemainder(dividingBy: w)
                 let sy = (fi * 19 + 3).truncatingRemainder(dividingBy: max(1, h - 5))
-                let a = 0.08 + sin(Double(frame) * 0.025 + Double(i) * 0.9) * 0.1
+                let a = 0.08 + sin(Double(frame / 2) * 0.025 + Double(i) * 0.9) * 0.1
                 if a > 0.05 { context.fill(Path(CGRect(x: sx, y: sy, width: 1, height: 1)), with: .color(.white.opacity(a))) }
             }
             // Moonlight beam cone
@@ -281,10 +308,10 @@ struct PixelStripView: View {
         // ── 별밤 ──
         case .starryNight:
             // Dense stars (3 layers)
-            for i in 0..<70 {
+            for i in 0..<40 {
                 let fi = CGFloat(i); let sx = (fi * 31 + 7).truncatingRemainder(dividingBy: w)
                 let sy = (fi * 17 + 2).truncatingRemainder(dividingBy: max(1, h - 3))
-                let a = 0.08 + sin(Double(frame) * 0.04 + Double(i) * 0.6) * 0.14
+                let a = 0.08 + sin(Double(frame / 2) * 0.04 + Double(i) * 0.6) * 0.14
                 let sz: CGFloat = i % 7 == 0 ? 2 : 1
                 if a > 0.04 {
                     context.fill(Path(CGRect(x: sx, y: sy, width: sz, height: sz)), with: .color(.white.opacity(a)))
@@ -311,30 +338,30 @@ struct PixelStripView: View {
             for i in 0..<30 {
                 let fi = CGFloat(i); let sx = (fi * 37 + 9).truncatingRemainder(dividingBy: w)
                 let sy = (fi * 15 + 4).truncatingRemainder(dividingBy: max(1, h - 5))
-                let a = 0.06 + sin(Double(frame) * 0.03 + Double(i)) * 0.08
+                let a = 0.06 + sin(Double(frame / 2) * 0.03 + Double(i)) * 0.08
                 if a > 0.04 { context.fill(Path(CGRect(x: sx, y: sy, width: 1, height: 1)), with: .color(.white.opacity(a))) }
             }
             // Aurora curtains (5 layers, flowing)
             let auroraColors: [Color] = [Color(hex: "30ff70"), Color(hex: "20e0a0"), Color(hex: "40a0ff"), Color(hex: "8060ff"), Color(hex: "c040ff")]
             for (ci, ac) in auroraColors.enumerated() {
                 let cfi = CGFloat(ci)
-                for x in stride(from: CGFloat(0), to: w, by: 3) {
+                for x in stride(from: CGFloat(0), to: w, by: 5) {
                     let yBase = h * (0.12 + cfi * 0.08)
                     let wave1 = sin(Double(x) * 0.015 + Double(frame) * 0.025 + Double(ci) * 1.8) * Double(h) * 0.1
                     let wave2 = sin(Double(x) * 0.008 + Double(frame) * 0.015 + Double(ci) * 0.7) * Double(h) * 0.05
                     let yy = yBase + CGFloat(wave1 + wave2)
                     let a = 0.04 + sin(Double(frame) * 0.02 + Double(x) * 0.008 + Double(ci) * 1.2) * 0.03
                     let hh: CGFloat = 4 + CGFloat(sin(Double(x) * 0.02 + Double(ci))) * 2
-                    context.fill(Path(CGRect(x: x, y: yy, width: 4, height: hh)), with: .color(ac.opacity(a)))
+                    context.fill(Path(CGRect(x: x, y: yy, width: 6, height: hh)), with: .color(ac.opacity(a)))
                 }
             }
 
         // ── 은하수 ──
         case .milkyWay:
-            for i in 0..<80 {
+            for i in 0..<45 {
                 let fi = CGFloat(i); let sx = (fi * 29 + 5).truncatingRemainder(dividingBy: w)
                 let sy = (fi * 11 + 1).truncatingRemainder(dividingBy: max(1, h - 2))
-                let a = 0.07 + sin(Double(frame) * 0.035 + Double(i) * 0.5) * 0.1
+                let a = 0.07 + sin(Double(frame / 2) * 0.035 + Double(i) * 0.5) * 0.1
                 let sz: CGFloat = i % 8 == 0 ? 2 : 1
                 if a > 0.03 { context.fill(Path(CGRect(x: sx, y: sy, width: sz, height: sz)), with: .color(.white.opacity(a))) }
             }
@@ -669,7 +696,7 @@ struct PixelStripView: View {
                 let fi = CGFloat(i)
                 let sx = (fi * 41 + 17).truncatingRemainder(dividingBy: size.width)
                 let sy = (fi * 29 + 5).truncatingRemainder(dividingBy: max(1, floorY - 8))
-                let alpha = 0.1 + sin(Double(frame) * 0.03 + Double(i) * 0.9) * 0.15
+                let alpha = 0.1 + sin(Double(frame / 2) * 0.03 + Double(i) * 0.9) * 0.15
                 if alpha > 0.08 {
                     context.fill(Path(CGRect(x: sx, y: sy, width: 1, height: 1)),
                                  with: .color(.white.opacity(alpha)))
@@ -678,7 +705,7 @@ struct PixelStripView: View {
         } else {
             for i in 0..<6 {
                 let fi = CGFloat(i)
-                let cx = (fi * 137 + CGFloat(frame) * 0.15 + 30).truncatingRemainder(dividingBy: size.width + 60) - 30
+                let cx = (fi * 137 + CGFloat(frame / 2) * 0.15 + 30).truncatingRemainder(dividingBy: size.width + 60) - 30
                 let cy = (fi * 23 + 8).truncatingRemainder(dividingBy: max(1, floorY - 20))
                 let w = 20 + fi * 5
                 context.fill(Path(ellipseIn: CGRect(x: cx, y: cy, width: w, height: 8)),
@@ -702,17 +729,46 @@ struct PixelStripView: View {
         let deskColor = dark
             ? (isActive ? Color(hex: "2a3040") : Color(hex: "1e2430"))
             : (isActive ? Color(hex: "a8b0c0") : Color(hex: "bcc4d0"))
-        context.fill(Path(CGRect(x: deskX, y: dy, width: deskW, height: 5)), with: .color(deskColor))
         let legColor = dark ? Color(hex: "181c28") : Color(hex: "9aa0b0")
+
+        // 의자 (책상 앞)
+        let chairX = x + 33 - 8
+        let chairY = floorY + 2
+        let chairColor = dark ? Color(hex: "1a2030") : Color(hex: "a0a8b8")
+        // 좌석
+        context.fill(Path(CGRect(x: chairX, y: chairY, width: 16, height: 4)), with: .color(chairColor))
+        // 등받이
+        context.fill(Path(CGRect(x: chairX + 2, y: chairY + 4, width: 12, height: 10)), with: .color(chairColor.opacity(0.7)))
+        // 다리
+        context.fill(Path(CGRect(x: chairX + 3, y: chairY + 14, width: 2, height: 4)), with: .color(legColor))
+        context.fill(Path(CGRect(x: chairX + 11, y: chairY + 14, width: 2, height: 4)), with: .color(legColor))
+
+        // 책상 상판
+        context.fill(Path(CGRect(x: deskX, y: dy, width: deskW, height: 5)), with: .color(deskColor))
+        // 책상 다리
         context.fill(Path(CGRect(x: deskX + 4, y: dy + 5, width: 3, height: 10)), with: .color(legColor))
         context.fill(Path(CGRect(x: deskX + deskW - 7, y: dy + 5, width: 3, height: 10)), with: .color(legColor))
+        // 책상 위 키보드
+        let kbX = x + 33 - 10
+        context.fill(Path(CGRect(x: kbX, y: dy - 2, width: 20, height: 3)), with: .color(dark ? Color(hex: "1a1e28") : Color(hex: "8890a0")))
+        // 키보드 키 디테일
+        for ki in 0..<4 {
+            context.fill(Path(CGRect(x: kbX + 2 + CGFloat(ki) * 5, y: dy - 1, width: 3, height: 1)),
+                         with: .color(dark ? Color(hex: "252a38") : Color(hex: "a0a8b8")))
+        }
 
+        // 모니터
         let monX = x + 33 - 21
-        context.fill(Path(CGRect(x: monX, y: dy - 26, width: 42, height: 24)),
+        context.fill(Path(CGRect(x: monX, y: dy - 28, width: 42, height: 26)),
                      with: .color(dark ? Color(hex: "0a0d14") : Color(hex: "3a3e4a")))
+        // 모니터 프레임 하이라이트 (상단)
+        context.fill(Path(CGRect(x: monX, y: dy - 28, width: 42, height: 1)),
+                     with: .color(dark ? Color(hex: "2a3040") : Color(hex: "5a6070")))
+        // 모니터 스탠드
         context.fill(Path(CGRect(x: x + 29, y: dy - 2, width: 8, height: 2)),
-                     with: .color(dark ? deskColor : Color(hex: "5a5e6a")))
+                     with: .color(dark ? Color(hex: "161a24") : Color(hex: "5a5e6a")))
 
+        // 화면 내용
         let screenColor: Color
         let act = group.primaryActivity
         switch act {
@@ -725,22 +781,29 @@ struct PixelStripView: View {
         case .done: screenColor = Theme.green.opacity(0.5)
         default: screenColor = group.isAnyRunning ? Theme.accent.opacity(dark ? 0.12 : 0.25) : (dark ? Color(hex: "141820") : Color(hex: "4a5060"))
         }
-        context.fill(Path(CGRect(x: monX + 2, y: dy - 24, width: 38, height: 20)), with: .color(screenColor))
+        context.fill(Path(CGRect(x: monX + 2, y: dy - 26, width: 38, height: 22)), with: .color(screenColor))
 
+        // 화면 코드 라인 애니메이션
         if group.isAnyRunning {
             let lc = dark ? screenColor.opacity(2) : Color.white.opacity(0.4)
-            for l in 0..<4 {
+            for l in 0..<5 {
+                let indent = CGFloat((l * 3 + frame / 6) % 4) * 3
                 let w = CGFloat(5 + (frame / 4 + l * 7) % 22)
-                context.fill(Path(CGRect(x: monX + 5, y: dy - 21 + CGFloat(l) * 4.5, width: w, height: 1.5)),
+                context.fill(Path(CGRect(x: monX + 5 + indent, y: dy - 24 + CGFloat(l) * 4, width: w, height: 1.5)),
                              with: .color(lc))
             }
         }
 
+        // 모니터 LED (전원 표시)
+        let ledColor = group.isAnyRunning ? Theme.green.opacity(0.8) : (dark ? Color(hex: "333") : Color(hex: "888"))
+        context.fill(Path(CGRect(x: monX + 19, y: dy - 3, width: 3, height: 1)), with: .color(ledColor))
+
+        // 프로젝트 이름
         context.draw(
             Text(group.projectName)
                 .font(.system(size: 7, weight: isActive ? .bold : .regular, design: .monospaced))
                 .foregroundColor(isActive ? Theme.textPrimary : Theme.textSecondary),
-            at: CGPoint(x: x + 33, y: floorY + 18)
+            at: CGPoint(x: x + 33, y: floorY + 26)
         )
 
         if group.tabs.count > 1 {
@@ -748,16 +811,20 @@ struct PixelStripView: View {
                 Text("x\(group.tabs.count)")
                     .font(.system(size: 6, weight: .bold, design: .monospaced))
                     .foregroundColor(Theme.cyan),
-                at: CGPoint(x: x + 33, y: floorY + 28)
+                at: CGPoint(x: x + 33, y: floorY + 36)
             )
         }
 
         if group.isAllCompleted {
+            // 완료 배지
+            let badgeY = dy - 34
+            context.fill(Path(CGRect(x: x + 22, y: badgeY - 3, width: 24, height: 10)),
+                         with: .color(Theme.green.opacity(0.15)))
             context.draw(
-                Text("done")
+                Text("DONE")
                     .font(.system(size: 7, weight: .bold, design: .monospaced))
                     .foregroundColor(Theme.green),
-                at: CGPoint(x: x + 33, y: dy - 32)
+                at: CGPoint(x: x + 33, y: badgeY + 2)
             )
         }
     }
@@ -857,6 +924,208 @@ struct PixelStripView: View {
             px(1, 3, 2, 2, c); px(0, 4, 1, 1, c); px(13, 3, 2, 2, c); px(15, 4, 1, 1, c)
             px(5, 4, 1, 2, Color(hex: "2a1810")); px(10, 4, 1, 2, Color(hex: "2a1810"))
             px(4, 9, 1, 3, c); px(6, 9, 1, 3, c); px(9, 9, 1, 3, c); px(11, 9, 1, 3, c)
+        case .alien:
+            // 큰 둥근 머리 + 거대한 아몬드 눈 + 안테나 + 가는 몸 + 글로우
+            let glow = Color(hex: "40ff80")
+            px(7, -4, 2, 1, glow); px(6, -3, 4, 1, glow.opacity(0.6)) // 안테나 + 빛
+            px(3, -1, 10, 2, fur) // 넓은 이마
+            px(2, 1, 12, 6, fur) // 큰 머리
+            px(1, 2, 1, 3, fur) // 머리 옆 볼록
+            px(14, 2, 1, 3, fur)
+            // 큰 아몬드 눈 (검은 배경 + 녹색 동공 + 하이라이트)
+            px(3, 2, 4, 4, Color(hex: "0a0a0a")); px(9, 2, 4, 4, Color(hex: "0a0a0a"))
+            px(5, 3, 2, 2, glow); px(11, 3, 2, 2, glow)
+            px(4, 3, 1, 1, glow.opacity(0.3)); px(10, 3, 1, 1, glow.opacity(0.3)) // 눈 반사
+            // 가느다란 몸 + 옷
+            px(5, 7, 6, 5, shirt)
+            px(3, 8, 2, 3, shirt); px(11, 8, 2, 3, shirt) // 가는 팔
+            px(2, 10, 2, 2, fur); px(12, 10, 2, 2, fur) // 긴 손가락
+            px(5, 12, 2, 4, fur); px(9, 12, 2, 4, fur) // 가는 다리
+            px(4, 15, 4, 1, fur); px(8, 15, 4, 1, fur) // 넓은 발
+
+        case .ghost:
+            // 반투명 느낌 + 물결 하단 + 큰 둥근 눈 + 볼터치
+            let ghostBody = fur.opacity(0.85)
+            px(5, -1, 6, 2, ghostBody) // 둥근 머리 상단
+            px(3, 1, 10, 7, ghostBody) // 메인 몸
+            px(2, 3, 1, 3, ghostBody); px(13, 3, 1, 3, ghostBody) // 옆면 볼록
+            // 큰 둥근 눈 (검은 원 + 하이라이트)
+            px(4, 3, 3, 3, Color(hex: "1a1a2a")); px(9, 3, 3, 3, Color(hex: "1a1a2a"))
+            px(5, 3, 1, 1, .white.opacity(0.4)); px(10, 3, 1, 1, .white.opacity(0.4)) // 하이라이트
+            // 볼터치
+            px(3, 5, 2, 1, Color(hex: "f0a0b0").opacity(0.3)); px(11, 5, 2, 1, Color(hex: "f0a0b0").opacity(0.3))
+            // 입 (작은 O)
+            px(7, 6, 2, 1, Color(hex: "404060"))
+            // 물결치는 하단 (3단 물결)
+            px(2, 8, 3, 3, ghostBody); px(5, 9, 3, 2, ghostBody); px(8, 8, 3, 3, ghostBody); px(11, 9, 2, 2, ghostBody)
+            px(3, 11, 2, 2, ghostBody); px(7, 11, 2, 1, ghostBody); px(10, 11, 2, 2, ghostBody)
+
+        case .dragon:
+            // 뿔 2개 + 비늘 무늬 + 날개 + 꼬리 + 불꽃 입김
+            let horn = Color(hex: "f0c030")
+            // 뿔 (지그재그)
+            px(3, -3, 2, 1, horn); px(4, -2, 2, 2, horn)
+            px(11, -3, 2, 1, horn); px(10, -2, 2, 2, horn)
+            // 머리
+            px(4, 0, 8, 6, fur)
+            // 눈 (세로 슬릿 동공)
+            px(5, 2, 2, 3, Color(hex: "ff4020")); px(6, 3, 1, 1, Color(hex: "ffff40"))
+            px(9, 2, 2, 3, Color(hex: "ff4020")); px(10, 3, 1, 1, Color(hex: "ffff40"))
+            // 콧구멍
+            px(7, 4, 1, 1, Color(hex: "301010")); px(8, 4, 1, 1, Color(hex: "301010"))
+            // 입에서 불꽃 (작은)
+            if frame % 30 < 15 {
+                px(12, 4, 2, 1, Color(hex: "ff6020").opacity(0.6)); px(14, 3, 1, 1, Color(hex: "ff4010").opacity(0.4))
+            }
+            // 몸 + 비늘 무늬
+            px(3, 6, 10, 6, shirt)
+            px(5, 7, 2, 1, shirt.opacity(0.6)); px(7, 8, 2, 1, shirt.opacity(0.6)); px(9, 9, 2, 1, shirt.opacity(0.6)) // 비늘
+            // 날개 (삼각형)
+            px(0, 4, 3, 2, shirt.opacity(0.5)); px(0, 6, 2, 2, shirt.opacity(0.4)); px(0, 3, 1, 1, shirt.opacity(0.3))
+            px(13, 4, 3, 2, shirt.opacity(0.5)); px(14, 6, 2, 2, shirt.opacity(0.4)); px(15, 3, 1, 1, shirt.opacity(0.3))
+            // 다리 (짧고 튼튼)
+            px(4, 12, 3, 3, fur); px(9, 12, 3, 3, fur)
+            // 꼬리 (오른쪽으로)
+            px(13, 10, 2, 1, fur); px(14, 9, 2, 1, fur); px(15, 8, 1, 1, Color(hex: "ff6020"))
+
+        case .chicken:
+            // 빨간 볏 + 둥근 몸 + 주황 부리 + 턱수염 + 날개접힌 + 가는 다리
+            px(6, -3, 4, 1, Color(hex: "e03020")) // 볏 꼭대기
+            px(5, -2, 6, 2, Color(hex: "e03020")) // 볏 메인
+            px(5, 0, 6, 5, fur) // 둥근 머리
+            // 눈 (동그란 검은 눈)
+            px(6, 2, 2, 2, Color(hex: "101010")); px(9, 2, 1, 1, Color(hex: "101010"))
+            // 부리 (삼각형)
+            px(11, 2, 2, 1, Color(hex: "f0a020")); px(12, 3, 1, 1, Color(hex: "f0a020"))
+            // 턱수염
+            px(6, 5, 2, 2, Color(hex: "f03020"))
+            // 둥근 몸
+            px(3, 5, 10, 7, shirt)
+            // 접힌 날개 (작은 삼각)
+            px(2, 6, 2, 3, shirt.opacity(0.7)); px(1, 7, 1, 2, shirt.opacity(0.5))
+            px(12, 6, 2, 3, shirt.opacity(0.7)); px(14, 7, 1, 2, shirt.opacity(0.5))
+            // 꼬리 깃털
+            px(1, 5, 2, 1, shirt.opacity(0.6)); px(0, 4, 2, 1, shirt.opacity(0.4))
+            // 가는 다리 + 발톱
+            px(5, 12, 1, 4, Color(hex: "f0a020")); px(10, 12, 1, 4, Color(hex: "f0a020"))
+            px(4, 15, 3, 1, Color(hex: "f0a020")); px(9, 15, 3, 1, Color(hex: "f0a020"))
+
+        case .owl:
+            // 귀깃 + 큰 원형 눈 + V자 부리 + 가슴무늬 + 접힌 날개
+            // 귀깃 (삼각)
+            px(3, -2, 2, 1, hair); px(2, -1, 3, 2, hair)
+            px(11, -2, 2, 1, hair); px(11, -1, 3, 2, hair)
+            px(4, 1, 8, 6, fur) // 둥근 머리
+            // 안면 원형 디스크
+            px(3, 2, 4, 4, Color(hex: "f0e8d0")); px(9, 2, 4, 4, Color(hex: "f0e8d0"))
+            // 큰 원형 눈 (노란 홍채 + 검은 동공)
+            px(4, 3, 2, 2, Color(hex: "f0c030")); px(10, 3, 2, 2, Color(hex: "f0c030"))
+            px(5, 3, 1, 1, Color(hex: "101010")); px(11, 3, 1, 1, Color(hex: "101010"))
+            // V자 부리
+            px(7, 5, 1, 1, Color(hex: "c08020")); px(8, 5, 1, 1, Color(hex: "c08020"))
+            px(7, 6, 2, 1, Color(hex: "a06818"))
+            // 몸 + 가슴 V무늬
+            px(3, 7, 10, 6, shirt)
+            px(5, 8, 6, 1, Color(hex: "f0e8d0").opacity(0.4)) // 가슴 밝은 줄
+            px(6, 9, 4, 1, Color(hex: "f0e8d0").opacity(0.3))
+            // 접힌 날개
+            px(1, 7, 2, 5, hair); px(0, 8, 1, 3, hair.opacity(0.6))
+            px(13, 7, 2, 5, hair); px(15, 8, 1, 3, hair.opacity(0.6))
+            // 발톱
+            px(5, 13, 2, 2, Color(hex: "a08040")); px(9, 13, 2, 2, Color(hex: "a08040"))
+
+        case .frog:
+            // 튀어나온 큰 눈 + 넓적한 입 + 배 색 + 물갈퀴 발
+            // 튀어나온 눈 (위로 솟은)
+            px(3, -1, 4, 4, fur); px(9, -1, 4, 4, fur) // 눈 볼록
+            px(4, 0, 2, 2, .white); px(10, 0, 2, 2, .white) // 흰자
+            px(5, 0, 1, 2, Color(hex: "101010")); px(11, 0, 1, 2, Color(hex: "101010")) // 동공
+            // 넓적한 머리
+            px(3, 3, 10, 4, fur)
+            // 넓은 입 (미소)
+            px(4, 5, 8, 1, Color(hex: "306030")); px(5, 6, 6, 1, Color(hex: "f06060").opacity(0.5))
+            // 몸 + 밝은 배
+            px(3, 7, 10, 5, shirt)
+            px(5, 8, 6, 3, Color(hex: "c0e0a0").opacity(0.3)) // 밝은 배
+            // 팔 (살짝 벌린)
+            px(1, 8, 2, 3, shirt); px(0, 10, 2, 2, fur) // 물갈퀴 손
+            px(13, 8, 2, 3, shirt); px(14, 10, 2, 2, fur)
+            // 다리 (쪼그린 자세 느낌)
+            px(3, 12, 4, 2, fur); px(9, 12, 4, 2, fur)
+            px(2, 13, 5, 1, fur); px(9, 13, 5, 1, fur) // 넓은 물갈퀴 발
+
+        case .panda:
+            // 둥근 귀 + 눈 패치 + 통통한 몸 + 대나무
+            // 둥근 검은 귀
+            px(2, -1, 3, 3, Color(hex: "1a1a1a")); px(11, -1, 3, 3, Color(hex: "1a1a1a"))
+            // 흰 얼굴
+            px(4, 1, 8, 6, fur)
+            // 눈 패치 (검은 타원)
+            px(4, 2, 3, 4, Color(hex: "1a1a1a")); px(9, 2, 3, 4, Color(hex: "1a1a1a"))
+            // 눈 (흰 점)
+            px(5, 3, 1, 2, .white); px(10, 3, 1, 2, .white)
+            px(5, 4, 1, 1, Color(hex: "101010")); px(10, 4, 1, 1, Color(hex: "101010")) // 동공
+            // 코
+            px(7, 5, 2, 1, Color(hex: "1a1a1a"))
+            // 통통한 몸
+            px(2, 7, 12, 6, shirt)
+            // 검은 팔
+            px(0, 8, 2, 4, Color(hex: "1a1a1a")); px(14, 8, 2, 4, Color(hex: "1a1a1a"))
+            // 검은 다리
+            px(4, 13, 3, 3, Color(hex: "1a1a1a")); px(9, 13, 3, 3, Color(hex: "1a1a1a"))
+            // 대나무 (들고 있음)
+            px(15, 5, 1, 8, Color(hex: "40a040")); px(15, 4, 2, 1, Color(hex: "60c060"))
+
+        case .unicorn:
+            // 나선형 뿔 + 무지개 갈기 + 말 머리 + 꼬리
+            // 나선형 뿔 (그라데이션)
+            px(7, -5, 2, 1, Color(hex: "fff8d0")); px(7, -4, 2, 1, Color(hex: "f0d040"))
+            px(7, -3, 2, 1, Color(hex: "e0b030")); px(7, -2, 2, 2, Color(hex: "d0a028"))
+            // 머리
+            px(4, 0, 8, 6, fur)
+            // 무지개 갈기 (왼쪽으로 흘러내림)
+            px(2, -1, 2, 2, Color(hex: "ff6080")); px(1, 1, 2, 2, Color(hex: "ff9040"))
+            px(1, 3, 2, 2, Color(hex: "f0e040")); px(2, 5, 2, 2, Color(hex: "40c080"))
+            // 눈 (큰 반짝이는 눈)
+            px(5, 2, 2, 3, .white); px(6, 3, 1, 1, Color(hex: "c060c0")) // 보라 동공
+            px(5, 2, 1, 1, Color(hex: "c060c0").opacity(0.3)) // 하이라이트
+            px(9, 2, 2, 3, .white); px(10, 3, 1, 1, Color(hex: "c060c0"))
+            px(9, 2, 1, 1, Color(hex: "c060c0").opacity(0.3))
+            // 몸
+            px(3, 6, 10, 7, shirt)
+            px(1, 7, 2, 4, shirt); px(13, 7, 2, 4, shirt) // 다리
+            px(4, 13, 3, 3, fur); px(9, 13, 3, 3, fur)
+            // 무지개 꼬리
+            px(14, 8, 2, 1, Color(hex: "ff6080")); px(15, 9, 1, 1, Color(hex: "f0e040")); px(14, 10, 2, 1, Color(hex: "40c080"))
+
+        case .skeleton:
+            // 두개골 + 이빨 + 갈비뼈 + 뼈 관절 + 맨 다리뼈
+            let bone = Color(hex: "f0f0e0")
+            let dark_bg = Color(hex: "1a1a1a")
+            // 두개골
+            px(4, 0, 8, 6, bone)
+            px(3, 1, 1, 3, bone); px(12, 1, 1, 3, bone) // 광대뼈
+            // 눈구멍 (검은 깊은 구멍)
+            px(5, 1, 2, 3, dark_bg); px(9, 1, 2, 3, dark_bg)
+            px(5, 2, 1, 1, Color(hex: "ff2020").opacity(0.3)); px(9, 2, 1, 1, Color(hex: "ff2020").opacity(0.3)) // 붉은 빛
+            // 코구멍
+            px(7, 4, 1, 1, dark_bg); px(8, 4, 1, 1, dark_bg)
+            // 이빨 (지그재그)
+            px(5, 5, 6, 1, dark_bg)
+            px(5, 5, 1, 1, bone); px(7, 5, 1, 1, bone); px(9, 5, 1, 1, bone); px(11, 5, 1, 1, bone)
+            // 목뼈
+            px(6, 6, 4, 1, bone)
+            // 갈비뼈 (교차)
+            px(4, 7, 8, 6, Color(hex: "303030")) // 어두운 배경
+            px(5, 7, 6, 1, bone); px(5, 9, 6, 1, bone); px(5, 11, 6, 1, bone) // 가로 갈비
+            px(7, 7, 2, 5, bone.opacity(0.3)) // 척추
+            // 팔뼈
+            px(2, 7, 2, 1, bone); px(1, 8, 2, 1, bone); px(0, 9, 2, 1, bone) // 왼팔
+            px(12, 7, 2, 1, bone); px(13, 8, 2, 1, bone); px(14, 9, 2, 1, bone) // 오른팔
+            // 다리뼈
+            px(5, 13, 2, 4, bone); px(9, 13, 2, 4, bone)
+            px(4, 16, 4, 1, bone); px(8, 16, 4, 1, bone) // 발뼈
+            px(5, 12, 2, 4, bone); px(9, 12, 2, 4, bone)
         case .human:
             px(4, 0, 8, 3, hair); px(3, 1, 1, 2, hair); px(12, 1, 1, 2, hair)
             px(4, 3, 8, 5, fur)
@@ -888,22 +1157,63 @@ struct PixelStripView: View {
             context.fill(Path(CGRect(x: x + 5 * s, y: y - 5, width: 6 * s, height: 2)), with: .color(Theme.accent.opacity(0.6)))
         }
 
-        // 상태 말풍선
-        if tab.claudeActivity != .idle {
+        // 상태 말풍선 (풍부한 버전)
+        if tab.claudeActivity != .idle && tab.claudeActivity != .done || (tab.claudeActivity == .done && frame % 60 < 30) {
             let txt: String
+            let bubbleColor: Color
+            let textColor: Color
             switch tab.claudeActivity {
-            case .thinking: txt = "..."; case .reading: txt = "R"; case .writing: txt = "W"
-            case .searching: txt = "?"; case .running: txt = ">"; case .done: txt = "ok"; case .error: txt = "!"
-            default: txt = ""
+            case .thinking:
+                let dots = String(repeating: ".", count: (frame / 8 % 3) + 1)
+                txt = "💭\(dots)"
+                bubbleColor = Theme.purple.opacity(0.15)
+                textColor = Theme.purple
+            case .reading:
+                txt = "📖 읽는 중"
+                bubbleColor = Theme.accent.opacity(0.12)
+                textColor = Theme.accent
+            case .writing:
+                txt = "✏️ 작성 중"
+                bubbleColor = Theme.green.opacity(0.12)
+                textColor = Theme.green
+            case .searching:
+                txt = "🔍 검색"
+                bubbleColor = Theme.cyan.opacity(0.12)
+                textColor = Theme.cyan
+            case .running:
+                let spinner = ["⠋","⠙","⠸","⠴","⠦","⠇"][frame / 3 % 6]
+                txt = "\(spinner) 실행"
+                bubbleColor = Theme.yellow.opacity(0.12)
+                textColor = Theme.yellow
+            case .done:
+                txt = "✅"
+                bubbleColor = Theme.green.opacity(0.12)
+                textColor = Theme.green
+            case .error:
+                txt = "⚠️ 에러"
+                bubbleColor = Theme.red.opacity(0.15)
+                textColor = Theme.red
+            default: txt = ""; bubbleColor = .clear; textColor = .clear
             }
             if !txt.isEmpty {
-                let bx = x + 8 * s - 8; let by = y - 16
-                context.fill(Path(roundedRect: CGRect(x: bx, y: by, width: 16, height: 12), cornerRadius: 3),
+                let bw: CGFloat = CGFloat(txt.count) * 5.5 + 10
+                let bx = x + 8 * s - bw / 2
+                let by = y - 20
+                // 말풍선 꼬리
+                var tail = Path()
+                tail.move(to: CGPoint(x: x + 8 * s - 3, y: by + 14))
+                tail.addLine(to: CGPoint(x: x + 8 * s, y: by + 18))
+                tail.addLine(to: CGPoint(x: x + 8 * s + 3, y: by + 14))
+                context.fill(tail, with: .color(dark ? Color(hex: "1a2030") : .white))
+                // 말풍선 본체
+                context.fill(Path(roundedRect: CGRect(x: bx, y: by, width: bw, height: 14), cornerRadius: 4),
                              with: .color(dark ? Color(hex: "1a2030") : .white))
-                context.stroke(Path(roundedRect: CGRect(x: bx, y: by, width: 16, height: 12), cornerRadius: 3),
-                               with: .color(Theme.border), lineWidth: 0.5)
-                context.draw(Text(txt).font(.system(size: 7, weight: .bold, design: .monospaced)).foregroundColor(Theme.textPrimary),
-                    at: CGPoint(x: bx + 8, y: by + 6))
+                context.fill(Path(roundedRect: CGRect(x: bx + 1, y: by + 1, width: bw - 2, height: 12), cornerRadius: 3),
+                             with: .color(bubbleColor))
+                context.stroke(Path(roundedRect: CGRect(x: bx, y: by, width: bw, height: 14), cornerRadius: 4),
+                               with: .color(textColor.opacity(0.3)), lineWidth: 0.5)
+                context.draw(Text(txt).font(.system(size: 7, weight: .bold, design: .monospaced)).foregroundColor(textColor),
+                    at: CGPoint(x: bx + bw / 2, y: by + 7))
             }
         }
     }
@@ -959,7 +1269,7 @@ struct PixelStripView: View {
         context.fill(Path(CGRect(x: b.rx + b.roomW * 0.72 + 4, y: floorY - 18, width: 1, height: 2)), with: .color(dark ? Color(hex: "0a0d14") : Color(hex: "9a9ea8")))
 
         // ── Resting characters on sofa ──
-        let breakTabs = manager.tabs.filter { $0.isOnBreak }
+        let breakTabs = manager.userVisibleTabs.filter { $0.isOnBreak }
         if settings.breakRoomShowSofa {
             let sofaPos = furnitureAbsolutePos(FurnitureItem.all[0], size: size)
             for (i, tab) in breakTabs.prefix(3).enumerated() {
@@ -1007,136 +1317,29 @@ struct PixelStripView: View {
         case "coffeeMachine": return settings.breakRoomShowCoffeeMachine
         case "plant": return settings.breakRoomShowPlant
         case "sideTable": return settings.breakRoomShowSideTable
-        case "clock": return settings.breakRoomShowClock
         case "picture": return settings.breakRoomShowPicture
         case "neonSign": return settings.breakRoomShowNeonSign
         case "rug": return settings.breakRoomShowRug
+        case "bookshelf": return settings.breakRoomShowBookshelf
+        case "aquarium": return settings.breakRoomShowAquarium
+        case "arcade": return settings.breakRoomShowArcade
+        case "whiteboard": return settings.breakRoomShowWhiteboard
+        case "lamp": return settings.breakRoomShowLamp
+        case "cat": return settings.breakRoomShowCat
+        case "tv": return settings.breakRoomShowTV
+        case "fan": return settings.breakRoomShowFan
+        case "calendar": return settings.breakRoomShowCalendar
+        case "poster": return settings.breakRoomShowPoster
+        case "trashcan": return settings.breakRoomShowTrashcan
+        case "cushion": return settings.breakRoomShowCushion
         default: return false
         }
     }
 
     private func drawFurnitureItem(context: GraphicsContext, item: FurnitureItem, at pos: CGPoint, floorY: CGFloat) {
         let dark = settings.isDarkMode
-        let x = pos.x
-        let y = pos.y
-
-        switch item.id {
-        case "sofa":
-            let sofaBase = dark ? Color(hex: "4a3060") : Color(hex: "8070a0")
-            let sofaLight = dark ? Color(hex: "5a4070") : Color(hex: "9080b0")
-            let sofaDark = dark ? Color(hex: "3a2050") : Color(hex: "706090")
-            let sofaShadow = dark ? Color(hex: "2a1840") : Color(hex: "605080")
-            context.fill(Path(roundedRect: CGRect(x: x - 2, y: y - 10, width: 49, height: 10), cornerRadius: 4), with: .color(sofaDark))
-            context.fill(Path(roundedRect: CGRect(x: x, y: y, width: 45, height: 13), cornerRadius: 3), with: .color(sofaBase))
-            context.fill(Path(roundedRect: CGRect(x: x + 3, y: y + 2, width: 18, height: 8), cornerRadius: 3), with: .color(sofaLight.opacity(0.5)))
-            context.fill(Path(roundedRect: CGRect(x: x + 24, y: y + 2, width: 18, height: 8), cornerRadius: 3), with: .color(sofaLight.opacity(0.5)))
-            context.fill(Path(CGRect(x: x + 22, y: y + 2, width: 1, height: 8)), with: .color(sofaShadow.opacity(0.4)))
-            context.fill(Path(roundedRect: CGRect(x: x - 4, y: y - 8, width: 7, height: 22), cornerRadius: 3), with: .color(sofaBase))
-            context.fill(Path(roundedRect: CGRect(x: x + 42, y: y - 8, width: 7, height: 22), cornerRadius: 3), with: .color(sofaBase))
-            context.fill(Path(roundedRect: CGRect(x: x + 2, y: y + 13, width: 4, height: 7), cornerRadius: 1), with: .color(sofaShadow))
-            context.fill(Path(roundedRect: CGRect(x: x + 39, y: y + 13, width: 4, height: 7), cornerRadius: 1), with: .color(sofaShadow))
-
-        case "sideTable":
-            let tableColor = dark ? Color(hex: "2a3040") : Color(hex: "9aa0b0")
-            let tableTop = dark ? Color(hex: "323a4a") : Color(hex: "b0b4c0")
-            context.fill(Path(CGRect(x: x, y: y, width: 18, height: 3)), with: .color(tableTop))
-            context.fill(Path(CGRect(x: x + 7, y: y + 3, width: 4, height: 11)), with: .color(tableColor))
-
-        case "coffeeMachine":
-            let machineBody = dark ? Color(hex: "2a3040") : Color(hex: "6a7080")
-            let machineAccent = dark ? Color(hex: "506070") : Color(hex: "a0b0c0")
-            let machineTop = dark ? Color(hex: "3a4050") : Color(hex: "7a8090")
-            context.fill(Path(roundedRect: CGRect(x: x + 1, y: y, width: 14, height: 16), cornerRadius: 2), with: .color(machineBody))
-            context.fill(Path(CGRect(x: x, y: y - 1, width: 16, height: 3)), with: .color(machineTop))
-            context.fill(Path(roundedRect: CGRect(x: x + 3, y: y + 3, width: 10, height: 6), cornerRadius: 1), with: .color(machineAccent))
-            let displayGlow = 0.3 + sin(Double(frame) * 0.06) * 0.1
-            context.fill(Path(CGRect(x: x + 4, y: y + 4, width: 4, height: 1)), with: .color(Theme.green.opacity(displayGlow)))
-            context.fill(Path(CGRect(x: x + 4, y: y + 11, width: 8, height: 5)), with: .color(dark ? Color(hex: "1a1e28") : Color(hex: "505860")))
-            let cupColor = dark ? Color(hex: "e0d8d0") : Color(hex: "f8f4f0")
-            context.fill(Path(roundedRect: CGRect(x: x + 5, y: y + 13, width: 6, height: 5), cornerRadius: 1), with: .color(cupColor))
-            context.fill(Path(CGRect(x: x + 11, y: y + 14, width: 2, height: 3)), with: .color(cupColor.opacity(0.7)))
-            let steamPhase = Double(frame) * 0.12
-            for si in 0..<3 {
-                let sOffset = sin(steamPhase + Double(si) * 1.5) * 2
-                let sAlpha = 0.15 + sin(steamPhase + Double(si) * 0.8) * 0.1
-                let sy = y + 10 - CGFloat(si) * 3
-                context.fill(Path(CGRect(x: x + 7 + CGFloat(sOffset), y: sy, width: 2, height: 2)),
-                             with: .color((dark ? Color.white : Color(hex: "8090a0")).opacity(sAlpha)))
-            }
-
-        case "plant":
-            let potColor = dark ? Color(hex: "6a4030") : Color(hex: "b08060")
-            let potRim = dark ? Color(hex: "7a5040") : Color(hex: "c09070")
-            let leafColor = dark ? Color(hex: "306030") : Color(hex: "50a050")
-            let leafLight = dark ? Color(hex: "408040") : Color(hex: "60b860")
-            context.fill(Path(CGRect(x: x, y: y + 12, width: 12, height: 6)), with: .color(potColor))
-            context.fill(Path(CGRect(x: x - 1, y: y + 10, width: 14, height: 3)), with: .color(potRim))
-            context.fill(Path(CGRect(x: x, y: y + 10, width: 12, height: 2)), with: .color(dark ? Color(hex: "3a2820") : Color(hex: "8a6850")))
-            context.fill(Path(ellipseIn: CGRect(x: x - 2, y: y, width: 10, height: 10)), with: .color(leafColor))
-            context.fill(Path(ellipseIn: CGRect(x: x + 4, y: y - 2, width: 10, height: 10)), with: .color(leafLight))
-            context.fill(Path(ellipseIn: CGRect(x: x, y: y - 5, width: 8, height: 9)), with: .color(leafColor.opacity(0.8)))
-            let flowerPhase = sin(Double(frame) * 0.03)
-            context.fill(Path(ellipseIn: CGRect(x: x + 3, y: y - 6 + CGFloat(flowerPhase), width: 4, height: 4)),
-                         with: .color(Theme.pink.opacity(0.6)))
-            context.fill(Path(ellipseIn: CGRect(x: x + 4, y: y - 5 + CGFloat(flowerPhase), width: 2, height: 2)),
-                         with: .color(Theme.yellow.opacity(0.7)))
-
-        case "clock":
-            let clockBg = dark ? Color(hex: "1e2430") : Color(hex: "f0f0f0")
-            let clockRim = dark ? Color(hex: "3a4050") : Color(hex: "808890")
-            context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 14, height: 14)), with: .color(clockRim))
-            context.fill(Path(ellipseIn: CGRect(x: x + 1, y: y + 1, width: 12, height: 12)), with: .color(clockBg))
-            let cx = x + 7, cy = y + 7
-            let minuteAngle = Double(frame) * 0.02
-            let hourAngle = Double(frame) * 0.002
-            var mh = Path(); mh.move(to: CGPoint(x: cx, y: cy))
-            mh.addLine(to: CGPoint(x: cx + cos(minuteAngle) * 4, y: cy + sin(minuteAngle) * 4))
-            context.stroke(mh, with: .color(dark ? Color(hex: "8090a0") : Color(hex: "4a5060")), lineWidth: 0.8)
-            var hh = Path(); hh.move(to: CGPoint(x: cx, y: cy))
-            hh.addLine(to: CGPoint(x: cx + cos(hourAngle) * 3, y: cy + sin(hourAngle) * 3))
-            context.stroke(hh, with: .color(dark ? Color(hex: "a0b0c0") : Color(hex: "3a3e4a")), lineWidth: 1.0)
-            context.fill(Path(ellipseIn: CGRect(x: cx - 1, y: cy - 1, width: 2, height: 2)), with: .color(Theme.red.opacity(0.7)))
-
-        case "picture":
-            let frameBorder = dark ? Color(hex: "3a3040") : Color(hex: "a09080")
-            let frameInner = dark ? Color(hex: "203040") : Color(hex: "c8d8e8")
-            context.fill(Path(CGRect(x: x, y: y, width: 20, height: 16)), with: .color(frameBorder))
-            context.fill(Path(CGRect(x: x + 2, y: y + 2, width: 16, height: 12)), with: .color(frameInner))
-            var mountain = Path()
-            mountain.move(to: CGPoint(x: x + 4, y: y + 12))
-            mountain.addLine(to: CGPoint(x: x + 10, y: y + 5))
-            mountain.addLine(to: CGPoint(x: x + 16, y: y + 12))
-            mountain.closeSubpath()
-            context.fill(mountain, with: .color(dark ? Color(hex: "405060") : Color(hex: "8ab0d0")))
-            context.fill(Path(ellipseIn: CGRect(x: x + 13, y: y + 3, width: 4, height: 4)),
-                         with: .color(Theme.yellow.opacity(0.6)))
-
-        case "neonSign":
-            let signBg = dark ? Color(hex: "0e1118") : Color(hex: "2a2e3a")
-            context.fill(Path(roundedRect: CGRect(x: x, y: y, width: 64, height: 16), cornerRadius: 4), with: .color(signBg))
-            let neonGlow = 0.15 + sin(Double(frame) * 0.08) * 0.08
-            context.fill(Path(roundedRect: CGRect(x: x - 2, y: y - 2, width: 68, height: 20), cornerRadius: 6),
-                         with: .color(Theme.yellow.opacity(neonGlow)))
-            let neonBright = 0.8 + sin(Double(frame) * 0.08) * 0.2
-            context.draw(
-                Text("☕ 휴게실").font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .foregroundColor(Theme.yellow.opacity(neonBright)),
-                at: CGPoint(x: x + 32, y: y + 8)
-            )
-
-        case "rug":
-            let rugColor = dark ? Color(hex: "2a2040").opacity(0.5) : Color(hex: "c0a8b8").opacity(0.4)
-            let rugBorder = dark ? Color(hex: "3a3050").opacity(0.4) : Color(hex: "b098a8").opacity(0.3)
-            context.fill(Path(roundedRect: CGRect(x: x, y: y, width: 100, height: 14), cornerRadius: 4), with: .color(rugColor))
-            context.stroke(Path(roundedRect: CGRect(x: x, y: y, width: 100, height: 14), cornerRadius: 4),
-                           with: .color(rugBorder), lineWidth: 0.5)
-            let rugPatternColor = dark ? Color(hex: "3a3060").opacity(0.4) : Color(hex: "b090a0").opacity(0.3)
-            for i in stride(from: CGFloat(5), to: 95, by: 8) {
-                context.fill(Path(CGRect(x: x + i, y: y + 6, width: 3, height: 1)), with: .color(rugPatternColor))
-            }
-
-        default: break
-        }
+        _ = floorY
+        drawAccessoryPixelFurniture(context: context, itemId: item.id, at: pos, dark: dark, frame: frame)
     }
 
     // MARK: - Edit Mode Overlay

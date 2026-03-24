@@ -1,6 +1,7 @@
 import SwiftUI
 import Darwin
 import UserNotifications
+import ScreenCaptureKit
 
 // ═══════════════════════════════════════════════════════
 // MARK: - Stream Event Architecture
@@ -82,6 +83,7 @@ enum WorkerState: String {
 
 // 권한 모드 (--permission-mode)
 enum PermissionMode: String, CaseIterable, Identifiable {
+    case acceptEdits = "acceptEdits"
     case bypassPermissions = "bypassPermissions"
     case auto = "auto"
     case defaultMode = "default"
@@ -89,6 +91,7 @@ enum PermissionMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var icon: String {
         switch self {
+        case .acceptEdits: return "✏️"
         case .bypassPermissions: return "⚡"
         case .auto: return "🤖"
         case .defaultMode: return "🛡️"
@@ -97,6 +100,7 @@ enum PermissionMode: String, CaseIterable, Identifiable {
     }
     var displayName: String {
         switch self {
+        case .acceptEdits: return "수정만 허용"
         case .bypassPermissions: return "전체 허용"
         case .auto: return "자동"
         case .defaultMode: return "기본"
@@ -105,6 +109,7 @@ enum PermissionMode: String, CaseIterable, Identifiable {
     }
     var desc: String {
         switch self {
+        case .acceptEdits: return "파일 수정 권한 자동 승인"
         case .bypassPermissions: return "모든 권한 자동 승인"
         case .auto: return "상황에 따라 자동 판단"
         case .defaultMode: return "위험 명령 승인 필요"
@@ -169,6 +174,74 @@ struct FileChangeRecord: Identifiable {
     var success: Bool = true
 }
 
+enum ParallelTaskState: String {
+    case running
+    case completed
+    case failed
+
+    var label: String {
+        switch self {
+        case .running: return "진행"
+        case .completed: return "완료"
+        case .failed: return "실패"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .running: return Theme.cyan
+        case .completed: return Theme.green
+        case .failed: return Theme.red
+        }
+    }
+}
+
+struct ParallelTaskRecord: Identifiable, Equatable {
+    let id: String
+    let label: String
+    let assigneeCharacterId: String
+    var state: ParallelTaskState
+}
+
+enum WorkflowStageState: String {
+    case queued
+    case running
+    case completed
+    case failed
+    case skipped
+
+    var label: String {
+        switch self {
+        case .queued: return "대기"
+        case .running: return "진행"
+        case .completed: return "완료"
+        case .failed: return "재작업"
+        case .skipped: return "건너뜀"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .queued: return Theme.textDim
+        case .running: return Theme.cyan
+        case .completed: return Theme.green
+        case .failed: return Theme.red
+        case .skipped: return Theme.textSecondary
+        }
+    }
+}
+
+struct WorkflowStageRecord: Identifiable, Equatable {
+    let id: String
+    let role: WorkerJob
+    var workerName: String
+    var assigneeCharacterId: String
+    var state: WorkflowStageState
+    var handoffLabel: String
+    var detail: String
+    var updatedAt: Date
+}
+
 struct GitInfo { var branch = "", changedFiles = 0, lastCommit = "", lastCommitAge = "", isGitRepo = false }
 struct SessionSummary { var filesModified: [String] = [], duration: TimeInterval = 0, tokenCount = 0, cost: Double = 0, lastLines: [String] = [], commandCount: Int = 0, errorCount: Int = 0, timestamp = Date() }
 
@@ -196,7 +269,17 @@ class ClaudeInstallChecker {
 
 class TokenTracker: ObservableObject {
     static let shared = TokenTracker()
+    static let recommendedDailyLimit = 500_000
+    static let recommendedWeeklyLimit = 2_500_000
     private let saveKey = "WorkManTokenHistory"
+    private let automationDailyReserve = 100_000
+    private let automationWeeklyReserve = 300_000
+    private let globalDailyReserve = 12_000
+    private let globalWeeklyReserve = 40_000
+    private let emergencyDailyReserve = 6_000
+    private let emergencyWeeklyReserve = 20_000
+    private let persistenceQueue = DispatchQueue(label: "workman.token-tracker", qos: .utility)
+    private var saveWorkItem: DispatchWorkItem?
 
     struct DayRecord: Codable {
         var date: String // "yyyy-MM-dd"
@@ -209,8 +292,8 @@ class TokenTracker: ObservableObject {
     @Published var history: [DayRecord] = []
 
     // 사용자 설정 한도
-    @AppStorage("dailyTokenLimit") var dailyTokenLimit: Int = 500_000
-    @AppStorage("weeklyTokenLimit") var weeklyTokenLimit: Int = 2_500_000
+    @AppStorage("dailyTokenLimit") var dailyTokenLimit: Int = TokenTracker.recommendedDailyLimit
+    @AppStorage("weeklyTokenLimit") var weeklyTokenLimit: Int = TokenTracker.recommendedWeeklyLimit
 
     private var dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -225,6 +308,7 @@ class TokenTracker: ObservableObject {
     // MARK: - Record
 
     func recordTokens(input: Int, output: Int) {
+        guard input > 0 || output > 0 else { return }
         let key = todayKey
         if let idx = history.firstIndex(where: { $0.date == key }) {
             history[idx].inputTokens += input
@@ -232,17 +316,20 @@ class TokenTracker: ObservableObject {
         } else {
             history.append(DayRecord(date: key, inputTokens: input, outputTokens: output, cost: 0))
         }
-        save()
+        scheduleSave()
+        print("[TokenTracker] +\(input)in +\(output)out → today: \(todayTokens), week: \(weekTokens)")
     }
 
     func recordCost(_ cost: Double) {
+        guard cost > 0 else { return }
         let key = todayKey
         if let idx = history.firstIndex(where: { $0.date == key }) {
             history[idx].cost += cost
         } else {
             history.append(DayRecord(date: key, inputTokens: 0, outputTokens: 0, cost: cost))
         }
-        save()
+        scheduleSave()
+        print("[TokenTracker] cost +$\(String(format: "%.4f", cost)) → today: $\(String(format: "%.4f", todayCost))")
     }
 
     // MARK: - Queries
@@ -268,18 +355,101 @@ class TokenTracker: ObservableObject {
         return history.filter { dateFormatter.date(from: $0.date).map { $0 >= weekAgo } ?? false }.reduce(0) { $0 + $1.cost }
     }
 
-    var dailyRemaining: Int { max(0, dailyTokenLimit - todayTokens) }
-    var weeklyRemaining: Int { max(0, weeklyTokenLimit - weekTokens) }
+    private var safeDailyLimit: Int { max(1, dailyTokenLimit) }
+    private var safeWeeklyLimit: Int { max(1, weeklyTokenLimit) }
 
-    var dailyUsagePercent: Double { Double(todayTokens) / Double(max(1, dailyTokenLimit)) }
-    var weeklyUsagePercent: Double { Double(weekTokens) / Double(max(1, weeklyTokenLimit)) }
+    private func cappedReserve(_ configured: Int, limit: Int, maxRatio: Double) -> Int {
+        let ratioCap = max(1, Int(Double(max(1, limit)) * maxRatio))
+        return min(configured, ratioCap)
+    }
+
+    private var effectiveGlobalDailyReserve: Int {
+        cappedReserve(globalDailyReserve, limit: safeDailyLimit, maxRatio: 0.05)
+    }
+
+    private var effectiveGlobalWeeklyReserve: Int {
+        cappedReserve(globalWeeklyReserve, limit: safeWeeklyLimit, maxRatio: 0.05)
+    }
+
+    private var effectiveAutomationDailyReserve: Int {
+        cappedReserve(automationDailyReserve, limit: safeDailyLimit, maxRatio: 0.18)
+    }
+
+    private var effectiveAutomationWeeklyReserve: Int {
+        cappedReserve(automationWeeklyReserve, limit: safeWeeklyLimit, maxRatio: 0.18)
+    }
+
+    private var effectiveEmergencyDailyReserve: Int {
+        cappedReserve(emergencyDailyReserve, limit: safeDailyLimit, maxRatio: 0.03)
+    }
+
+    private var effectiveEmergencyWeeklyReserve: Int {
+        cappedReserve(emergencyWeeklyReserve, limit: safeWeeklyLimit, maxRatio: 0.03)
+    }
+
+    var dailyRemaining: Int { max(0, safeDailyLimit - todayTokens) }
+    var weeklyRemaining: Int { max(0, safeWeeklyLimit - weekTokens) }
+
+    var dailyUsagePercent: Double { Double(todayTokens) / Double(safeDailyLimit) }
+    var weeklyUsagePercent: Double { Double(weekTokens) / Double(safeWeeklyLimit) }
+
+    private func protectionUsageSummary() -> String {
+        "오늘 \(formatTokens(todayTokens))/\(formatTokens(safeDailyLimit)), 이번 주 \(formatTokens(weekTokens))/\(formatTokens(safeWeeklyLimit)) 사용 중입니다."
+    }
+
+    func startBlockReason(isAutomation: Bool) -> String? {
+        if dailyRemaining <= effectiveGlobalDailyReserve ||
+            weeklyRemaining <= effectiveGlobalWeeklyReserve ||
+            dailyUsagePercent >= 0.985 ||
+            weeklyUsagePercent >= 0.985 {
+            return "전체 토큰 보호선을 넘겨 새 작업을 잠시 막았습니다. \(protectionUsageSummary()) 설정 > 토큰에서 한도를 올리거나 토큰 이력을 초기화하면 바로 다시 입력할 수 있습니다."
+        }
+
+        if isAutomation &&
+            (dailyRemaining <= effectiveAutomationDailyReserve ||
+             weeklyRemaining <= effectiveAutomationWeeklyReserve ||
+             dailyUsagePercent >= 0.82 ||
+             weeklyUsagePercent >= 0.82) {
+            return "자동 보조 작업은 토큰 보호를 위해 잠시 제한되었습니다. \(protectionUsageSummary())"
+        }
+
+        return nil
+    }
+
+    func runningStopReason(isAutomation: Bool, currentTabTokens: Int, tokenLimit: Int) -> String? {
+        if currentTabTokens >= tokenLimit {
+            return "세션 토큰 한도에 도달해 자동 중단했습니다."
+        }
+
+        if dailyRemaining <= effectiveEmergencyDailyReserve ||
+            weeklyRemaining <= effectiveEmergencyWeeklyReserve {
+            return "전체 토큰 보호선을 넘겨 현재 작업을 중단했습니다. \(protectionUsageSummary())"
+        }
+
+        if isAutomation &&
+            (dailyRemaining <= effectiveGlobalDailyReserve ||
+             weeklyRemaining <= effectiveGlobalWeeklyReserve ||
+             dailyUsagePercent >= 0.94 ||
+             weeklyUsagePercent >= 0.94) {
+            return "자동 보조 작업 토큰 보호선에 도달해 중단했습니다. \(protectionUsageSummary())"
+        }
+
+        return nil
+    }
 
     // MARK: - Persistence
 
-    private func save() {
-        if let data = try? JSONEncoder().encode(history) {
-            UserDefaults.standard.set(data, forKey: saveKey)
+    private func scheduleSave(delay: TimeInterval = 0.75) {
+        saveWorkItem?.cancel()
+        let snapshot = history
+        let key = saveKey
+        let workItem = DispatchWorkItem {
+            if let data = try? JSONEncoder().encode(snapshot) {
+                UserDefaults.standard.set(data, forKey: key)
+            }
         }
+        saveWorkItem = workItem
+        persistenceQueue.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
     private func load() {
@@ -289,6 +459,27 @@ class TokenTracker: ObservableObject {
         let cal = Calendar.current
         let cutoff = cal.date(byAdding: .day, value: -30, to: Date())!
         history = loaded.filter { dateFormatter.date(from: $0.date).map { $0 >= cutoff } ?? false }
+    }
+
+    func clearOldEntries() {
+        let key = todayKey
+        history = history.filter { $0.date == key }
+        scheduleSave(delay: 0)
+    }
+
+    func clearAllEntries() {
+        history.removeAll()
+        saveWorkItem?.cancel()
+        UserDefaults.standard.removeObject(forKey: saveKey)
+    }
+
+    func applyRecommendedMinimumLimits() {
+        if dailyTokenLimit < Self.recommendedDailyLimit {
+            dailyTokenLimit = Self.recommendedDailyLimit
+        }
+        if weeklyTokenLimit < Self.recommendedWeeklyLimit {
+            weeklyTokenLimit = Self.recommendedWeeklyLimit
+        }
     }
 
     func formatTokens(_ c: Int) -> String {
@@ -303,6 +494,23 @@ class TokenTracker: ObservableObject {
 // ═══════════════════════════════════════════════════════
 
 class TerminalTab: ObservableObject, Identifiable {
+    private static let maxRetainedBlocks = 420
+    private static let maxRetainedFileChanges = 240
+
+    private struct ToolUseContext {
+        let id: String
+        let name: String
+        let input: [String: Any]
+        let preview: String
+    }
+
+    private struct PermissionDenialCandidate {
+        let toolUseId: String?
+        let toolName: String
+        let toolInput: [String: Any]
+        let message: String
+    }
+
     let id: String
     @Published var projectName: String
     @Published var projectPath: String
@@ -335,7 +543,12 @@ class TerminalTab: ObservableObject, Identifiable {
     @Published var fileChanges: [FileChangeRecord] = []
     @Published var commandCount: Int = 0
     @Published var errorCount: Int = 0
+    var readCommandCount: Int = 0
     @Published var pendingApproval: PendingApproval?
+    @Published var lastResultText: String = ""
+    @Published var lastPromptText: String = ""
+    @Published var completedPromptCount: Int = 0
+    @Published var parallelTasks: [ParallelTaskRecord] = []
 
     struct PendingApproval: Identifiable {
         let id = UUID()
@@ -360,7 +573,11 @@ class TerminalTab: ObservableObject, Identifiable {
     private var currentProcess: Process?
     private var activeToolBlockIndex: Int?
     private var seenToolUseIds: Set<String> = []  // 중복 방지
+    private var toolUseContexts: [String: ToolUseContext] = [:]
+    private var pendingPermissionDenial: PermissionDenialCandidate?
+    private var lastPermissionFingerprint: String?
     @Published var scrollTrigger: Int = 0          // 스크롤 트리거
+    private var budgetStopIssued = false
 
     // Legacy compat
     var outputText: String { blocks.map { $0.content }.joined(separator: "\n") }
@@ -368,6 +585,19 @@ class TerminalTab: ObservableObject, Identifiable {
 
     var initialPrompt: String?
     var characterId: String?  // CharacterRegistry 연동
+    var automationSourceTabId: String?
+    var automationReportPath: String?
+    @Published var workflowSourceRequest: String = ""
+    @Published var workflowPlanSummary: String = ""
+    @Published var workflowDesignSummary: String = ""
+    @Published var workflowReviewSummary: String = ""
+    @Published var workflowQASummary: String = ""
+    @Published var workflowSRESummary: String = ""
+    @Published var officeSeatLockReason: String?
+    @Published var workflowStages: [WorkflowStageRecord] = []
+    @Published var reviewerAttemptCount: Int = 0
+    @Published var qaAttemptCount: Int = 0
+    @Published var automatedRevisionCount: Int = 0
 
     // ── 고급 CLI 옵션 ──
     @Published var permissionMode: PermissionMode = .bypassPermissions
@@ -378,6 +608,30 @@ class TerminalTab: ObservableObject, Identifiable {
     @Published var additionalDirs: [String] = []
     @Published var continueSession: Bool = false   // --continue
     @Published var useWorktree: Bool = false        // --worktree
+
+    // ── 추가 CLI 옵션 (v1.5) ──
+    @Published var fallbackModel: String = ""          // --fallback-model
+    @Published var sessionName: String = ""            // --name
+    @Published var jsonSchema: String = ""             // --json-schema
+    @Published var mcpConfigPaths: [String] = []       // --mcp-config
+    @Published var customAgent: String = ""            // --agent
+    @Published var customAgentsJSON: String = ""       // --agents (JSON)
+    @Published var pluginDirs: [String] = []           // --plugin-dir
+    @Published var customTools: String = ""            // --tools (빌트인 도구 제한)
+    @Published var enableChrome: Bool = true           // --chrome
+    @Published var forkSession: Bool = false           // --fork-session
+    @Published var fromPR: String = ""                 // --from-pr
+    @Published var enableBrief: Bool = false           // --brief
+    @Published var tmuxMode: Bool = false              // --tmux
+    @Published var strictMcpConfig: Bool = false       // --strict-mcp-config
+    @Published var settingSources: String = ""         // --setting-sources
+    @Published var settingsFileOrJSON: String = ""     // --settings
+    @Published var betaHeaders: String = ""            // --betas
+
+    // ── 세션 연속성 (--resume으로 멀티턴 유지) ──
+
+    // ── 크롬 윈도우 캡처 ──
+    @Published var chromeScreenshot: CGImage?
 
     init(id: String, projectName: String, projectPath: String, workerName: String, workerColor: Color) {
         self.id = id; self.projectName = projectName; self.projectPath = projectPath
@@ -428,29 +682,64 @@ class TerminalTab: ObservableObject, Identifiable {
 
     // MARK: - Send Prompt (stream-json 이벤트 스트림)
 
-    func sendPrompt(_ prompt: String) {
-        guard !prompt.isEmpty, !isProcessing else { return }
+    func sendPrompt(_ prompt: String, permissionOverride: PermissionMode? = nil, bypassWorkflowRouting: Bool = false) {
+        guard !prompt.isEmpty else { return }
+
+        if !bypassWorkflowRouting,
+           permissionOverride == nil,
+           SessionManager.shared.routePromptIfNeeded(for: self, prompt: prompt) {
+            return
+        }
+
+        if !bypassWorkflowRouting, permissionOverride == nil {
+            SessionManager.shared.prepareDirectDeveloperWorkflowIfNeeded(for: self, prompt: prompt)
+        }
+
+        guard !isProcessing else { return }
+
+        if let reason = TokenTracker.shared.startBlockReason(isAutomation: isAutomationTab) {
+            appendBlock(.status(message: "토큰 보호 모드"), content: reason)
+            claudeActivity = .idle
+            return
+        }
+
+        pendingApproval = nil
+        pendingPermissionDenial = nil
+        lastPermissionFingerprint = nil
+        toolUseContexts.removeAll()
+        parallelTasks.removeAll()
+        isCompleted = false
+        budgetStopIssued = false
 
         appendBlock(.userPrompt, content: prompt)
+        lastPromptText = prompt
         isProcessing = true
         claudeActivity = .thinking
-        lastActivityTime = Date()  // 휴게실에서 복귀
+        lastActivityTime = Date()
 
         let path = FileManager.default.fileExists(atPath: projectPath) ? projectPath : NSHomeDirectory()
+        let effectivePermissionMode = permissionOverride ?? permissionMode
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
 
             var cmd = "cd \(self.shellEscape(path)) && claude -p --output-format stream-json --verbose"
+
             // 권한 모드
-            cmd += " --permission-mode \(self.permissionMode.rawValue)"
+            cmd += " --permission-mode \(effectivePermissionMode.rawValue)"
             cmd += " --model \(self.selectedModel.rawValue)"
             cmd += " --effort \(self.effortLevel.rawValue)"
+
             // 세션 이어하기
             if self.continueSession && self.sessionId == nil {
                 cmd += " --continue"
             } else if let sid = self.sessionId {
                 cmd += " --resume \(self.shellEscape(sid))"
+            }
+
+            // 세션 이름
+            if !self.sessionName.isEmpty {
+                cmd += " --name \(self.shellEscape(self.sessionName))"
             }
             // 시스템 프롬프트
             if !self.systemPrompt.isEmpty {
@@ -460,36 +749,75 @@ class TerminalTab: ObservableObject, Identifiable {
             if self.maxBudgetUSD > 0 {
                 cmd += " --max-budget-usd \(String(format: "%.2f", self.maxBudgetUSD))"
             }
-            // 도구 제한
-            if !self.allowedTools.trimmingCharacters(in: .whitespaces).isEmpty {
-                cmd += " --allowed-tools \(self.shellEscape(self.allowedTools.trimmingCharacters(in: .whitespaces)))"
+            // 대체 모델
+            if !self.fallbackModel.isEmpty {
+                cmd += " --fallback-model \(self.shellEscape(self.fallbackModel))"
             }
-            if !self.disallowedTools.trimmingCharacters(in: .whitespaces).isEmpty {
-                cmd += " --disallowed-tools \(self.shellEscape(self.disallowedTools.trimmingCharacters(in: .whitespaces)))"
+            // JSON 스키마
+            if !self.jsonSchema.isEmpty {
+                cmd += " --json-schema \(self.shellEscape(self.jsonSchema))"
+            }
+            // 도구 제한
+            let effectiveAllowedTools = self.effectiveAllowedTools()
+            if !effectiveAllowedTools.isEmpty {
+                cmd += " --allowed-tools \(self.shellEscape(effectiveAllowedTools))"
+            }
+            let effectiveDisallowedTools = self.effectiveDisallowedTools()
+            if !effectiveDisallowedTools.isEmpty {
+                cmd += " --disallowed-tools \(self.shellEscape(effectiveDisallowedTools))"
+            }
+            // 빌트인 도구
+            if !self.customTools.trimmingCharacters(in: .whitespaces).isEmpty {
+                cmd += " --tools \(self.shellEscape(self.customTools.trimmingCharacters(in: .whitespaces)))"
             }
             // 추가 디렉토리
             for dir in self.additionalDirs where !dir.isEmpty {
                 cmd += " --add-dir \(self.shellEscape(dir))"
             }
+            // MCP 설정
+            for mcpPath in self.mcpConfigPaths where !mcpPath.isEmpty {
+                cmd += " --mcp-config \(self.shellEscape(mcpPath))"
+            }
+            if self.strictMcpConfig { cmd += " --strict-mcp-config" }
+            // 에이전트
+            if !self.customAgent.isEmpty {
+                cmd += " --agent \(self.shellEscape(self.customAgent))"
+            }
+            if !self.customAgentsJSON.isEmpty {
+                cmd += " --agents \(self.shellEscape(self.customAgentsJSON))"
+            }
+            // 플러그인
+            for pluginDir in self.pluginDirs where !pluginDir.isEmpty {
+                cmd += " --plugin-dir \(self.shellEscape(pluginDir))"
+            }
+            // 크롬
+            if self.enableChrome { cmd += " --chrome" }
             // 워크트리
             if self.useWorktree { cmd += " --worktree" }
-            cmd += " \(self.shellEscape(prompt))"
+            if self.tmuxMode { cmd += " --tmux" }
+            // 포크
+            if self.forkSession { cmd += " --fork-session" }
+            // PR
+            if !self.fromPR.isEmpty { cmd += " --from-pr \(self.shellEscape(self.fromPR))" }
+            // Brief
+            if self.enableBrief { cmd += " --brief" }
+            // 베타
+            if !self.betaHeaders.isEmpty { cmd += " --betas \(self.shellEscape(self.betaHeaders))" }
+            // 설정 소스
+            if !self.settingSources.isEmpty { cmd += " --setting-sources \(self.shellEscape(self.settingSources))" }
+            if !self.settingsFileOrJSON.isEmpty { cmd += " --settings \(self.shellEscape(self.settingsFileOrJSON))" }
+
+            // 프롬프트
+            cmd += " -- \(self.shellEscape(prompt))"
 
             let proc = Process()
             let outPipe = Pipe()
             let errPipe = Pipe()
             proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            // -l (login shell) 로 실행해야 ~/.zprofile, ~/.zshrc 의 PATH 설정이 로드됨
-            proc.arguments = ["-l", "-c", cmd]
+            proc.arguments = ["-il", "-c", cmd]
             proc.currentDirectoryURL = URL(fileURLWithPath: path)
             var env = ProcessInfo.processInfo.environment
-            // GUI 앱에서 homebrew PATH가 누락될 수 있으므로 보장
-            let existingPath = env["PATH"] ?? "/usr/bin:/bin"
-            let extraPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/homebrew/sbin",
-                              NSHomeDirectory() + "/.nvm/versions/node/*/bin",
-                              NSHomeDirectory() + "/.local/bin",
-                              "/usr/local/opt/node/bin"]
-            env["PATH"] = (extraPaths + [existingPath]).joined(separator: ":")
+            env["PATH"] = Self.buildFullPATH()
             env["TERM"] = "dumb"; env["NO_COLOR"] = "1"
             proc.environment = env
             proc.standardOutput = outPipe
@@ -550,6 +878,10 @@ class TerminalTab: ObservableObject, Identifiable {
                 if self.isProcessing {
                     self.isProcessing = false
                     self.claudeActivity = self.claudeActivity == .error ? .error : .done
+                    self.finalizeParallelTasks(as: self.claudeActivity == .error ? .failed : .completed)
+                }
+                if let denial = self.pendingPermissionDenial, self.pendingApproval == nil {
+                    self.presentPermissionApprovalIfNeeded(denial)
                 }
             }
         }
@@ -579,10 +911,14 @@ class TerminalTab: ObservableObject, Identifiable {
             if let usage = usageObj {
                 let input = usage["input_tokens"] as? Int ?? 0
                 let output = usage["output_tokens"] as? Int ?? 0
-                inputTokensUsed += input
-                outputTokensUsed += output
-                tokensUsed = inputTokensUsed + outputTokensUsed
+                // 3개 @Published를 개별 갱신하지 않고 한 번에 처리
+                let newInput = inputTokensUsed + input
+                let newOutput = outputTokensUsed + output
+                inputTokensUsed = newInput
+                outputTokensUsed = newOutput
+                tokensUsed = newInput + newOutput
                 TokenTracker.shared.recordTokens(input: input, output: output)
+                enforceTokenBudgetIfNeeded()
             }
 
             for block in content {
@@ -591,7 +927,10 @@ class TerminalTab: ObservableObject, Identifiable {
                 if blockType == "text" {
                     let text = block["text"] as? String ?? ""
                     if !text.isEmpty {
-                        claudeActivity = .thinking
+                        // Assistant response text is visible output, so the office actor
+                        // should return to the workstation instead of lingering in a
+                        // remote "thinking" spot.
+                        claudeActivity = .writing
                         appendBlock(.thought, content: text)
                     }
                 }
@@ -603,6 +942,8 @@ class TerminalTab: ObservableObject, Identifiable {
 
                     let toolName = block["name"] as? String ?? ""
                     let toolInput = block["input"] as? [String: Any] ?? [:]
+                    let toolPreview = toolPreview(toolName: toolName, toolInput: toolInput)
+                    toolUseContexts[toolUseId] = ToolUseContext(id: toolUseId, name: toolName, input: toolInput, preview: toolPreview)
 
                     switch toolName {
                     case "Bash":
@@ -616,18 +957,18 @@ class TerminalTab: ObservableObject, Identifiable {
                         claudeActivity = .reading
                         let file = toolInput["file_path"] as? String ?? ""
                         appendBlock(.toolUse(name: "Read", input: file), content: (file as NSString).lastPathComponent)
-                        let readCount = blocks.filter { if case .toolUse(let n, _) = $0.blockType, n == "Read" { return true }; return false }.count
-                        AchievementManager.shared.recordFileRead(sessionReadCount: readCount)
+                        readCommandCount += 1
+                        AchievementManager.shared.recordFileRead(sessionReadCount: readCommandCount)
                     case "Write":
                         claudeActivity = .writing
                         let file = toolInput["file_path"] as? String ?? ""
-                        fileChanges.append(FileChangeRecord(path: file, fileName: (file as NSString).lastPathComponent, action: "Write", timestamp: Date()))
+                        recordFileChange(path: file, action: "Write")
                         appendBlock(.fileChange(path: file, action: "Write"), content: (file as NSString).lastPathComponent)
                         AchievementManager.shared.recordFileEdit()
                     case "Edit":
                         claudeActivity = .writing
                         let file = toolInput["file_path"] as? String ?? ""
-                        fileChanges.append(FileChangeRecord(path: file, fileName: (file as NSString).lastPathComponent, action: "Edit", timestamp: Date()))
+                        recordFileChange(path: file, action: "Edit")
                         appendBlock(.fileChange(path: file, action: "Edit"), content: (file as NSString).lastPathComponent)
                         AchievementManager.shared.recordFileEdit()
                     case "Grep":
@@ -638,8 +979,12 @@ class TerminalTab: ObservableObject, Identifiable {
                         claudeActivity = .searching
                         let pattern = toolInput["pattern"] as? String ?? ""
                         appendBlock(.toolUse(name: "Glob", input: pattern), content: pattern)
+                    case "Task":
+                        claudeActivity = .thinking
+                        let taskLabel = registerParallelTask(toolUseId: toolUseId, input: toolInput)
+                        appendBlock(.toolUse(name: "Task", input: taskLabel), content: taskLabel)
                     default:
-                        appendBlock(.toolUse(name: toolName, input: ""), content: toolName)
+                        appendBlock(.toolUse(name: toolName, input: ""), content: toolPreview.isEmpty ? toolName : toolPreview)
                     }
 
                     activeToolBlockIndex = blocks.count - 1
@@ -647,33 +992,13 @@ class TerminalTab: ObservableObject, Identifiable {
             }
 
         case "user":
-            // tool_result → 도구 실행 결과
-            if let result = json["tool_use_result"] as? [String: Any] {
-                let stdout = result["stdout"] as? String ?? ""
-                let stderr = result["stderr"] as? String ?? ""
-                let interrupted = result["interrupted"] as? Bool ?? false
-
-                if !stdout.isEmpty {
-                    appendBlock(.toolOutput, content: stdout)
-                }
-                if !stderr.isEmpty {
-                    errorCount += 1
-                    appendBlock(.toolError, content: stderr)
-                }
-                if interrupted {
-                    appendBlock(.toolEnd(success: false), content: "중단됨")
-                } else {
-                    let success = !(result["is_error"] as? Bool ?? false)
-                    appendBlock(.toolEnd(success: success))
-                }
-
-                activeToolBlockIndex = nil
-            }
+            handleUserToolResult(json)
 
         case "result":
             let cost = json["total_cost_usd"] as? Double ?? 0
             let duration = json["duration_ms"] as? Int ?? 0
             let resultText = json["result"] as? String ?? ""
+            let permissionDenials = json["permission_denials"] as? [[String: Any]] ?? []
             totalCost += cost
             TokenTracker.shared.recordCost(cost)
 
@@ -686,6 +1011,7 @@ class TerminalTab: ObservableObject, Identifiable {
                     outputTokensUsed += output
                     tokensUsed = inputTokensUsed + outputTokensUsed
                     TokenTracker.shared.recordTokens(input: input, output: output)
+                    enforceTokenBudgetIfNeeded()
                 }
             }
             // total_input_tokens / total_output_tokens (일부 Claude Code 버전)
@@ -700,27 +1026,352 @@ class TerminalTab: ObservableObject, Identifiable {
                     inputTokensUsed = totalInput
                     outputTokensUsed = totalOutput
                     tokensUsed = totalInput + totalOutput
+                    enforceTokenBudgetIfNeeded()
                 }
             }
 
             if let sid = json["session_id"] as? String { sessionId = sid }
+            if let latestDenial = permissionDenials.last {
+                pendingPermissionDenial = permissionDenialCandidate(from: latestDenial)
+            }
 
             appendBlock(.completion(cost: cost, duration: duration),
-                        content: resultText.isEmpty ? "완료" : String(resultText.prefix(200)))
+                        content: "완료")
 
             // 즉시 완료 상태로 전환 (프로세스 종료 기다리지 않음)
             isProcessing = false
             claudeActivity = .done
+            lastResultText = resultText
+            completedPromptCount += 1
+            finalizeParallelTasks(as: .completed)
+            generateSummary()
             seenToolUseIds.removeAll()
+            if let denial = pendingPermissionDenial {
+                presentPermissionApprovalIfNeeded(denial)
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
                 if self?.claudeActivity == .done { self?.claudeActivity = .idle }
             }
 
-            sendCompletionNotification()
+            if permissionDenials.isEmpty {
+                sendCompletionNotification()
+                NotificationCenter.default.post(
+                    name: .workmanTabCycleCompleted,
+                    object: self,
+                    userInfo: [
+                        "tabId": id,
+                        "completedPromptCount": completedPromptCount,
+                        "resultText": resultText
+                    ]
+                )
+            }
 
         default:
             break
         }
+    }
+
+    private func handleUserToolResult(_ json: [String: Any]) {
+        let toolUseId = extractToolUseId(from: json)
+
+        if let result = json["tool_use_result"] as? [String: Any] {
+            let stdout = result["stdout"] as? String ?? ""
+            let stderr = result["stderr"] as? String ?? ""
+            let interrupted = result["interrupted"] as? Bool ?? false
+            let isError = (result["is_error"] as? Bool) ?? isToolResultError(from: json)
+
+            if !stdout.isEmpty {
+                appendBlock(.toolOutput, content: stdout)
+            }
+            if !stderr.isEmpty {
+                errorCount += 1
+                appendBlock(.toolError, content: stderr)
+            } else if isError, let message = extractToolResultText(from: json) {
+                errorCount += 1
+                appendBlock(.toolError, content: message)
+                recordPermissionDenialIfNeeded(message: message, toolUseId: toolUseId)
+            }
+
+            if interrupted {
+                appendBlock(.toolEnd(success: false), content: "중단됨")
+            } else {
+                appendBlock(.toolEnd(success: !isError))
+            }
+
+            if let toolUseId {
+                updateParallelTask(toolUseId: toolUseId, succeeded: !isError && !interrupted)
+            }
+
+            activeToolBlockIndex = nil
+            return
+        }
+
+        if let message = extractToolResultText(from: json) {
+            let isError = isToolResultError(from: json) || message.lowercased().contains("error:")
+            if isError {
+                errorCount += 1
+                appendBlock(.toolError, content: message)
+                recordPermissionDenialIfNeeded(message: message, toolUseId: toolUseId)
+                appendBlock(.toolEnd(success: false))
+            } else if !message.isEmpty {
+                appendBlock(.toolOutput, content: message)
+                appendBlock(.toolEnd(success: true))
+            }
+
+            if let toolUseId {
+                updateParallelTask(toolUseId: toolUseId, succeeded: !isError)
+            }
+
+            activeToolBlockIndex = nil
+        }
+    }
+
+    private func extractToolUseId(from json: [String: Any]) -> String? {
+        guard let message = json["message"] as? [String: Any],
+              let content = message["content"] as? [[String: Any]] else { return nil }
+        return content.first(where: { ($0["type"] as? String) == "tool_result" })?["tool_use_id"] as? String
+    }
+
+    private func extractToolResultText(from json: [String: Any]) -> String? {
+        if let raw = json["tool_use_result"] as? String {
+            return cleanedToolResultText(raw)
+        }
+
+        guard let message = json["message"] as? [String: Any],
+              let content = message["content"] as? [[String: Any]] else { return nil }
+
+        for item in content where (item["type"] as? String) == "tool_result" {
+            if let text = item["content"] as? String {
+                return cleanedToolResultText(text)
+            }
+        }
+        return nil
+    }
+
+    private func isToolResultError(from json: [String: Any]) -> Bool {
+        guard let message = json["message"] as? [String: Any],
+              let content = message["content"] as? [[String: Any]] else { return false }
+        return content.contains {
+            ($0["type"] as? String) == "tool_result" && (($0["is_error"] as? Bool) ?? false)
+        }
+    }
+
+    private func cleanedToolResultText(_ text: String) -> String {
+        text.replacingOccurrences(of: "^Error:\\s*", with: "", options: .regularExpression)
+    }
+
+    private func recordPermissionDenialIfNeeded(message: String, toolUseId: String?) {
+        guard isPermissionDenialMessage(message) else { return }
+
+        let context = toolUseId.flatMap { toolUseContexts[$0] }
+        pendingPermissionDenial = PermissionDenialCandidate(
+            toolUseId: toolUseId,
+            toolName: context?.name ?? "Tool",
+            toolInput: context?.input ?? [:],
+            message: message
+        )
+    }
+
+    private func permissionDenialCandidate(from denial: [String: Any]) -> PermissionDenialCandidate {
+        let toolUseId = denial["tool_use_id"] as? String
+        let context = toolUseId.flatMap { toolUseContexts[$0] }
+        let toolName = denial["tool_name"] as? String ?? context?.name ?? "Tool"
+        let toolInput = denial["tool_input"] as? [String: Any] ?? context?.input ?? [:]
+        let message = pendingPermissionDenial?.message
+            ?? permissionDenialMessage(toolName: toolName, toolInput: toolInput)
+            ?? "Claude requested permissions to use \(toolName), but you haven't granted it yet."
+
+        return PermissionDenialCandidate(
+            toolUseId: toolUseId,
+            toolName: toolName,
+            toolInput: toolInput,
+            message: message
+        )
+    }
+
+    private func presentPermissionApprovalIfNeeded(_ denial: PermissionDenialCandidate) {
+        let command = approvalCommandText(for: denial)
+        let fingerprint = [denial.toolName, command].joined(separator: "|")
+        guard pendingApproval == nil, lastPermissionFingerprint != fingerprint else { return }
+
+        let retryMode = retryPermissionMode(for: denial.toolName)
+        let retrySummary = retryMode == .acceptEdits
+            ? "이번 한 번만 수정 권한으로 재시도합니다."
+            : "이번 한 번만 전체 권한으로 재시도합니다."
+
+        lastPermissionFingerprint = fingerprint
+        pendingApproval = PendingApproval(
+            command: command,
+            reason: "\(approvalReasonPrefix(for: denial.toolName)) 권한이 필요합니다. 승인하면 \(retrySummary)",
+            onApprove: { [weak self] in
+                self?.pendingPermissionDenial = nil
+                self?.appendBlock(.status(message: "권한 승인됨 · 다시 시도합니다"))
+                self?.sendPrompt(self?.approvalRetryPrompt(for: denial.toolName) ?? "Permission granted. Please continue the previous task.", permissionOverride: retryMode)
+            },
+            onDeny: { [weak self] in
+                self?.pendingPermissionDenial = nil
+                self?.appendBlock(.status(message: "권한 요청이 거부되었습니다"))
+            }
+        )
+    }
+
+    private func retryPermissionMode(for toolName: String) -> PermissionMode {
+        switch toolName {
+        case "Write", "Edit", "NotebookEdit":
+            return .acceptEdits
+        default:
+            return .bypassPermissions
+        }
+    }
+
+    private func approvalRetryPrompt(for toolName: String) -> String {
+        switch retryPermissionMode(for: toolName) {
+        case .acceptEdits:
+            return "Permission granted. You may now make the required file edits. Please continue the previous task."
+        default:
+            return "Permission granted. You may now use the required tool. Please continue the previous task."
+        }
+    }
+
+    private func approvalReasonPrefix(for toolName: String) -> String {
+        switch toolName {
+        case "Write", "Edit", "NotebookEdit":
+            return "파일 수정"
+        case "Bash":
+            return "명령 실행"
+        case "WebFetch":
+            return "웹 가져오기"
+        case "WebSearch":
+            return "웹 검색"
+        default:
+            return toolName
+        }
+    }
+
+    private func approvalCommandText(for denial: PermissionDenialCandidate) -> String {
+        let detail = toolPreview(toolName: denial.toolName, toolInput: denial.toolInput)
+        if detail.isEmpty {
+            return denial.message
+        }
+        return "\(denial.toolName) · \(detail)"
+    }
+
+    private func permissionDenialMessage(toolName: String, toolInput: [String: Any]) -> String? {
+        switch toolName {
+        case "Write", "Edit", "NotebookEdit":
+            if let filePath = toolInput["file_path"] as? String {
+                return "Claude requested permissions to write to \(filePath), but you haven't granted it yet."
+            }
+        case "Bash":
+            if let command = toolInput["command"] as? String {
+                return "Claude requested permissions to run \(command), but you haven't granted it yet."
+            }
+        case "WebFetch":
+            return "Claude requested permissions to use WebFetch, but you haven't granted it yet."
+        case "WebSearch":
+            return "Claude requested permissions to use WebSearch, but you haven't granted it yet."
+        default:
+            return "Claude requested permissions to use \(toolName), but you haven't granted it yet."
+        }
+        return nil
+    }
+
+    private func isPermissionDenialMessage(_ message: String) -> Bool {
+        message.lowercased().contains("requested permissions")
+    }
+
+    private func toolPreview(toolName: String, toolInput: [String: Any]) -> String {
+        switch toolName {
+        case "Bash":
+            return toolInput["command"] as? String ?? ""
+        case "Read", "Write", "Edit", "NotebookEdit":
+            return toolInput["file_path"] as? String ?? ""
+        case "Grep", "Glob":
+            return toolInput["pattern"] as? String ?? ""
+        case "Task":
+            return parallelTaskLabel(from: toolInput)
+        case "WebFetch":
+            return toolInput["url"] as? String ?? ""
+        case "WebSearch":
+            return toolInput["query"] as? String ?? ""
+        default:
+            return ""
+        }
+    }
+
+    private func registerParallelTask(toolUseId: String, input: [String: Any]) -> String {
+        let label = parallelTaskLabel(from: input)
+        let assigneeId = parallelTaskAssigneeId(seed: toolUseId)
+
+        if let index = parallelTasks.firstIndex(where: { $0.id == toolUseId }) {
+            parallelTasks[index].state = .running
+            return parallelTasks[index].label
+        }
+
+        parallelTasks.append(
+            ParallelTaskRecord(
+                id: toolUseId,
+                label: label,
+                assigneeCharacterId: assigneeId,
+                state: .running
+            )
+        )
+        return label
+    }
+
+    private func updateParallelTask(toolUseId: String, succeeded: Bool) {
+        guard let index = parallelTasks.firstIndex(where: { $0.id == toolUseId }) else { return }
+        parallelTasks[index].state = succeeded ? .completed : .failed
+    }
+
+    private func finalizeParallelTasks(as state: ParallelTaskState) {
+        guard parallelTasks.contains(where: { $0.state == .running }) else { return }
+        parallelTasks = parallelTasks.map { task in
+            guard task.state == .running else { return task }
+            var updated = task
+            updated.state = state
+            return updated
+        }
+    }
+
+    private func parallelTaskLabel(from input: [String: Any]) -> String {
+        let candidates: [String?] = [
+            input["description"] as? String,
+            input["subtask"] as? String,
+            input["title"] as? String,
+            input["name"] as? String,
+            input["prompt"] as? String
+        ]
+
+        for candidate in candidates {
+            guard let candidate else { continue }
+            let cleaned = candidate
+                .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !cleaned.isEmpty {
+                return String(cleaned.prefix(18))
+            }
+        }
+
+        return "병렬 작업"
+    }
+
+    private func parallelTaskAssigneeId(seed: String) -> String {
+        let registry = CharacterRegistry.shared
+        let preferredPool = registry.hiredCharacters.filter {
+            !$0.isOnVacation && $0.id != characterId
+        }
+        let pool = preferredPool
+
+        guard !pool.isEmpty else {
+            return characterId ?? "parallel-\(id)"
+        }
+
+        let alreadyUsed = Set(parallelTasks.map(\.assigneeCharacterId))
+        let available = pool.filter { !alreadyUsed.contains($0.id) }
+        let effectivePool = available.isEmpty ? pool : available
+        let hash = abs(seed.hashValue)
+        return effectivePool[hash % effectivePool.count].id
     }
 
     // MARK: - Block Management
@@ -729,17 +1380,103 @@ class TerminalTab: ObservableObject, Identifiable {
     func appendBlock(_ type: StreamBlock.BlockType, content: String = "") -> StreamBlock {
         let block = StreamBlock(type: type, content: content)
         blocks.append(block)
-        scrollTrigger += 1  // 스크롤 트리거
+        trimBlocksIfNeeded()
         return block
+    }
+
+    var isAutomationTab: Bool {
+        automationSourceTabId != nil
     }
 
     func cancelProcessing() {
         currentProcess?.terminate(); currentProcess = nil
         isProcessing = false; claudeActivity = .idle
+        finalizeParallelTasks(as: .failed)
         appendBlock(.status(message: "취소됨"))
     }
 
+    func forceStop() {
+        if let proc = currentProcess, proc.isRunning {
+            proc.terminate()
+            let pid = proc.processIdentifier
+            DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) {
+                if proc.isRunning { kill(pid, SIGKILL) }
+            }
+        }
+        currentProcess = nil
+        isProcessing = false; claudeActivity = .idle; isRunning = false
+        finalizeParallelTasks(as: .failed)
+        appendBlock(.status(message: "강제 중지됨"))
+    }
+
+    /// 작업을 강제 중지하고 git 변경사항을 작업 전 상태로 롤백
+    func cancelAndRevert() {
+        forceStop()
+        guard gitInfo.isGitRepo else { return }
+        let p = projectPath
+        // 작업 중 변경된 파일만 복원
+        let changedPaths = Set(fileChanges.map(\.path))
+        for filePath in changedPaths {
+            _ = Self.shellSync("git -C \"\(p)\" checkout -- \"\(filePath)\" 2>/dev/null")
+        }
+        // 새로 생성된 파일 (Write action) 삭제
+        let newFiles = fileChanges.filter { $0.action == "Write" }.map(\.path)
+        for filePath in newFiles {
+            _ = Self.shellSync("git -C \"\(p)\" clean -f -- \"\(filePath)\" 2>/dev/null")
+        }
+        appendBlock(.status(message: "작업 취소 및 변경사항 롤백 완료"))
+    }
+
     func clearBlocks() { blocks.removeAll() }
+
+    private func trimBlocksIfNeeded() {
+        let overflow = blocks.count - Self.maxRetainedBlocks
+        guard overflow > 0 else { return }
+
+        let preserveSessionStart: Bool
+        if let first = blocks.first, case .sessionStart = first.blockType {
+            preserveSessionStart = true
+        } else {
+            preserveSessionStart = false
+        }
+
+        let removalStart = preserveSessionStart ? 1 : 0
+        let removableCount = min(overflow, max(0, blocks.count - removalStart))
+        guard removableCount > 0 else { return }
+
+        let removalEnd = removalStart + removableCount
+        blocks.removeSubrange(removalStart..<removalEnd)
+
+        if let activeToolBlockIndex {
+            if activeToolBlockIndex < removalEnd {
+                self.activeToolBlockIndex = nil
+            } else {
+                self.activeToolBlockIndex = activeToolBlockIndex - removableCount
+            }
+        }
+    }
+
+    private func recordFileChange(path: String, action: String) {
+        let record = FileChangeRecord(
+            path: path,
+            fileName: (path as NSString).lastPathComponent,
+            action: action,
+            timestamp: Date()
+        )
+
+        if let last = fileChanges.last,
+           last.path == record.path,
+           last.action == record.action {
+            fileChanges[fileChanges.count - 1] = record
+        } else {
+            fileChanges.append(record)
+        }
+
+        let overflow = fileChanges.count - Self.maxRetainedFileChanges
+        if overflow > 0 {
+            fileChanges.removeFirst(overflow)
+        }
+    }
 
     // Legacy compat
     func send(_ text: String) { sendPrompt(text) }
@@ -828,21 +1565,348 @@ class TerminalTab: ObservableObject, Identifiable {
 
     private func shellEscape(_ str: String) -> String { "'" + str.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 
+    private func effectiveAllowedTools() -> String {
+        let raw = allowedTools
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if shouldBlockParallelSubagents {
+            return raw.filter { $0.caseInsensitiveCompare("Task") != .orderedSame }.joined(separator: ",")
+        }
+        return raw.joined(separator: ",")
+    }
+
+    private func effectiveDisallowedTools() -> String {
+        var raw = disallowedTools
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if shouldBlockParallelSubagents &&
+            !raw.contains(where: { $0.caseInsensitiveCompare("Task") == .orderedSame }) {
+            raw.append("Task")
+        }
+
+        return raw.joined(separator: ",")
+    }
+
+    private var shouldBlockParallelSubagents: Bool {
+        isAutomationTab || !AppSettings.shared.allowParallelSubagents
+    }
+
+    private func enforceTokenBudgetIfNeeded() {
+        guard isProcessing, !budgetStopIssued else { return }
+        guard let reason = TokenTracker.shared.runningStopReason(
+            isAutomation: isAutomationTab,
+            currentTabTokens: tokensUsed,
+            tokenLimit: tokenLimit
+        ) else { return }
+
+        budgetStopIssued = true
+        currentProcess?.terminate()
+        currentProcess = nil
+        isProcessing = false
+        claudeActivity = .error
+        finalizeParallelTasks(as: .failed)
+        appendBlock(.status(message: "토큰 보호로 중단"), content: reason)
+    }
+
+    /// GUI 앱에서도 claude CLI를 찾을 수 있도록 PATH를 완전히 구성
+    static func buildFullPATH() -> String {
+        let home = NSHomeDirectory()
+        var paths: [String] = []
+
+        // Homebrew (Apple Silicon + Intel)
+        paths += ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/usr/local/sbin"]
+
+        // npm global 설치 경로들
+        paths += ["/usr/local/opt/node/bin", home + "/.npm-global/bin"]
+
+        // nvm 설치 경로 — glob 직접 해결
+        let nvmBase = home + "/.nvm/versions/node"
+        if let nodeDirs = try? FileManager.default.contentsOfDirectory(atPath: nvmBase) {
+            for dir in nodeDirs.sorted().reversed() {
+                let binPath = nvmBase + "/" + dir + "/bin"
+                if FileManager.default.fileExists(atPath: binPath) {
+                    paths.append(binPath)
+                }
+            }
+        }
+
+        // fnm 설치 경로
+        let fnmBase = home + "/Library/Application Support/fnm/node-versions"
+        if let fnmDirs = try? FileManager.default.contentsOfDirectory(atPath: fnmBase) {
+            for dir in fnmDirs.sorted().reversed() {
+                let binPath = fnmBase + "/" + dir + "/installation/bin"
+                if FileManager.default.fileExists(atPath: binPath) {
+                    paths.append(binPath)
+                }
+            }
+        }
+
+        // volta
+        paths.append(home + "/.volta/bin")
+
+        // pnpm
+        paths.append(home + "/Library/pnpm")
+        paths.append(home + "/.local/share/pnpm")
+
+        // 일반적인 경로들
+        paths += [home + "/.local/bin", home + "/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+
+        // 기존 PATH 유지
+        let existing = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        if !existing.isEmpty { paths.append(existing) }
+
+        return paths.joined(separator: ":")
+    }
+
     static func shellSync(_ command: String) -> String? {
         let p = Process(); let pipe = Pipe()
         p.standardOutput = pipe; p.standardError = FileHandle.nullDevice
         p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        p.arguments = ["-l", "-c", command]
-        // GUI 앱에서 PATH 보장
+        p.arguments = ["-il", "-c", command]  // -i (interactive) + -l (login) 모두 사용
         var env = ProcessInfo.processInfo.environment
-        let existing = env["PATH"] ?? "/usr/bin:/bin"
-        let extra = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/homebrew/sbin",
-                     NSHomeDirectory() + "/.local/bin", "/usr/local/opt/node/bin"]
-        env["PATH"] = (extra + [existing]).joined(separator: ":")
+        env["PATH"] = buildFullPATH()
         p.environment = env
         do { try p.run(); p.waitUntilExit()
             let d = pipe.fileHandleForReading.readDataToEndOfFile()
             let o = String(data: d, encoding: .utf8); return o?.isEmpty == true ? nil : o
         } catch { return nil }
+    }
+
+    // MARK: - Chrome Window Capture (ScreenCaptureKit)
+
+    static func captureBrowserWindow() async -> CGImage? {
+        // Check screen recording permission before attempting capture
+        // to avoid repeatedly triggering the system permission dialog
+        guard CGPreflightScreenCaptureAccess() else { return nil }
+
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            let browserApps = ["Google Chrome", "Arc", "Safari", "Microsoft Edge", "Firefox", "Brave Browser"]
+
+            // 브라우저 윈도우 찾기
+            for window in content.windows {
+                guard let app = window.owningApplication,
+                      browserApps.contains(app.applicationName),
+                      window.frame.width > 200 && window.frame.height > 200 else { continue }
+
+                let filter = SCContentFilter(desktopIndependentWindow: window)
+                let config = SCStreamConfiguration()
+                config.width = Int(window.frame.width / 4)   // 축소 (성능)
+                config.height = Int(window.frame.height / 4)
+                config.capturesAudio = false
+                config.showsCursor = false
+
+                let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+                return image
+            }
+        } catch {
+            // 권한 없거나 에러 → 무시
+        }
+        return nil
+    }
+}
+
+extension TerminalTab {
+    var assignedCharacter: WorkerCharacter? {
+        CharacterRegistry.shared.character(with: characterId)
+    }
+
+    var workerJob: WorkerJob {
+        assignedCharacter?.jobRole ?? .developer
+    }
+
+    var isWorkerOnVacation: Bool {
+        assignedCharacter?.isOnVacation ?? false
+    }
+
+    var hasCodeChanges: Bool {
+        fileChanges.contains { $0.action == "Write" || $0.action == "Edit" }
+    }
+
+    var latestUserPromptText: String? {
+        blocks.reversed().first {
+            if case .userPrompt = $0.blockType { return true }
+            return false
+        }?.content
+    }
+
+    var workflowRequirementText: String {
+        let source = workflowSourceRequest.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !source.isEmpty { return source }
+        return latestUserPromptText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    var lastCompletionSummary: String {
+        lastResultText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func resetWorkflowTracking(request: String) {
+        workflowSourceRequest = request
+        workflowPlanSummary = ""
+        workflowDesignSummary = ""
+        workflowReviewSummary = ""
+        workflowQASummary = ""
+        workflowSRESummary = ""
+        automationReportPath = nil
+        workflowStages.removeAll()
+        reviewerAttemptCount = 0
+        qaAttemptCount = 0
+        automatedRevisionCount = 0
+    }
+
+    func upsertWorkflowStage(
+        role: WorkerJob,
+        workerName: String,
+        assigneeCharacterId: String?,
+        state: WorkflowStageState,
+        handoffLabel: String,
+        detail: String
+    ) {
+        let effectiveAssignee = assigneeCharacterId ?? characterId ?? "workflow-\(role.rawValue)-\(id)"
+        let stageId = role.rawValue
+        if let index = workflowStages.firstIndex(where: { $0.id == stageId }) {
+            workflowStages[index].workerName = workerName
+            workflowStages[index].assigneeCharacterId = effectiveAssignee
+            workflowStages[index].state = state
+            workflowStages[index].handoffLabel = handoffLabel
+            workflowStages[index].detail = detail
+            workflowStages[index].updatedAt = Date()
+            return
+        }
+
+        workflowStages.append(
+            WorkflowStageRecord(
+                id: stageId,
+                role: role,
+                workerName: workerName,
+                assigneeCharacterId: effectiveAssignee,
+                state: state,
+                handoffLabel: handoffLabel,
+                detail: detail,
+                updatedAt: Date()
+            )
+        )
+    }
+
+    func updateWorkflowStage(
+        role: WorkerJob,
+        state: WorkflowStageState,
+        detail: String? = nil,
+        handoffLabel: String? = nil
+    ) {
+        guard let index = workflowStages.firstIndex(where: { $0.role == role }) else { return }
+        workflowStages[index].state = state
+        if let detail {
+            workflowStages[index].detail = detail
+        }
+        if let handoffLabel {
+            workflowStages[index].handoffLabel = handoffLabel
+        }
+        workflowStages[index].updatedAt = Date()
+    }
+
+    private func workflowStageOrder(for role: WorkerJob) -> Int {
+        switch role {
+        case .planner: return 0
+        case .designer: return 1
+        case .developer: return 2
+        case .reviewer: return 3
+        case .qa: return 4
+        case .reporter: return 5
+        case .sre: return 6
+        case .boss: return 7
+        }
+    }
+
+    var workflowTimelineStages: [WorkflowStageRecord] {
+        workflowStages.sorted { lhs, rhs in
+            let lhsOrder = workflowStageOrder(for: lhs.role)
+            let rhsOrder = workflowStageOrder(for: rhs.role)
+            if lhsOrder != rhsOrder { return lhsOrder < rhsOrder }
+            return lhs.updatedAt < rhs.updatedAt
+        }
+    }
+
+    private var workflowBubbleTasks: [ParallelTaskRecord] {
+        let visibleStages = workflowTimelineStages.filter { $0.state != .skipped }
+        guard !visibleStages.isEmpty else { return [] }
+
+        let active = visibleStages.filter { $0.state == .running || $0.state == .failed }
+        let completed = visibleStages
+            .filter { $0.state == .completed }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        let queued = visibleStages.filter { $0.state == .queued }
+
+        let ordered = active + completed + queued
+        return Array(ordered.prefix(4)).map { stage in
+            let parallelState: ParallelTaskState
+            switch stage.state {
+            case .failed:
+                parallelState = .failed
+            case .completed:
+                parallelState = .completed
+            case .queued, .running, .skipped:
+                parallelState = .running
+            }
+            return ParallelTaskRecord(
+                id: "workflow-\(stage.id)",
+                label: stage.workerName,
+                assigneeCharacterId: stage.assigneeCharacterId,
+                state: parallelState
+            )
+        }
+    }
+
+    var officeParallelTasks: [ParallelTaskRecord] {
+        let workflowTasks = workflowBubbleTasks
+        if workflowTasks.isEmpty {
+            return Array(parallelTasks.prefix(4))
+        }
+
+        let extraTasks = parallelTasks.filter { task in
+            !workflowTasks.contains(where: { $0.assigneeCharacterId == task.assigneeCharacterId && $0.label == task.label })
+        }
+        return Array((workflowTasks + extraTasks).prefix(4))
+    }
+
+    var workflowProgressSummary: String? {
+        guard !workflowStages.isEmpty else { return nil }
+
+        if let running = workflowTimelineStages.last(where: { $0.state == .running }) {
+            return "\(running.role.displayName) 진행 중 · \(running.workerName)"
+        }
+        if let failed = workflowTimelineStages.last(where: { $0.state == .failed }) {
+            return "\(failed.role.displayName) 피드백 반영 중"
+        }
+        if let completed = workflowTimelineStages.last(where: { $0.state == .completed }) {
+            return "\(completed.role.displayName) 완료"
+        }
+        if let queued = workflowTimelineStages.last(where: { $0.state == .queued }) {
+            return "\(queued.role.displayName) 대기 중"
+        }
+        return nil
+    }
+
+    var officeParallelSummary: String? {
+        if let workflowSummary = workflowProgressSummary {
+            return workflowSummary
+        }
+
+        guard !parallelTasks.isEmpty else { return nil }
+        let completed = parallelTasks.filter { $0.state == .completed }.count
+        let failed = parallelTasks.filter { $0.state == .failed }.count
+        let running = parallelTasks.filter { $0.state == .running }.count
+
+        if running > 0 {
+            return "병렬 \(completed)/\(parallelTasks.count) 완료"
+        }
+        if failed > 0 {
+            return "병렬 \(failed)개 실패"
+        }
+        return "병렬 작업 완료"
     }
 }

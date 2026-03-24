@@ -3,12 +3,23 @@ import SwiftUI
 struct MainView: View {
     @EnvironmentObject var manager: SessionManager
     @ObservedObject var settings = AppSettings.shared
+    @ObservedObject private var achievementManager = AchievementManager.shared
     @State private var sidebarWidth: CGFloat = 230
     @State private var showSettings = false
     @State private var showClaudeNotInstalledAlert = false
+    @State private var showRoleNoticeAlert = false
+    @State private var roleNoticeTitle = ""
+    @State private var roleNoticeMessage = ""
     @State private var showBugReport = false
     @State private var showUpdateSheet = false
     @ObservedObject private var updater = UpdateChecker.shared
+    @Environment(\.openWindow) private var openWindow
+    @AppStorage("officeExpanded") private var officeExpanded = true
+    @AppStorage("viewMode") private var viewModeRaw: Int = 1
+
+    private enum ViewMode: Int { case split = 0, office = 1, terminal = 2, strip = 3 }
+    private var viewMode: ViewMode { ViewMode(rawValue: viewModeRaw) ?? .split }
+    private var officeHeight: CGFloat { officeExpanded ? 380 : 240 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,11 +31,17 @@ struct MainView: View {
 
                 Rectangle().fill(Theme.border).frame(width: 1)
 
-                VStack(spacing: 0) {
-                    PixelStripView()
-                        .frame(height: 110)
-                    Rectangle().fill(Theme.border).frame(height: 1)
-                    TerminalAreaView()
+                ZStack {
+                    switch viewMode {
+                    case .split:
+                        splitView
+                    case .office:
+                        officeFullView
+                    case .terminal:
+                        TerminalAreaView()
+                    case .strip:
+                        stripView
+                    }
                 }
             }
 
@@ -32,12 +49,20 @@ struct MainView: View {
         }
         .background(Theme.bg)
         .overlay(alignment: .topTrailing) {
-            if let ach = AchievementManager.shared.recentUnlock {
-                AchievementToastView(achievement: ach)
-                    .padding(.top, 44)
-                    .padding(.trailing, 16)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-                    .animation(.spring(response: 0.4, dampingFraction: 0.75), value: ach.id)
+            if let ach = achievementManager.recentUnlock {
+                AchievementToastView(achievement: ach) {
+                    achievementManager.dismissRecentUnlock()
+                }
+                .padding(.top, 44)
+                .padding(.trailing, 18)
+                .transition(
+                    .asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .scale(scale: 0.96).combined(with: .opacity)
+                    )
+                )
+                .animation(.easeOut(duration: 0.2), value: ach.id)
+                .zIndex(10)
             }
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
@@ -53,8 +78,13 @@ struct MainView: View {
         } message: {
             Text("Claude Code CLI가 설치되어 있지 않습니다.\n\n터미널에서 아래 명령어로 설치해주세요:\n\nnpm install -g @anthropic-ai/claude-code\n\n설치 후 앱을 다시 실행해주세요.")
         }
+        .alert(roleNoticeTitle, isPresented: $showRoleNoticeAlert) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text(roleNoticeMessage)
+        }
         .onAppear {
-            if manager.tabs.isEmpty {
+            if manager.userVisibleTabs.isEmpty {
                 manager.restoreSessions()
                 manager.autoDetectAndConnect()
             }
@@ -76,12 +106,104 @@ struct MainView: View {
             if let id = manager.activeTabId { manager.removeTab(id) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .workmanSelectTab)) { notif in
-            if let i = notif.object as? Int, i >= 1, i <= manager.tabs.count { manager.selectTab(manager.tabs[i-1].id) }
+            let tabs = manager.userVisibleTabs
+            if let i = notif.object as? Int, i >= 1, i <= tabs.count { manager.selectTab(tabs[i-1].id) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .workmanExportLog)) { _ in exportActiveLog() }
         .onReceive(NotificationCenter.default.publisher(for: .workmanClaudeNotInstalled)) { _ in
             showClaudeNotInstalledAlert = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .workmanRoleNotice)) { notif in
+            roleNoticeTitle = notif.userInfo?["title"] as? String ?? "직업 안내"
+            roleNoticeMessage = notif.userInfo?["message"] as? String ?? ""
+            showRoleNoticeAlert = true
+        }
+        .onChange(of: viewModeRaw) { _, newValue in
+            if newValue == ViewMode.terminal.rawValue {
+                OfficeSceneStore.shared.suspend()
+            }
+        }
+    }
+
+    private func viewModeButton(icon: String, mode: ViewMode, label: String) -> some View {
+        let isActive = viewMode == mode
+        return Button(action: { withAnimation(.easeInOut(duration: 0.2)) { viewModeRaw = mode.rawValue } }) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(isActive ? Theme.accent : Theme.textDim)
+                .frame(width: 30, height: 24)
+                .background(isActive ? Theme.accent.opacity(0.12) : .clear)
+        }
+        .buttonStyle(.plain)
+        .help(label)
+    }
+
+    // MARK: - Split View (기본 모드: 오피스 + 터미널)
+
+    private var splitView: some View {
+        VStack(spacing: 0) {
+            ZStack(alignment: .bottomTrailing) {
+                OfficeSceneView()
+                    .frame(height: officeHeight)
+
+                // 오피스 시점 + 확장/축소 버튼
+                HStack(spacing: 3) {
+                    // 전체 맵 ↔ 포커스 시점 토글
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            settings.officeViewMode = settings.officeViewMode == "grid" ? "side" : "grid"
+                        }
+                    }) {
+                        Image(systemName: settings.officeViewMode == "grid" ? "scope" : "rectangle.expand.vertical")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(Theme.textDim.opacity(0.6))
+                            .frame(width: 26, height: 20)
+                            .background(RoundedRectangle(cornerRadius: 5).fill(Theme.bgCard.opacity(0.7)))
+                            .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.border.opacity(0.3), lineWidth: 0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .help(settings.officeViewMode == "grid" ? "선택 캐릭터 포커스로 전환" : "오피스 전체 보기로 전환")
+
+                    // 확장/축소
+                    Button(action: { withAnimation(.easeInOut(duration: 0.25)) { officeExpanded.toggle() } }) {
+                        Image(systemName: officeExpanded ? "chevron.up.2" : "chevron.down.2")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(Theme.textDim.opacity(0.5))
+                            .frame(width: 26, height: 20)
+                            .background(RoundedRectangle(cornerRadius: 5).fill(Theme.bgCard.opacity(0.7)))
+                            .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.border.opacity(0.3), lineWidth: 0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .help(officeExpanded ? "오피스 축소" : "오피스 확장")
+                }
+                .padding(4)
+            }
+            Rectangle().fill(Theme.border).frame(height: 1)
+            TerminalAreaView()
+        }
+    }
+
+    // MARK: - Strip View (v1.2 스타일: 픽셀 스트립 + 터미널)
+
+    private var stripView: some View {
+        VStack(spacing: 0) {
+            PixelStripView()
+                .frame(height: 120)
+            Rectangle().fill(Theme.border).frame(height: 1)
+            TerminalAreaView()
+        }
+    }
+
+    // MARK: - Office Full View (오피스 전체 화면)
+
+    private var officeFullView: some View {
+        OfficeSceneView()
+    }
+
+    private func openOfficeWindow() {
+        openWindow(id: "office-window")
+        // 메인 창을 터미널 모드로 전환
+        withAnimation(.easeInOut(duration: 0.2)) { viewModeRaw = ViewMode.terminal.rawValue }
     }
 
     private func exportActiveLog() {
@@ -113,7 +235,7 @@ struct MainView: View {
             if updater.hasUpdate {
                 Button(action: { showUpdateSheet = true }) {
                     HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle.fill").font(.system(size: 10)).foregroundColor(Theme.green)
+                        Image(systemName: "arrow.down.circle.fill").font(.system(size: Theme.iconSize(10))).foregroundColor(Theme.green)
                         Text("v\(updater.latestVersion)").font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.green)
                     }
                     .padding(.horizontal, 7).padding(.vertical, 3)
@@ -143,25 +265,51 @@ struct MainView: View {
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .background(Theme.yellow.opacity(0.1)).cornerRadius(3)
 
+            // 뷰 모드 전환
+            HStack(spacing: 1) {
+                viewModeButton(icon: "rectangle.split.1x2", mode: .split, label: "분할")
+                viewModeButton(icon: "building.2", mode: .office, label: "오피스")
+                viewModeButton(icon: "person.2.fill", mode: .strip, label: "스트립")
+                viewModeButton(icon: "terminal", mode: .terminal, label: "터미널")
+            }
+            .background(RoundedRectangle(cornerRadius: 5).fill(Theme.bgSurface))
+            .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.border.opacity(0.3), lineWidth: 0.5))
+
+            // 오피스 별도 창 열기 (듀얼 모니터)
+            Button(action: { openOfficeWindow() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "rectangle.on.rectangle")
+                        .font(.system(size: 11, weight: .medium))
+                    Text("분리")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                }
+                .foregroundColor(Theme.textDim)
+                .padding(.horizontal, 9).padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 5).fill(Theme.bgSurface))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.border.opacity(0.3), lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+            .help("오피스를 별도 창으로 분리 (듀얼 모니터)")
+
             Button(action: { showBugReport = true }) {
-                Image(systemName: "ladybug.fill").font(Theme.monoSmall)
-                    .foregroundColor(Theme.textDim).padding(4)
+                Image(systemName: "ladybug.fill").font(.system(size: 13))
+                    .foregroundColor(Theme.textDim).padding(6)
             }.buttonStyle(.plain).help("버그 신고")
 
             Button(action: { showSettings = true }) {
-                Image(systemName: "gearshape.fill").font(Theme.monoSmall)
-                    .foregroundColor(Theme.textDim).padding(4)
+                Image(systemName: "gearshape.fill").font(.system(size: 13))
+                    .foregroundColor(Theme.textDim).padding(6)
             }.buttonStyle(.plain).help("Settings")
 
             Button(action: { manager.refresh() }) {
-                Image(systemName: "arrow.clockwise").font(Theme.mono(11, weight: .semibold))
-                    .foregroundColor(Theme.textDim).padding(4)
+                Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Theme.textDim).padding(6)
             }.buttonStyle(.plain).help("Cmd+R")
 
-            Text("\(manager.tabs.count)")
-                .font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.textDim)
-                .padding(.horizontal, 5).padding(.vertical, 2)
-                .background(Theme.bgSurface).cornerRadius(3)
+            Text("\(manager.userVisibleTabCount)")
+                .font(Theme.mono(11, weight: .bold)).foregroundColor(Theme.textDim)
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .background(Theme.bgSurface).cornerRadius(4)
         }
         .padding(.horizontal, 14).frame(height: 36)
         .background(Theme.bgCard)
@@ -170,21 +318,14 @@ struct MainView: View {
 
     // MARK: - Status Bar
 
+    private var activeTabCount: Int { manager.userVisibleTabs.lazy.filter(\.isRunning).count }
+
     private var statusBar: some View {
         HStack(spacing: 10) {
             HStack(spacing: 4) {
                 Circle().fill(Theme.green).frame(width: 4, height: 4)
-                Text("\(manager.tabs.filter { $0.isRunning }.count) active")
+                Text("\(activeTabCount) active")
                     .font(Theme.monoSmall).foregroundColor(Theme.textSecondary)
-            }
-
-            if let top = manager.tabs.max(by: { $0.tokensUsed < $1.tokensUsed }), top.tokensUsed > 0 {
-                Text("·").foregroundColor(Theme.textDim).font(Theme.monoTiny)
-                HStack(spacing: 3) {
-                    RoundedRectangle(cornerRadius: 1).fill(top.workerColor).frame(width: 2, height: 8)
-                    Text("\(top.workerName) \(fmtTok(top.tokensUsed))")
-                        .font(Theme.monoSmall).foregroundColor(Theme.textSecondary)
-                }
             }
 
             Spacer()
@@ -216,7 +357,7 @@ struct BugReportView: View {
         VStack(spacing: 16) {
             // Header
             HStack(spacing: 8) {
-                Image(systemName: "ladybug.fill").font(.system(size: 16)).foregroundColor(Theme.red)
+                Image(systemName: "ladybug.fill").font(.system(size: Theme.iconSize(16))).foregroundColor(Theme.red)
                 Text("버그 신고").font(Theme.mono(14, weight: .bold)).foregroundColor(Theme.textPrimary)
                 Spacer()
             }
@@ -224,7 +365,7 @@ struct BugReportView: View {
             if sent {
                 // Success
                 VStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill").font(.system(size: 36)).foregroundColor(Theme.green)
+                    Image(systemName: "checkmark.circle.fill").font(.system(size: Theme.iconSize(36))).foregroundColor(Theme.green)
                     Text("전송 완료!").font(Theme.mono(13, weight: .bold)).foregroundColor(Theme.green)
                     Text("소중한 피드백 감사합니다.").font(Theme.monoSmall).foregroundColor(Theme.textSecondary)
                 }
@@ -322,15 +463,16 @@ struct BugReportView: View {
     }
 
     private func captureScreenshot() {
-        guard let window = NSApp.mainWindow else { return }
-        if let cgImage = CGWindowListCreateImage(
-            window.frame,
-            .optionIncludingWindow,
-            CGWindowID(window.windowNumber),
-            [.boundsIgnoreFraming]
-        ) {
-            screenshotImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-        }
+        guard let window = NSApp.mainWindow,
+              let contentView = window.contentView else { return }
+
+        let bounds = contentView.bounds
+        guard let bitmap = contentView.bitmapImageRepForCachingDisplay(in: bounds) else { return }
+        contentView.cacheDisplay(in: bounds, to: bitmap)
+
+        let image = NSImage(size: bounds.size)
+        image.addRepresentation(bitmap)
+        screenshotImage = image
     }
 
     private func pickImage() {
@@ -361,7 +503,7 @@ struct BugReportView: View {
         App: WorkMan
         macOS: \(ProcessInfo.processInfo.operatingSystemVersionString)
         Claude: \(ClaudeInstallChecker.shared.version)
-        Sessions: \(SessionManager.shared.tabs.count)
+        Sessions: \(SessionManager.shared.userVisibleTabCount)
         Theme: \(AppSettings.shared.isDarkMode ? "Dark" : "Light")
         Font Scale: \(AppSettings.shared.fontSizeScale)
         """

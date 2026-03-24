@@ -1,10 +1,16 @@
 import SwiftUI
+import AppKit
 
 struct SidebarView: View {
     @EnvironmentObject var manager: SessionManager
     @ObservedObject private var settings = AppSettings.shared
+    @AppStorage("viewMode") private var appViewModeRaw: Int = 1
     @State private var draggingTabId: String?
     @State private var showHistory: Bool = false
+
+    private var isTerminalOnlyMode: Bool {
+        appViewModeRaw == 2
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,7 +22,7 @@ struct SidebarView: View {
                     Image(systemName: "clock.arrow.circlepath").font(Theme.monoTiny)
                         .foregroundColor(showHistory ? Theme.accent : Theme.textDim)
                 }.buttonStyle(.plain).help("세션 히스토리")
-                Text("\(manager.tabs.count)")
+                Text("\(manager.userVisibleTabCount)")
                     .font(Theme.monoSmall).foregroundColor(Theme.textDim)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(Theme.bgSurface).cornerRadius(3)
@@ -52,10 +58,16 @@ struct SidebarView: View {
             }
 
             Spacer(minLength: 0)
-            gamePanel
+            if !(isTerminalOnlyMode && settings.terminalSidebarLightweight) {
+                gamePanel
+            }
             tokenUsagePanel
             if manager.totalTokensUsed > 0 { tokenPanel }
-            managementButtons
+            if isTerminalOnlyMode && settings.terminalSidebarLightweight {
+                lightweightManagementButtons
+            } else {
+                managementButtons
+            }
             addButton
         }
         .background(Theme.bgCard)
@@ -155,8 +167,8 @@ struct SidebarView: View {
                     HStack {
                         Text("현재 세션").font(Theme.mono(8, weight: .medium)).foregroundColor(Theme.textDim)
                         Spacer()
-                        let totalIn = manager.tabs.reduce(0) { $0 + $1.inputTokensUsed }
-                        let totalOut = manager.tabs.reduce(0) { $0 + $1.outputTokensUsed }
+                        let totalIn = manager.userVisibleTabs.reduce(0) { $0 + $1.inputTokensUsed }
+                        let totalOut = manager.userVisibleTabs.reduce(0) { $0 + $1.outputTokensUsed }
                         if totalIn > 0 || totalOut > 0 {
                             HStack(spacing: 4) {
                                 Text("In").font(Theme.mono(7)).foregroundColor(Theme.textDim)
@@ -198,7 +210,7 @@ struct SidebarView: View {
                     Text(formatTokens(manager.totalTokensUsed))
                         .font(Theme.mono(12, weight: .semibold)).foregroundColor(Theme.textPrimary)
                 }
-                ForEach(manager.tabs.sorted(by: { $0.tokensUsed > $1.tokensUsed })) { tab in
+                ForEach(manager.userVisibleTabs.sorted(by: { $0.tokensUsed > $1.tokensUsed })) { tab in
                     if tab.tokensUsed > 0 {
                         HStack(spacing: 6) {
                             RoundedRectangle(cornerRadius: 1).fill(tab.workerColor).frame(width: 3, height: 12)
@@ -245,69 +257,300 @@ struct SidebarView: View {
     @State private var showCharacterSheet = false
     @State private var showAchievementSheet = false
     @State private var showAccessorySheet = false
+    @State private var showReportSheet = false
 
     private var managementButtons: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Button(action: { showCharacterSheet = true }) {
-                HStack(spacing: 6) {
-                    Text("👥").font(.system(size: 10))
-                    Text("캐릭터 관리").font(.system(size: 9, weight: .medium, design: .monospaced))
+                HStack(spacing: 8) {
+                    Text("👥").font(.system(size: 14))
+                    Text("캐릭터 관리").font(Theme.mono(11, weight: .medium))
                     Spacer()
                     Text("\(CharacterRegistry.shared.hiredCharacters.count)/\(CharacterRegistry.shared.allCharacters.count)")
-                        .font(.system(size: 7, weight: .bold, design: .monospaced)).foregroundColor(Theme.accent)
-                        .padding(.horizontal, 4).padding(.vertical, 1).background(Theme.accent.opacity(0.1)).cornerRadius(3)
+                        .font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.accent)
+                        .padding(.horizontal, 6).padding(.vertical, 2).background(Theme.accent.opacity(0.1)).cornerRadius(4)
                 }
                 .foregroundColor(Theme.textSecondary)
-                .padding(.vertical, 7).padding(.horizontal, 10)
+                .padding(.vertical, 9).padding(.horizontal, 12)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface.opacity(0.5))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.3), lineWidth: 0.5)))
             }.buttonStyle(.plain)
 
             Button(action: { showAccessorySheet = true }) {
-                HStack(spacing: 6) {
-                    Text("🛋️").font(.system(size: 10))
-                    Text("악세서리").font(.system(size: 9, weight: .medium, design: .monospaced))
+                HStack(spacing: 8) {
+                    Text("🛋️").font(.system(size: 14))
+                    Text("악세서리").font(Theme.mono(11, weight: .medium))
                     Spacer()
-                    Text("\(breakRoomFurnitureOnCount)/8")
-                        .font(.system(size: 7, weight: .bold, design: .monospaced)).foregroundColor(Theme.purple)
-                        .padding(.horizontal, 4).padding(.vertical, 1).background(Theme.purple.opacity(0.1)).cornerRadius(3)
+                    Text("\(breakRoomFurnitureOnCount)/20")
+                        .font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.purple)
+                        .padding(.horizontal, 6).padding(.vertical, 2).background(Theme.purple.opacity(0.1)).cornerRadius(4)
                 }
                 .foregroundColor(Theme.textSecondary)
-                .padding(.vertical, 7).padding(.horizontal, 10)
+                .padding(.vertical, 9).padding(.horizontal, 12)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface.opacity(0.5))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.3), lineWidth: 0.5)))
+            }.buttonStyle(.plain)
+
+            Button(action: { showReportSheet = true }) {
+                HStack(spacing: 8) {
+                    Text("📝").font(.system(size: 14))
+                    Text("보고서").font(Theme.mono(11, weight: .medium))
+                    Spacer()
+                    Text("\(manager.availableReportCount)")
+                        .font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.cyan)
+                        .padding(.horizontal, 6).padding(.vertical, 2).background(Theme.cyan.opacity(0.1)).cornerRadius(4)
+                }
+                .foregroundColor(Theme.textSecondary)
+                .padding(.vertical, 9).padding(.horizontal, 12)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface.opacity(0.5))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.3), lineWidth: 0.5)))
             }.buttonStyle(.plain)
 
             Button(action: { showAchievementSheet = true }) {
-                HStack(spacing: 6) {
-                    Text("🏆").font(.system(size: 10))
-                    Text("도전과제").font(.system(size: 9, weight: .medium, design: .monospaced))
+                HStack(spacing: 8) {
+                    Text("🏆").font(.system(size: 14))
+                    Text("도전과제").font(Theme.mono(11, weight: .medium))
                     Spacer()
                     Text("\(AchievementManager.shared.unlockedCount)/\(AchievementManager.shared.achievements.count)")
-                        .font(.system(size: 7, weight: .bold, design: .monospaced)).foregroundColor(Theme.yellow)
-                        .padding(.horizontal, 4).padding(.vertical, 1).background(Theme.yellow.opacity(0.1)).cornerRadius(3)
+                        .font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.yellow)
+                        .padding(.horizontal, 6).padding(.vertical, 2).background(Theme.yellow.opacity(0.1)).cornerRadius(4)
                 }
                 .foregroundColor(Theme.textSecondary)
-                .padding(.vertical, 7).padding(.horizontal, 10)
+                .padding(.vertical, 9).padding(.horizontal, 12)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface.opacity(0.5))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.3), lineWidth: 0.5)))
             }.buttonStyle(.plain)
         }
-        .padding(.horizontal, 10).padding(.bottom, 4)
-        .sheet(isPresented: $showCharacterSheet) { CharacterCollectionView().frame(minWidth: 520, minHeight: 450) }
-        .sheet(isPresented: $showAccessorySheet) { AccessoryView().frame(minWidth: 420, minHeight: 480) }
+        .padding(.horizontal, 10).padding(.bottom, 6)
+        .sheet(isPresented: $showCharacterSheet) {
+            CharacterCollectionView()
+                .frame(minWidth: 940, idealWidth: 1040, minHeight: 760, idealHeight: 840)
+        }
+        .sheet(isPresented: $showAccessorySheet) { AccessoryView().frame(minWidth: 480, minHeight: 560) }
+        .sheet(isPresented: $showReportSheet) { ReportCenterView().frame(minWidth: 760, minHeight: 620) }
         .sheet(isPresented: $showAchievementSheet) { AchievementCollectionView().frame(minWidth: 880, idealWidth: 960, minHeight: 680, idealHeight: 740) }
+    }
+
+    private var lightweightManagementButtons: some View {
+        VStack(spacing: 6) {
+            lightweightButton(title: "캐릭터 관리", emoji: "👥") { showCharacterSheet = true }
+            lightweightButton(title: "악세서리", emoji: "🛋️") { showAccessorySheet = true }
+            lightweightButton(title: "보고서", emoji: "📝") { showReportSheet = true }
+            lightweightButton(title: "도전과제", emoji: "🏆") { showAchievementSheet = true }
+        }
+        .padding(.horizontal, 10).padding(.bottom, 6)
+        .sheet(isPresented: $showCharacterSheet) {
+            CharacterCollectionView()
+                .frame(minWidth: 940, idealWidth: 1040, minHeight: 760, idealHeight: 840)
+        }
+        .sheet(isPresented: $showAccessorySheet) { AccessoryView().frame(minWidth: 480, minHeight: 560) }
+        .sheet(isPresented: $showReportSheet) { ReportCenterView().frame(minWidth: 760, minHeight: 620) }
+        .sheet(isPresented: $showAchievementSheet) { AchievementCollectionView().frame(minWidth: 880, idealWidth: 960, minHeight: 680, idealHeight: 740) }
+    }
+
+    private func lightweightButton(title: String, emoji: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(emoji).font(.system(size: 14))
+                Text(title).font(Theme.mono(11, weight: .medium))
+                Spacer()
+                Text("열기")
+                    .font(Theme.mono(8, weight: .bold))
+                    .foregroundColor(Theme.textDim)
+            }
+            .foregroundColor(Theme.textSecondary)
+            .padding(.vertical, 9).padding(.horizontal, 12)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface.opacity(0.35))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.2), lineWidth: 0.5)))
+        }
+        .buttonStyle(.plain)
     }
 
     private var breakRoomFurnitureOnCount: Int {
         let s = AppSettings.shared
         return [s.breakRoomShowSofa, s.breakRoomShowCoffeeMachine, s.breakRoomShowPlant, s.breakRoomShowSideTable,
-                s.breakRoomShowClock, s.breakRoomShowPicture, s.breakRoomShowNeonSign, s.breakRoomShowRug].filter { $0 }.count
+                s.breakRoomShowPicture, s.breakRoomShowNeonSign, s.breakRoomShowRug,
+                s.breakRoomShowBookshelf, s.breakRoomShowAquarium, s.breakRoomShowArcade, s.breakRoomShowWhiteboard,
+                s.breakRoomShowLamp, s.breakRoomShowCat, s.breakRoomShowTV, s.breakRoomShowFan,
+                s.breakRoomShowCalendar, s.breakRoomShowPoster, s.breakRoomShowTrashcan, s.breakRoomShowCushion].filter { $0 }.count
     }
 
     private func formatTokens(_ count: Int) -> String {
         if count >= 1000 { return String(format: "%.1fk", Double(count) / 1000.0) }
         return "\(count)"
+    }
+}
+
+struct ReportCenterView: View {
+    @EnvironmentObject var manager: SessionManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedReportPath: String?
+    @State private var reportText: String = ""
+
+    private var reports: [SessionManager.ReportReference] {
+        manager.availableReports()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("REPORTS")
+                        .font(Theme.mono(14, weight: .black))
+                        .foregroundColor(Theme.textPrimary)
+                    Text("QA 통과 후 생성된 Markdown 보고서를 앱 안에서 바로 확인합니다.")
+                        .font(Theme.mono(9))
+                        .foregroundColor(Theme.textDim)
+                }
+                Spacer()
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(Theme.textDim)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(18)
+
+            Rectangle().fill(Theme.border.opacity(0.6)).frame(height: 1)
+
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("목록")
+                            .font(Theme.mono(9, weight: .bold))
+                            .foregroundColor(Theme.textDim)
+                        Spacer()
+                        Text("\(reports.count)")
+                            .font(Theme.mono(8, weight: .bold))
+                            .foregroundColor(Theme.cyan)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+
+                    ScrollView {
+                        VStack(spacing: 6) {
+                            if reports.isEmpty {
+                                Text("생성된 보고서가 아직 없습니다.")
+                                    .font(Theme.mono(10))
+                                    .foregroundColor(Theme.textDim)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(14)
+                            } else {
+                                ForEach(reports) { report in
+                                    reportRow(report)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 10)
+                    }
+                }
+                .frame(width: 260)
+
+                Rectangle().fill(Theme.border.opacity(0.6)).frame(width: 1)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 8) {
+                        Text(selectedReportTitle)
+                            .font(Theme.mono(10, weight: .bold))
+                            .foregroundColor(Theme.textPrimary)
+                            .lineLimit(1)
+                        Spacer()
+                        if let selectedReportPath {
+                            Button("Finder") {
+                                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: selectedReportPath)])
+                            }
+                            .buttonStyle(.plain)
+                            .font(Theme.mono(8, weight: .bold))
+                            .foregroundColor(Theme.cyan)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Theme.bgCard.opacity(0.95))
+
+                    Rectangle().fill(Theme.border.opacity(0.5)).frame(height: 1)
+
+                    ScrollView {
+                        if reportText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("왼쪽에서 보고서를 선택하면 내용이 여기에 표시됩니다.")
+                                .font(Theme.mono(10))
+                                .foregroundColor(Theme.textDim)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                .padding(18)
+                        } else {
+                            MarkdownTextView(text: reportText, compact: false)
+                                .padding(18)
+                        }
+                    }
+                    .background(Theme.bg)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .background(Theme.bgCard)
+        .onAppear {
+            if selectedReportPath == nil, let first = reports.first {
+                loadReport(first.path)
+            }
+        }
+        .onChange(of: reports.map(\.path)) { _, paths in
+            if let selectedReportPath, paths.contains(selectedReportPath) {
+                loadReport(selectedReportPath)
+            } else if let first = reports.first {
+                loadReport(first.path)
+            } else {
+                selectedReportPath = nil
+                reportText = ""
+            }
+        }
+    }
+
+    private var selectedReportTitle: String {
+        guard let selectedReportPath else { return "Report Preview" }
+        return (selectedReportPath as NSString).lastPathComponent
+    }
+
+    private func reportRow(_ report: SessionManager.ReportReference) -> some View {
+        let isSelected = selectedReportPath == report.path
+        return Button(action: { loadReport(report.path) }) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Circle().fill(isSelected ? Theme.cyan : Theme.textDim.opacity(0.5)).frame(width: 6, height: 6)
+                    Text(report.projectName)
+                        .font(Theme.mono(10, weight: .bold))
+                        .foregroundColor(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                        .lineLimit(1)
+                    Spacer()
+                }
+
+                Text((report.path as NSString).lastPathComponent)
+                    .font(Theme.mono(8))
+                    .foregroundColor(Theme.textDim)
+                    .lineLimit(1)
+
+                Text(report.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(Theme.mono(7, weight: .medium))
+                    .foregroundColor(Theme.cyan.opacity(0.8))
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? Theme.bgSelected : Theme.bgSurface.opacity(0.55))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? Theme.cyan.opacity(0.35) : Theme.border.opacity(0.25), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func loadReport(_ path: String) {
+        selectedReportPath = path
+        reportText = (try? String(contentsOfFile: path, encoding: .utf8)) ?? "보고서를 불러오지 못했습니다."
     }
 }
 
@@ -365,9 +608,17 @@ struct SessionGroupCard: View {
     }
 
     private var groupColor: Color {
-        if group.tabs.allSatisfy({ $0.isCompleted }) { return Theme.green }
-        if group.tabs.contains(where: { $0.isProcessing }) { return Theme.yellow }
-        return group.tabs.contains(where: { $0.isRunning }) ? Theme.green.opacity(0.5) : Theme.textDim
+        var allCompleted = true
+        var anyProcessing = false
+        var anyRunning = false
+        for tab in group.tabs {
+            if !tab.isCompleted { allCompleted = false }
+            if tab.isProcessing { anyProcessing = true }
+            if tab.isRunning { anyRunning = true }
+        }
+        if allCompleted { return Theme.green }
+        if anyProcessing { return Theme.yellow }
+        return anyRunning ? Theme.green.opacity(0.5) : Theme.textDim
     }
 }
 
@@ -429,7 +680,7 @@ struct SessionCard: View {
                         .font(Theme.mono(11, weight: isSelected ? .semibold : .regular))
                         .foregroundColor(isSelected ? Theme.textPrimary : Theme.textSecondary).lineLimit(1)
                     Spacer()
-                    if let idx = manager.tabs.firstIndex(where: { $0.id == tab.id }), idx < 9 {
+                    if let idx = manager.userVisibleTabs.firstIndex(where: { $0.id == tab.id }), idx < 9 {
                         Text("Cmd+\(idx + 1)").font(Theme.mono(7, weight: .medium))
                             .foregroundColor(Theme.textDim).opacity(isSelected ? 0.7 : 0.3)
                     }
@@ -541,7 +792,6 @@ struct SessionHistoryView: View {
             VStack(spacing: 6) {
                 HStack {
                     HStack(spacing: 4) {
-                        Image(systemName: "clock.fill").font(Theme.monoTiny).foregroundColor(Theme.accent)
                         Text("HISTORY").font(Theme.pixel).foregroundColor(Theme.textDim).tracking(2)
                     }
                     Spacer()
@@ -561,8 +811,14 @@ struct SessionHistoryView: View {
                             if session.tokensUsed > 0 {
                                 Text(formatTokens(session.tokensUsed)).font(Theme.monoTiny).foregroundColor(Theme.textDim)
                             }
-                            if !manager.tabs.contains(where: { $0.projectPath == session.projectPath }) {
-                                Button(action: { manager.addTab(projectName: session.projectName, projectPath: session.projectPath, branch: session.branch) }) {
+                            if !manager.userVisibleTabs.contains(where: { $0.projectPath == session.projectPath }) {
+                                Button(action: {
+                                    if manager.manualLaunchCapacity > 0 {
+                                        manager.addTab(projectName: session.projectName, projectPath: session.projectPath, branch: session.branch, manualLaunch: true)
+                                    } else {
+                                        manager.notifyManualLaunchCapacity()
+                                    }
+                                }) {
                                     Image(systemName: "arrow.counterclockwise").font(Theme.monoTiny).foregroundColor(Theme.accent)
                                 }.buttonStyle(.plain).help("세션 재시작")
                             }
@@ -572,7 +828,10 @@ struct SessionHistoryView: View {
             }.padding(.horizontal, 14).padding(.vertical, 8)
             Rectangle().fill(Theme.border).frame(height: 1)
         }
-        .onAppear { history = SessionStore.shared.load(); lastSaved = SessionStore.shared.loadLastSaved() }
+        .onAppear(perform: reloadHistory)
+        .onReceive(NotificationCenter.default.publisher(for: .workmanSessionStoreDidChange)) { _ in
+            reloadHistory()
+        }
     }
 
     private func formatTokens(_ count: Int) -> String {
@@ -585,5 +844,10 @@ struct SessionHistoryView: View {
         if interval < 3600 { return "\(Int(interval / 60))분 전" }
         if interval < 86400 { return "\(Int(interval / 3600))시간 전" }
         return "\(Int(interval / 86400))일 전"
+    }
+
+    private func reloadHistory() {
+        history = SessionStore.shared.load()
+        lastSaved = SessionStore.shared.loadLastSaved()
     }
 }

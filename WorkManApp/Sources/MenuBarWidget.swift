@@ -11,7 +11,13 @@ class MenuBarManager: ObservableObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem?.button {
-            button.title = "W"
+            // SF Symbol 아이콘으로 메뉴바 표시
+            if let img = NSImage(systemSymbolName: "hammer.fill", accessibilityDescription: "WorkMan") {
+                let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+                button.image = img.withSymbolConfiguration(config)
+                button.imagePosition = .imageLeading
+            }
+            button.title = ""
             button.action = #selector(togglePopover)
             button.target = self
         }
@@ -25,33 +31,40 @@ class MenuBarManager: ObservableObject {
         )
         self.popover = popover
 
-        // 주기적으로 메뉴바 타이틀 업데이트
-        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        // 주기적으로 메뉴바 타이틀 업데이트 (5초 간격)
+        Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             self?.updateTitle()
         }
     }
 
     private func updateTitle() {
         let mgr = SessionManager.shared
-        let active = mgr.tabs.filter { $0.isRunning && !$0.isCompleted }.count
-        let doing = mgr.tabs.first(where: { $0.claudeActivity != .idle && $0.claudeActivity != .done })
+        let visibleTabs = mgr.userVisibleTabs
+        let active = visibleTabs.filter { $0.isRunning && !$0.isCompleted }.count
+        let doing = visibleTabs.first(where: { $0.claudeActivity != .idle && $0.claudeActivity != .done })
 
+        // 활동 상태에 따라 아이콘 변경
+        let symbolName: String
         if let doing = doing {
-            let emoji: String
             switch doing.claudeActivity {
-            case .thinking: emoji = "💭"
-            case .writing: emoji = "✏️"
-            case .reading: emoji = "📖"
-            case .searching: emoji = "🔍"
-            case .running: emoji = "⚡"
-            case .error: emoji = "❌"
-            default: emoji = "🔧"
+            case .thinking: symbolName = "brain"
+            case .writing: symbolName = "pencil.line"
+            case .reading: symbolName = "book.fill"
+            case .searching: symbolName = "magnifyingglass"
+            case .running: symbolName = "terminal.fill"
+            case .error: symbolName = "exclamationmark.triangle.fill"
+            default: symbolName = "hammer.fill"
             }
-            statusItem?.button?.title = "\(emoji) \(active)"
-        } else if active > 0 {
-            statusItem?.button?.title = "W \(active)"
         } else {
-            statusItem?.button?.title = "W"
+            symbolName = "hammer.fill"
+        }
+
+        if let button = statusItem?.button {
+            if let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
+                let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+                button.image = img.withSymbolConfiguration(config)
+            }
+            button.title = active > 0 ? " \(active)" : ""
         }
     }
 
@@ -70,11 +83,11 @@ class MenuBarManager: ObservableObject {
 struct MenuBarPopoverView: View {
     @EnvironmentObject var manager: SessionManager
     @State private var now = Date()
-    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    let timer = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
 
-    private var activeTabs: [TerminalTab] { manager.tabs.filter { $0.isRunning && !$0.isCompleted } }
-    private var completedTabs: [TerminalTab] { manager.tabs.filter { $0.isCompleted } }
-    private var idleTabs: [TerminalTab] { manager.tabs.filter { !$0.isRunning && !$0.isCompleted } }
+    private var activeTabs: [TerminalTab] { manager.userVisibleTabs.filter { $0.isRunning && !$0.isCompleted } }
+    private var completedTabs: [TerminalTab] { manager.userVisibleTabs.filter { $0.isCompleted } }
+    private var idleTabs: [TerminalTab] { manager.userVisibleTabs.filter { !$0.isRunning && !$0.isCompleted } }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -106,9 +119,9 @@ struct MenuBarPopoverView: View {
                         ForEach(idleTabs) { tab in MenuBarSessionRow(tab: tab, now: now) }
                     }
 
-                    if manager.tabs.isEmpty {
+                    if manager.userVisibleTabs.isEmpty {
                         VStack(spacing: 8) {
-                            Text("W").font(.system(size: 18, weight: .bold, design: .monospaced)).foregroundColor(Theme.accent)
+                            Image(systemName: "hammer.fill").font(.system(size: 16, weight: .medium)).foregroundColor(Theme.accent)
                             Text("활성 세션 없음").font(Theme.mono(10)).foregroundColor(Theme.textDim)
                             Text(AppSettings.shared.appDisplayName).font(Theme.mono(8)).foregroundColor(Theme.textDim.opacity(0.5))
                         }
@@ -131,7 +144,7 @@ struct MenuBarPopoverView: View {
 
     private var headerSection: some View {
         HStack(spacing: 8) {
-            Text("W").font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundColor(Theme.accent)
+            Image(systemName: "hammer.fill").font(.system(size: 11, weight: .medium)).foregroundColor(Theme.accent)
             VStack(alignment: .leading, spacing: 1) {
                 Text(AppSettings.shared.appDisplayName).font(Theme.mono(12, weight: .bold)).foregroundColor(Theme.accent)
                 Text(AppSettings.shared.companyName.isEmpty ? "Claude Code Manager" : AppSettings.shared.companyName)
@@ -146,7 +159,7 @@ struct MenuBarPopoverView: View {
                 .padding(.horizontal, 5).padding(.vertical, 2)
                 .background(Theme.yellow.opacity(0.1)).cornerRadius(3)
 
-            Text("\(manager.tabs.count)")
+            Text("\(manager.userVisibleTabCount)")
                 .font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.textSecondary)
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .background(Theme.bgSurface).cornerRadius(4)

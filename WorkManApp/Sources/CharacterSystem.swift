@@ -2,6 +2,112 @@ import SwiftUI
 
 // MARK: - Character Definition
 
+enum WorkerJob: String, Codable, CaseIterable, Identifiable {
+    case developer
+    case qa
+    case reporter
+    case boss
+    case planner
+    case reviewer
+    case designer
+    case sre
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .developer: return "개발자"
+        case .qa: return "QA"
+        case .reporter: return "보고자"
+        case .boss: return "사장"
+        case .planner: return "기획자"
+        case .reviewer: return "코드 리뷰어"
+        case .designer: return "디자이너"
+        case .sre: return "SRE"
+        }
+    }
+
+    var shortLabel: String {
+        switch self {
+        case .developer: return "DEV"
+        case .qa: return "QA"
+        case .reporter: return "MD"
+        case .boss: return "CEO"
+        case .planner: return "PM"
+        case .reviewer: return "REV"
+        case .designer: return "DES"
+        case .sre: return "SRE"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .developer: return "laptopcomputer"
+        case .qa: return "checkmark.shield.fill"
+        case .reporter: return "doc.text.fill"
+        case .boss: return "crown.fill"
+        case .planner: return "list.bullet.clipboard.fill"
+        case .reviewer: return "checklist.checked"
+        case .designer: return "paintpalette.fill"
+        case .sre: return "server.rack"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .developer:
+            return "실제 구현과 코드 변경을 담당합니다."
+        case .qa:
+            return "개발 완료 후 코드 변경이 있었을 때 직접 테스트를 수행합니다."
+        case .reporter:
+            return "QA 통과 후 결과물과 요구사항을 Markdown 보고서로 정리합니다."
+        case .boss:
+            return "일은 하지 않고 분위기만 잡습니다."
+        case .planner:
+            return "요구사항과 수용 기준을 먼저 정리하는 역할입니다."
+        case .reviewer:
+            return "구현 이후 변경 사항을 검토하고 위험을 찾는 역할입니다."
+        case .designer:
+            return "UI/UX와 시각 품질을 다듬는 역할입니다."
+        case .sre:
+            return "배포 안정성, 실행 환경, 운영 리스크를 보는 역할입니다."
+        }
+    }
+
+    var relationshipHint: String {
+        switch self {
+        case .developer:
+            return "핵심 구현 담당"
+        case .qa:
+            return "개발 완료 후 검증"
+        case .reporter:
+            return "QA 통과 후 문서화"
+        case .boss:
+            return "관전 및 한마디"
+        case .planner:
+            return "개발 전 요구사항 정리"
+        case .reviewer:
+            return "개발 후 코드 검토"
+        case .designer:
+            return "디자인/경험 보강"
+        case .sre:
+            return "배포/운영 안정성 확인"
+        }
+    }
+
+    var usesExtraTokensWarning: Bool {
+        self != .developer
+    }
+
+    var participatesInAutoPipeline: Bool {
+        self == .reviewer || self == .qa || self == .reporter
+    }
+
+    var takesManualCodingSessions: Bool {
+        self == .developer
+    }
+}
+
 struct WorkerCharacter: Identifiable, Codable {
     let id: String
     var name: String
@@ -16,6 +122,8 @@ struct WorkerCharacter: Identifiable, Codable {
     var isHired: Bool = false
     var hiredAt: Date?
     var requiredAchievement: String?  // nil이면 자유 고용, 있으면 해당 업적 달성 필요
+    var jobRole: WorkerJob = .developer
+    var isOnVacation: Bool = false
 
     enum HatType: String, Codable, CaseIterable {
         case none, beanie, cap, hardhat, wizard, crown, headphones, beret
@@ -35,6 +143,74 @@ struct WorkerCharacter: Identifiable, Codable {
         case fox = "여우"
         case robot = "로봇"
         case claude = "Claude"
+        case alien = "외계인"
+        case ghost = "유령"
+        case dragon = "드래곤"
+        case chicken = "닭"
+        case owl = "부엉이"
+        case frog = "개구리"
+        case panda = "판다"
+        case unicorn = "유니콘"
+        case skeleton = "해골"
+    }
+
+    init(
+        id: String,
+        name: String,
+        archetype: String,
+        hairColor: String,
+        skinTone: String,
+        shirtColor: String,
+        pantsColor: String,
+        hatType: HatType,
+        accessory: Accessory,
+        species: Species,
+        isHired: Bool = false,
+        hiredAt: Date? = nil,
+        requiredAchievement: String? = nil,
+        jobRole: WorkerJob = .developer,
+        isOnVacation: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.archetype = archetype
+        self.hairColor = hairColor
+        self.skinTone = skinTone
+        self.shirtColor = shirtColor
+        self.pantsColor = pantsColor
+        self.hatType = hatType
+        self.accessory = accessory
+        self.species = species
+        self.isHired = isHired
+        self.hiredAt = hiredAt
+        self.requiredAchievement = requiredAchievement
+        self.jobRole = jobRole
+        self.isOnVacation = isOnVacation
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, archetype, hairColor, skinTone, shirtColor, pantsColor
+        case hatType, accessory, species, isHired, hiredAt, requiredAchievement
+        case jobRole, isOnVacation
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        archetype = try container.decode(String.self, forKey: .archetype)
+        hairColor = try container.decode(String.self, forKey: .hairColor)
+        skinTone = try container.decode(String.self, forKey: .skinTone)
+        shirtColor = try container.decode(String.self, forKey: .shirtColor)
+        pantsColor = try container.decode(String.self, forKey: .pantsColor)
+        hatType = try container.decode(HatType.self, forKey: .hatType)
+        accessory = try container.decode(Accessory.self, forKey: .accessory)
+        species = try container.decode(Species.self, forKey: .species)
+        isHired = try container.decodeIfPresent(Bool.self, forKey: .isHired) ?? false
+        hiredAt = try container.decodeIfPresent(Date.self, forKey: .hiredAt)
+        requiredAchievement = try container.decodeIfPresent(String.self, forKey: .requiredAchievement)
+        jobRole = try container.decodeIfPresent(WorkerJob.self, forKey: .jobRole) ?? .developer
+        isOnVacation = try container.decodeIfPresent(Bool.self, forKey: .isOnVacation) ?? false
     }
 }
 
@@ -42,10 +218,43 @@ struct WorkerCharacter: Identifiable, Codable {
 
 class CharacterRegistry: ObservableObject {
     static let shared = CharacterRegistry()
+    static let maxHiredCount = 13
 
     @Published var allCharacters: [WorkerCharacter] = []
 
     private let saveKey = "WorkManCharacters"
+    let bossLines: [String] = [
+        "열심히 일해라. 내가 보고 있다.",
+        "버그는 잡고, 월급은 내가 잡는다.",
+        "야근은 짧게, 성과는 길게.",
+        "오늘도 KPI가 당신을 응원합니다.",
+        "커피는 회사가, 책임은 개발자가.",
+        "문서는 미래의 나를 위한 선물이다.",
+        "테스트 없는 배포는 스릴러 장르다.",
+        "회의는 짧게, 코드는 길게.",
+        "에러도 경험이다. 남의 경험이면 더 좋고.",
+        "리팩토링은 사랑이지만 일정은 현실이다.",
+        "일단 돌아가면 절반은 성공이다.",
+        "주석은 거짓말할 수 있지만 로그는 못 한다.",
+        "배포 전 심호흡, 배포 후 기도.",
+        "오늘의 아재개그: 버그가 왜 울었나? 잡혔으니까.",
+        "커밋 메시지가 길면 양심도 길다.",
+        "코드 리뷰는 공격이 아니라 보험이다.",
+        "빨리 가려면 혼자, 멀리 가려면 브랜치부터 정리해라.",
+        "스펙은 바뀌어도 마감은 안 바뀐다.",
+        "오늘도 서버는 평화롭길 빈다.",
+        "QA를 사랑하라. 내일의 너다.",
+        "문제가 없다고? 아직 못 찾은 거다.",
+        "좋은 개발자는 에러를 줄이고, 위대한 개발자는 재현법을 남긴다.",
+        "README는 한 번쯤은 읽혀야 한다.",
+        "사수는 없지만 git blame은 있다.",
+        "핫픽스는 뜨겁고 마음은 차갑게.",
+        "코드는 정직하다. 사람이 둘러말할 뿐.",
+        "버전업은 쉽고 롤백은 빠르게.",
+        "오늘의 목표: 안 터뜨리기.",
+        "농담 하나. 완벽한 첫 배포라는 건 없다.",
+        "다들 힘내라. 내가 마음으로 응원한다."
+    ]
 
     init() {
         loadOrCreate()
@@ -84,6 +293,10 @@ class CharacterRegistry: ObservableObject {
         if let req = allCharacters[idx].requiredAchievement {
             guard AchievementManager.shared.achievements.first(where: { $0.id == req })?.unlocked == true else { return }
         }
+        guard allCharacters[idx].isHired || canHire(id) else {
+            notifyHiringCapReached()
+            return
+        }
         allCharacters[idx].isHired = true
         allCharacters[idx].hiredAt = Date()
         allCharacters[idx].archetype = Self.personalities.randomElement() ?? "신입"
@@ -104,6 +317,9 @@ class CharacterRegistry: ObservableObject {
 
     func hireAll() {
         for i in allCharacters.indices {
+            if !allCharacters[i].isHired && hiredCharacters.count >= Self.maxHiredCount {
+                break
+            }
             allCharacters[i].isHired = true
             if allCharacters[i].hiredAt == nil { allCharacters[i].hiredAt = Date() }
             if allCharacters[i].archetype.isEmpty || allCharacters[i].archetype == "신입" {
@@ -117,6 +333,7 @@ class CharacterRegistry: ObservableObject {
         if let idx = allCharacters.firstIndex(where: { $0.id == id }) {
             allCharacters[idx].isHired = false
             allCharacters[idx].hiredAt = nil
+            allCharacters[idx].isOnVacation = false
             save()
         }
     }
@@ -128,8 +345,73 @@ class CharacterRegistry: ObservableObject {
         }
     }
 
+    func setJobRole(_ role: WorkerJob, for id: String) {
+        guard let idx = allCharacters.firstIndex(where: { $0.id == id }) else { return }
+        let previous = allCharacters[idx].jobRole
+        allCharacters[idx].jobRole = role
+        save()
+
+        guard previous != role else { return }
+        if role.usesExtraTokensWarning {
+            NotificationCenter.default.post(
+                name: .workmanRoleNotice,
+                object: nil,
+                userInfo: [
+                    "title": "\(role.displayName) 경고",
+                    "message": "개발자를 제외한 직업은 자동 검증, 문서화, 추가 세션 등으로 토큰 사용량이 더 늘어날 수 있습니다."
+                ]
+            )
+        }
+        if role == .boss {
+            NotificationCenter.default.post(
+                name: .workmanRoleNotice,
+                object: nil,
+                userInfo: [
+                    "title": "사장 직업 안내",
+                    "message": "사장은 딱히 일은 하지 않습니다."
+                ]
+            )
+        }
+    }
+
+    func setVacation(_ isOnVacation: Bool, for id: String) {
+        guard let idx = allCharacters.firstIndex(where: { $0.id == id }) else { return }
+        allCharacters[idx].isOnVacation = isOnVacation
+        save()
+    }
+
+    func character(with id: String?) -> WorkerCharacter? {
+        guard let id else { return nil }
+        return allCharacters.first(where: { $0.id == id })
+    }
+
     var hiredCharacters: [WorkerCharacter] {
         allCharacters.filter { $0.isHired }
+    }
+
+    var canHireMore: Bool {
+        hiredCharacters.count < Self.maxHiredCount
+    }
+
+    func canHire(_ id: String) -> Bool {
+        guard let character = character(with: id) else { return false }
+        return character.isHired || canHireMore
+    }
+
+    func hiredCharacters(for role: WorkerJob, allowVacation: Bool = false) -> [WorkerCharacter] {
+        hiredCharacters.filter {
+            $0.jobRole == role && (allowVacation || !$0.isOnVacation)
+        }
+    }
+
+    var activeBossCharacter: WorkerCharacter? {
+        hiredCharacters(for: .boss).first
+    }
+
+    func bossLine(frame: Int) -> String {
+        guard !bossLines.isEmpty else { return "열심히 일해라." }
+        let step = max(0, frame / Int(OfficeConstants.fps * 5))
+        return bossLines[step % bossLines.count]
     }
 
     var availableCharacters: [WorkerCharacter] {
@@ -138,6 +420,17 @@ class CharacterRegistry: ObservableObject {
 
     func nextAvailable() -> WorkerCharacter? {
         availableCharacters.first
+    }
+
+    private func notifyHiringCapReached() {
+        NotificationCenter.default.post(
+            name: .workmanRoleNotice,
+            object: nil,
+            userInfo: [
+                "title": "직원 수 제한",
+                "message": "직원은 최대 \(Self.maxHiredCount)명까지 권장합니다. 이 이상은 세션 증가와 메모리 사용량 문제를 만들 수 있어 막아두었습니다."
+            ]
+        )
     }
 
     // MARK: - Default Characters (20개)
@@ -203,6 +496,113 @@ class CharacterRegistry: ObservableObject {
         WorkerCharacter(id: "claude_opus", name: "Claude", archetype: "Opus", hairColor: "d97757", skinTone: "f5e6d0", shirtColor: "d97757", pantsColor: "2a2a3a", hatType: .none, accessory: .none, species: .claude, isHired: true),
         WorkerCharacter(id: "claude_sonnet", name: "Sonnet", archetype: "Sonnet", hairColor: "5b9cf6", skinTone: "f5e6d0", shirtColor: "5b9cf6", pantsColor: "2a2a3a", hatType: .none, accessory: .none, species: .claude, requiredAchievement: "three_models"),
         WorkerCharacter(id: "claude_haiku", name: "Haiku", archetype: "Haiku", hairColor: "56d97e", skinTone: "f5e6d0", shirtColor: "56d97e", pantsColor: "2a2a3a", hatType: .none, accessory: .none, species: .claude, requiredAchievement: "haiku_user"),
+
+        // 👽 외계인
+        WorkerCharacter(id: "zyx", name: "Zyx", archetype: "차원 여행자", hairColor: "40f080", skinTone: "80f0a0", shirtColor: "206040", pantsColor: "103020", hatType: .none, accessory: .none, species: .alien),
+        WorkerCharacter(id: "nova_x", name: "Nova-X", archetype: "텔레파시 코더", hairColor: "a060ff", skinTone: "c0a0f0", shirtColor: "6030a0", pantsColor: "301860", hatType: .none, accessory: .glasses, species: .alien, requiredAchievement: "token_whale"),
+        WorkerCharacter(id: "blip", name: "Blip", archetype: "0과 1의 존재", hairColor: "60f0f0", skinTone: "80e0e0", shirtColor: "206060", pantsColor: "104040", hatType: .headphones, accessory: .none, species: .alien, requiredAchievement: "level_8"),
+        WorkerCharacter(id: "mars", name: "Mars", archetype: "화성에서 온 PM", hairColor: "f06040", skinTone: "e0a080", shirtColor: "c04020", pantsColor: "602010", hatType: .none, accessory: .sunglasses, species: .alien),
+
+        // 👻 유령
+        WorkerCharacter(id: "boo", name: "Boo", archetype: "보이지 않는 버그", hairColor: "d0d8e0", skinTone: "e8ecf4", shirtColor: "c0c8d8", pantsColor: "a0a8b8", hatType: .none, accessory: .none, species: .ghost),
+        WorkerCharacter(id: "shade", name: "Shade", archetype: "야간 배포 전문", hairColor: "8088a0", skinTone: "b0b8d0", shirtColor: "606880", pantsColor: "404860", hatType: .none, accessory: .glasses, species: .ghost, requiredAchievement: "night_owl"),
+        WorkerCharacter(id: "wisp", name: "Wisp", archetype: "사라진 커밋", hairColor: "a0e0ff", skinTone: "d0f0ff", shirtColor: "80c0e0", pantsColor: "60a0c0", hatType: .none, accessory: .none, species: .ghost, requiredAchievement: "night_marathon"),
+
+        // 🐉 드래곤
+        WorkerCharacter(id: "drako", name: "Drako", archetype: "서버 불지르는 자", hairColor: "e04020", skinTone: "c06040", shirtColor: "a02010", pantsColor: "601008", hatType: .none, accessory: .none, species: .dragon, requiredAchievement: "error_10"),
+        WorkerCharacter(id: "azure", name: "Azure", archetype: "클라우드 날다", hairColor: "4090e0", skinTone: "80b0e0", shirtColor: "3070c0", pantsColor: "204080", hatType: .none, accessory: .none, species: .dragon, requiredAchievement: "cost_10"),
+        WorkerCharacter(id: "ember", name: "Ember", archetype: "핫픽스 화염구", hairColor: "f0a030", skinTone: "e0a060", shirtColor: "d08020", pantsColor: "a06010", hatType: .crown, accessory: .none, species: .dragon, requiredAchievement: "level_10"),
+
+        // 🐔 닭
+        WorkerCharacter(id: "kko", name: "꼬", archetype: "새벽 알람", hairColor: "e0c080", skinTone: "f0e0c0", shirtColor: "f0f0e0", pantsColor: "d0c0a0", hatType: .none, accessory: .none, species: .chicken),
+        WorkerCharacter(id: "dak", name: "닥", archetype: "치킨 타이머", hairColor: "c0a060", skinTone: "e0d0b0", shirtColor: "d0a040", pantsColor: "a08030", hatType: .cap, accessory: .none, species: .chicken, requiredAchievement: "early_bird"),
+
+        // 🦉 부엉이
+        WorkerCharacter(id: "hoot", name: "Hoot", archetype: "코드 리뷰의 눈", hairColor: "8b6040", skinTone: "a08060", shirtColor: "705030", pantsColor: "503820", hatType: .none, accessory: .glasses, species: .owl, requiredAchievement: "night_complete"),
+        WorkerCharacter(id: "luna", name: "Luna", archetype: "밤의 파수꾼", hairColor: "404060", skinTone: "606080", shirtColor: "303050", pantsColor: "202040", hatType: .wizard, accessory: .none, species: .owl, requiredAchievement: "night_marathon"),
+
+        // 🐸 개구리
+        WorkerCharacter(id: "gae", name: "개굴", archetype: "점프 디버거", hairColor: "40a040", skinTone: "60c060", shirtColor: "308030", pantsColor: "206020", hatType: .none, accessory: .none, species: .frog),
+        WorkerCharacter(id: "ribbit", name: "Ribbit", archetype: "워터폴 개발자", hairColor: "30b070", skinTone: "50d090", shirtColor: "208050", pantsColor: "106030", hatType: .beanie, accessory: .sunglasses, species: .frog, requiredAchievement: "focus_30"),
+
+        // 🐼 판다
+        WorkerCharacter(id: "bao", name: "바오", archetype: "대나무 먹방 중", hairColor: "202020", skinTone: "f0f0f0", shirtColor: "1a1a1a", pantsColor: "101010", hatType: .none, accessory: .none, species: .panda),
+        WorkerCharacter(id: "mei", name: "메이", archetype: "느긋한 아키텍트", hairColor: "303030", skinTone: "e8e8e8", shirtColor: "f08080", pantsColor: "303030", hatType: .none, accessory: .glasses, species: .panda, requiredAchievement: "complete_25"),
+
+        // 🦄 유니콘
+        WorkerCharacter(id: "stella", name: "Stella", archetype: "유니콘 스타트업", hairColor: "ff80c0", skinTone: "fff0f8", shirtColor: "c060a0", pantsColor: "803868", hatType: .crown, accessory: .none, species: .unicorn, requiredAchievement: "level_5"),
+        WorkerCharacter(id: "rainbow", name: "Rainbow", archetype: "무지개 빌더", hairColor: "f06080", skinTone: "f8e8f0", shirtColor: "80a0f0", pantsColor: "5070c0", hatType: .none, accessory: .none, species: .unicorn, requiredAchievement: "complete_100"),
+
+        // 💀 해골
+        WorkerCharacter(id: "bones", name: "Bones", archetype: "레거시 코드", hairColor: "e0e0e0", skinTone: "f0f0e8", shirtColor: "404040", pantsColor: "2a2a2a", hatType: .none, accessory: .none, species: .skeleton, requiredAchievement: "centurion"),
+        WorkerCharacter(id: "skull", name: "Skull", archetype: "데드코드 수집가", hairColor: "d0d0c8", skinTone: "e8e8e0", shirtColor: "202020", pantsColor: "101010", hatType: .headphones, accessory: .sunglasses, species: .skeleton, requiredAchievement: "command_1000"),
+
+        // 🧑 추가 사람
+        WorkerCharacter(id: "ace", name: "Ace", archetype: "PR 무시맨", hairColor: "303040", skinTone: "c8a882", shirtColor: "e04040", pantsColor: "3a4050", hatType: .cap, accessory: .none, species: .human),
+        WorkerCharacter(id: "ivy", name: "Ivy", archetype: "테스트 뭐하는거?", hairColor: "205020", skinTone: "ffd5b8", shirtColor: "40a060", pantsColor: "3a4050", hatType: .none, accessory: .glasses, species: .human),
+        WorkerCharacter(id: "max", name: "Max", archetype: "에러 친구", hairColor: "a08040", skinTone: "e8c4a0", shirtColor: "d06030", pantsColor: "3a4050", hatType: .hardhat, accessory: .none, species: .human, requiredAchievement: "error_5"),
+        WorkerCharacter(id: "sky", name: "Sky", archetype: "배포 두려움 극복", hairColor: "80b0e0", skinTone: "ffd5b8", shirtColor: "4080c0", pantsColor: "3a4050", hatType: .none, accessory: .none, species: .human, requiredAchievement: "complete_10"),
+        WorkerCharacter(id: "zen", name: "Zen", archetype: "롤백 전문가", hairColor: "808080", skinTone: "e8c4a0", shirtColor: "b0b0b0", pantsColor: "3a4050", hatType: .none, accessory: .glasses, species: .human, requiredAchievement: "marathon"),
+
+        // 🤖 추가 로봇
+        WorkerCharacter(id: "bit", name: "Bit", archetype: "바이너리 토커", hairColor: "50e050", skinTone: "80a090", shirtColor: "206030", pantsColor: "103020", hatType: .none, accessory: .none, species: .robot),
+        WorkerCharacter(id: "cpu", name: "CPU", archetype: "오버클럭 중", hairColor: "f06060", skinTone: "a0b0c0", shirtColor: "804040", pantsColor: "503030", hatType: .headphones, accessory: .none, species: .robot, requiredAchievement: "speed_2min"),
+
+        // 🐱 추가 고양이
+        WorkerCharacter(id: "tuna", name: "참치", archetype: "간식 협상가", hairColor: "808080", skinTone: "a0a0a0", shirtColor: "5080a0", pantsColor: "3a4050", hatType: .none, accessory: .none, species: .cat, requiredAchievement: "lunch_coder"),
+
+        // 🐶 추가 강아지
+        WorkerCharacter(id: "maru", name: "마루", archetype: "꼬리 흔드는 QA", hairColor: "e0c080", skinTone: "f0d8b0", shirtColor: "e08040", pantsColor: "3a4050", hatType: .none, accessory: .scarf, species: .dog, requiredAchievement: "complete_5"),
+
+        // ════════════ 추가 20캐릭터 ════════════
+
+        // 👽 외계인 추가
+        WorkerCharacter(id: "nebula", name: "Nebula", archetype: "우주 디버거", hairColor: "8040c0", skinTone: "a070e0", shirtColor: "5020a0", pantsColor: "301060", hatType: .none, accessory: .glasses, species: .alien, requiredAchievement: "token_10k_total"),
+
+        // 👻 유령 추가
+        WorkerCharacter(id: "phantom", name: "Phantom", archetype: "404 Not Found", hairColor: "6070a0", skinTone: "90a0c0", shirtColor: "4050a0", pantsColor: "303080", hatType: .none, accessory: .mask, species: .ghost, requiredAchievement: "complete_50"),
+
+        // 🐉 드래곤 추가
+        WorkerCharacter(id: "frost", name: "Frost", archetype: "서버 냉각기", hairColor: "80c0f0", skinTone: "a0d0f0", shirtColor: "4080c0", pantsColor: "205080", hatType: .crown, accessory: .none, species: .dragon, requiredAchievement: "session_streak_7"),
+
+        // 🐔 닭 추가
+        WorkerCharacter(id: "egg", name: "알", archetype: "신입 (부화 전)", hairColor: "f0e8d0", skinTone: "f8f0e0", shirtColor: "f0e0c0", pantsColor: "e0d0b0", hatType: .none, accessory: .none, species: .chicken),
+
+        // 🦉 부엉이 추가
+        WorkerCharacter(id: "wise", name: "Wise", archetype: "시니어 코드 리뷰어", hairColor: "c0b0a0", skinTone: "d0c0b0", shirtColor: "605040", pantsColor: "403020", hatType: .wizard, accessory: .glasses, species: .owl, requiredAchievement: "git_master_25"),
+
+        // 🐸 개구리 추가
+        WorkerCharacter(id: "lily", name: "Lily", archetype: "연잎 위의 리모트워커", hairColor: "30c050", skinTone: "50e070", shirtColor: "f0a0c0", pantsColor: "c07090", hatType: .beret, accessory: .none, species: .frog, requiredAchievement: "weekend_warrior"),
+
+        // 🐼 판다 추가
+        WorkerCharacter(id: "yin", name: "Yin", archetype: "야근조", hairColor: "1a1a1a", skinTone: "f0f0f0", shirtColor: "303030", pantsColor: "1a1a1a", hatType: .headphones, accessory: .none, species: .panda, requiredAchievement: "night_owl"),
+
+        // 🦄 유니콘 추가
+        WorkerCharacter(id: "prism", name: "Prism", archetype: "프리즘 리팩토러", hairColor: "40d0f0", skinTone: "f0f0ff", shirtColor: "f080f0", pantsColor: "a050a0", hatType: .none, accessory: .sunglasses, species: .unicorn, requiredAchievement: "three_models"),
+
+        // 💀 해골 추가
+        WorkerCharacter(id: "grim", name: "Grim", archetype: "rm -rf /", hairColor: "c0c0b0", skinTone: "e0e0d8", shirtColor: "101010", pantsColor: "080808", hatType: .none, accessory: .none, species: .skeleton, requiredAchievement: "command_5000"),
+
+        // 🐰 토끼 추가
+        WorkerCharacter(id: "snow", name: "Snow", archetype: "화이트박스 테스터", hairColor: "f0f0f0", skinTone: "f8f0f0", shirtColor: "f0c0d0", pantsColor: "d0a0b0", hatType: .none, accessory: .none, species: .rabbit),
+        WorkerCharacter(id: "choco", name: "Choco", archetype: "초콜릿 빌더", hairColor: "6a4030", skinTone: "8b6040", shirtColor: "c08060", pantsColor: "805040", hatType: .beanie, accessory: .none, species: .rabbit, requiredAchievement: "session_10"),
+
+        // 🐻 곰 추가
+        WorkerCharacter(id: "polar", name: "Polar", archetype: "북극곰 SRE", hairColor: "e8e8f0", skinTone: "f0f0f8", shirtColor: "80a0c0", pantsColor: "506080", hatType: .none, accessory: .scarf, species: .bear, requiredAchievement: "snow"),
+
+        // 🐧 펭귄 추가
+        WorkerCharacter(id: "tux", name: "Tux", archetype: "리눅스 커널 해커", hairColor: "1a1a2a", skinTone: "2a2a3a", shirtColor: "f8f8f8", pantsColor: "1a1a2a", hatType: .headphones, accessory: .none, species: .penguin, requiredAchievement: "opus_user"),
+
+        // 🦊 여우 추가
+        WorkerCharacter(id: "firefox", name: "Firefox", archetype: "브라우저 전쟁 생존자", hairColor: "f04020", skinTone: "f06030", shirtColor: "e08020", pantsColor: "a05010", hatType: .none, accessory: .sunglasses, species: .fox, requiredAchievement: "speed_demon"),
+
+        // 🧑 사람 추가
+        WorkerCharacter(id: "luna_h", name: "루나", archetype: "달빛 코더", hairColor: "c0b8d0", skinTone: "ffd5b8", shirtColor: "6060a0", pantsColor: "3a3a60", hatType: .none, accessory: .earring, species: .human, requiredAchievement: "night_complete"),
+        WorkerCharacter(id: "sol", name: "Sol", archetype: "일출 배포", hairColor: "f0c040", skinTone: "e8c4a0", shirtColor: "f08030", pantsColor: "a05020", hatType: .cap, accessory: .none, species: .human, requiredAchievement: "morning_complete"),
+        WorkerCharacter(id: "storm_h", name: "Storm", archetype: "핫픽스 폭풍", hairColor: "404060", skinTone: "ffd5b8", shirtColor: "3050a0", pantsColor: "202848", hatType: .none, accessory: .none, species: .human, requiredAchievement: "speed_2min"),
+        WorkerCharacter(id: "jade", name: "Jade", archetype: "그린필드 개척자", hairColor: "1a3020", skinTone: "c8a882", shirtColor: "40a060", pantsColor: "205030", hatType: .hardhat, accessory: .glasses, species: .human),
+        WorkerCharacter(id: "ruby", name: "Ruby", archetype: "레드팀 리더", hairColor: "a02020", skinTone: "ffd5b8", shirtColor: "c03030", pantsColor: "801818", hatType: .none, accessory: .none, species: .human, requiredAchievement: "error_10"),
+        WorkerCharacter(id: "indigo", name: "Indigo", archetype: "딥워크 마스터", hairColor: "3030a0", skinTone: "e8c4a0", shirtColor: "4040c0", pantsColor: "2a2a80", hatType: .beret, accessory: .glasses, species: .human, requiredAchievement: "ultra_marathon"),
     ]
 }
 
@@ -213,8 +613,12 @@ struct CharacterCollectionView: View {
     @State private var editingId: String?
     @State private var editName = ""
     @State private var selectedSpecies: WorkerCharacter.Species? = nil
+    @State private var viewMode: CharViewMode = .grid
+    enum CharViewMode { case grid, list }
 
-    let columns = Array(repeating: GridItem(.flexible(), spacing: 14), count: 3)
+    let columns = [
+        GridItem(.adaptive(minimum: 220, maximum: 260), spacing: 16, alignment: .top)
+    ]
 
     private var filteredHired: [WorkerCharacter] {
         let chars = registry.hiredCharacters
@@ -249,29 +653,121 @@ struct CharacterCollectionView: View {
                 }
                 Spacer()
 
-                // Species filter
-                HStack(spacing: 3) {
-                    speciesFilter(nil, label: "All")
-                    speciesFilter(.human, label: "👤")
-                    speciesFilter(.cat, label: "🐱")
-                    speciesFilter(.dog, label: "🐶")
-                    speciesFilter(.robot, label: "🤖")
-                    speciesFilter(.claude, label: "✨")
+                // View mode toggle
+                HStack(spacing: 2) {
+                    Button(action: { withAnimation(.easeInOut(duration: 0.15)) { viewMode = .grid } }) {
+                        Image(systemName: "square.grid.2x2").font(.system(size: 10))
+                            .foregroundColor(viewMode == .grid ? Theme.accent : Theme.textDim).padding(4)
+                            .background(viewMode == .grid ? Theme.accent.opacity(0.12) : .clear).cornerRadius(4)
+                    }.buttonStyle(.plain)
+                    Button(action: { withAnimation(.easeInOut(duration: 0.15)) { viewMode = .list } }) {
+                        Image(systemName: "list.bullet").font(.system(size: 10))
+                            .foregroundColor(viewMode == .list ? Theme.accent : Theme.textDim).padding(4)
+                            .background(viewMode == .list ? Theme.accent.opacity(0.12) : .clear).cornerRadius(4)
+                    }.buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
             .background(Theme.bgCard)
 
+            // Species filter row
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    speciesFilter(nil, label: "All")
+                    ForEach(WorkerCharacter.Species.allCases, id: \.rawValue) { sp in
+                        speciesFilter(sp, label: speciesFilterEmoji(sp))
+                    }
+                }.padding(.horizontal, 16).padding(.vertical, 8)
+            }
+            .background(Theme.bgSurface.opacity(0.3))
+
             Rectangle().fill(Theme.border).frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "point.3.connected.trianglepath.dotted")
+                        .font(.system(size: 11))
+                        .foregroundColor(Theme.accent)
+                    Text("역할 흐름")
+                        .font(Theme.mono(9, weight: .bold))
+                        .foregroundColor(Theme.textSecondary)
+                    Spacer()
+                }
+
+                Text("기획자 → 디자이너 → 개발자 → 코드 리뷰어 → QA → 보고자 · SRE")
+                    .font(Theme.mono(9, weight: .semibold))
+                    .foregroundColor(Theme.textPrimary)
+                Text("없는 역할은 자동으로 건너뛰고, 사장은 농담만 합니다.")
+                    .font(Theme.mono(8))
+                    .foregroundColor(Theme.textDim)
+                Text("주의: 개발자를 제외한 직업은 자동 검증/문서화 세션이 추가될 수 있어 토큰 사용량이 늘어날 수 있습니다.")
+                    .font(Theme.mono(8, weight: .semibold))
+                    .foregroundColor(Theme.yellow)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Theme.bgSurface.opacity(0.45))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Theme.border.opacity(0.35), lineWidth: 0.8)
+                    )
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    staffStatCard(
+                        title: "회사 인원",
+                        value: "\(registry.hiredCharacters.count)명",
+                        subtitle: "전체 \(registry.allCharacters.count)명 · 최대 \(CharacterRegistry.maxHiredCount)명",
+                        tint: Theme.accent,
+                        icon: "building.2.fill"
+                    )
+                    staffStatCard(
+                        title: "보고자",
+                        value: "\(registry.hiredCharacters(for: .reporter, allowVacation: true).count)명",
+                        subtitle: "문서화 담당",
+                        tint: Theme.purple,
+                        icon: "doc.text.fill"
+                    )
+                    staffStatCard(
+                        title: "개발자",
+                        value: "\(registry.hiredCharacters(for: .developer, allowVacation: true).count)명",
+                        subtitle: "구현 담당",
+                        tint: Theme.accent,
+                        icon: "laptopcomputer"
+                    )
+                    staffStatCard(
+                        title: "QA",
+                        value: "\(registry.hiredCharacters(for: .qa, allowVacation: true).count)명",
+                        subtitle: "검증 담당",
+                        tint: Theme.green,
+                        icon: "checkmark.shield.fill"
+                    )
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     // 고용 중
                     if !filteredHired.isEmpty {
                         sectionHeader("고용 중", count: filteredHired.count, color: Theme.green, icon: "person.fill.checkmark")
-                        LazyVGrid(columns: columns, spacing: 14) {
-                            ForEach(filteredHired) { char in
-                                CharacterCard(character: char, isHired: true, editingId: $editingId, editName: $editName)
+                        if viewMode == .grid {
+                            LazyVGrid(columns: columns, spacing: 16) {
+                                ForEach(filteredHired) { char in
+                                    CharacterCard(character: char, isHired: true, editingId: $editingId, editName: $editName)
+                                }
+                            }
+                        } else {
+                            VStack(spacing: 4) {
+                                ForEach(filteredHired) { char in
+                                    CharacterListRow(character: char, isHired: true, editingId: $editingId, editName: $editName)
+                                }
                             }
                         }
                     }
@@ -287,9 +783,17 @@ struct CharacterCollectionView: View {
                     // 대기 중 (잠금 해제된 것만)
                     if !filteredAvailable.isEmpty {
                         sectionHeader("대기 중", count: filteredAvailable.count, color: Theme.textSecondary, icon: "person.fill.questionmark")
-                        LazyVGrid(columns: columns, spacing: 14) {
-                            ForEach(filteredAvailable) { char in
-                                CharacterCard(character: char, isHired: false, editingId: $editingId, editName: $editName)
+                        if viewMode == .grid {
+                            LazyVGrid(columns: columns, spacing: 16) {
+                                ForEach(filteredAvailable) { char in
+                                    CharacterCard(character: char, isHired: false, editingId: $editingId, editName: $editName)
+                                }
+                            }
+                        } else {
+                            VStack(spacing: 4) {
+                                ForEach(filteredAvailable) { char in
+                                    CharacterListRow(character: char, isHired: false, editingId: $editingId, editName: $editName)
+                                }
                             }
                         }
                     }
@@ -308,7 +812,7 @@ struct CharacterCollectionView: View {
                         }
 
                         sectionHeader("잠금", count: filteredLocked.count, color: Theme.yellow.opacity(0.6), icon: "lock.fill")
-                        LazyVGrid(columns: columns, spacing: 14) {
+                        LazyVGrid(columns: columns, spacing: 16) {
                             ForEach(filteredLocked) { char in
                                 LockedCharacterCard(character: char)
                             }
@@ -319,17 +823,45 @@ struct CharacterCollectionView: View {
             }
         }
         .background(Theme.bg)
+        .frame(minWidth: 920, minHeight: 720)
     }
 
     private func speciesFilter(_ species: WorkerCharacter.Species?, label: String) -> some View {
         let active = selectedSpecies == species
+        let count: Int = {
+            if species == nil { return registry.allCharacters.count }
+            return registry.allCharacters.filter { $0.species == species }.count
+        }()
+
         return Button(action: { withAnimation(.easeInOut(duration: 0.15)) { selectedSpecies = species } }) {
-            Text(label).font(species == nil ? Theme.mono(8, weight: active ? .bold : .regular) : .system(size: 11))
-                .padding(.horizontal, 5).padding(.vertical, 3)
-                .background(active ? Theme.accent.opacity(0.12) : .clear)
-                .cornerRadius(4)
-                .overlay(RoundedRectangle(cornerRadius: 4).stroke(active ? Theme.accent.opacity(0.3) : .clear, lineWidth: 1))
+            VStack(spacing: 3) {
+                Text(label)
+                    .font(species == nil ? .system(size: 10, weight: active ? .bold : .medium, design: .monospaced) : .system(size: 20))
+                Text(species?.rawValue ?? "전체")
+                    .font(.system(size: 7, weight: .medium, design: .monospaced))
+                    .foregroundColor(active ? Theme.accent : Theme.textDim)
+                Text("\(count)")
+                    .font(.system(size: 7, weight: .bold, design: .monospaced))
+                    .foregroundColor(active ? Theme.accent : Theme.textDim.opacity(0.5))
+            }
+            .frame(width: 44, height: 52)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(active ? Theme.accent.opacity(0.1) : Theme.bgCard.opacity(0.5))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(active ? Theme.accent.opacity(0.4) : Theme.border.opacity(0.15), lineWidth: active ? 1.5 : 0.5))
+            )
         }.buttonStyle(.plain)
+    }
+
+    private func speciesFilterEmoji(_ sp: WorkerCharacter.Species) -> String {
+        switch sp {
+        case .human: return "👤"; case .cat: return "🐱"; case .dog: return "🐶"
+        case .rabbit: return "🐰"; case .bear: return "🐻"; case .penguin: return "🐧"
+        case .fox: return "🦊"; case .robot: return "🤖"; case .claude: return "✨"
+        case .alien: return "👽"; case .ghost: return "👻"; case .dragon: return "🐉"
+        case .chicken: return "🐔"; case .owl: return "🦉"; case .frog: return "🐸"
+        case .panda: return "🐼"; case .unicorn: return "🦄"; case .skeleton: return "💀"
+        }
     }
 
     private func sectionHeader(_ title: String, count: Int, color: Color, icon: String) -> some View {
@@ -340,6 +872,163 @@ struct CharacterCollectionView: View {
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .background(color.opacity(0.1)).cornerRadius(4)
             Spacer()
+        }
+    }
+
+    private func staffStatCard(title: String, value: String, subtitle: String, tint: Color, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(tint)
+                Text(title)
+                    .font(Theme.mono(8, weight: .bold))
+                    .foregroundColor(Theme.textSecondary)
+            }
+            Text(value)
+                .font(Theme.mono(11, weight: .heavy))
+                .foregroundColor(Theme.textPrimary)
+            Text(subtitle)
+                .font(Theme.mono(7))
+                .foregroundColor(Theme.textDim)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Theme.bgSurface.opacity(0.42))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(tint.opacity(0.18), lineWidth: 0.8)
+                )
+        )
+    }
+}
+
+// MARK: - Character List Row
+
+struct CharacterListRow: View {
+    let character: WorkerCharacter
+    let isHired: Bool
+    @Binding var editingId: String?
+    @Binding var editName: String
+    @ObservedObject private var registry = CharacterRegistry.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 2).fill(Color(hex: character.shirtColor)).frame(width: 4, height: 20)
+                Text(character.species.rawValue).font(.system(size: 10))
+                if editingId == character.id {
+                    TextField("이름", text: $editName)
+                        .textFieldStyle(.roundedBorder).font(Theme.mono(10)).frame(width: 80)
+                        .onSubmit { registry.rename(character.id, to: editName); editingId = nil }
+                } else {
+                    Text(character.name).font(Theme.mono(10, weight: .semibold)).foregroundColor(Theme.textPrimary)
+                        .onTapGesture(count: 2) { editName = character.name; editingId = character.id }
+                }
+                Text(character.archetype).font(Theme.mono(8)).foregroundColor(Theme.textDim)
+                Spacer()
+                if isHired {
+                    roleMenu
+                    vacationButton
+                    Button(action: { registry.fire(character.id) }) {
+                        Text("해고").font(Theme.mono(8, weight: .medium)).foregroundColor(Theme.red)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Theme.red.opacity(0.1)).cornerRadius(4)
+                    }.buttonStyle(.plain)
+                } else {
+                    Button(action: { registry.hire(character.id) }) {
+                        Text("고용").font(Theme.mono(8, weight: .bold)).foregroundColor(Theme.green)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Theme.green.opacity(0.1)).cornerRadius(4)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!registry.canHire(character.id))
+                    .opacity(registry.canHire(character.id) ? 1 : 0.45)
+                }
+            }
+
+            HStack(spacing: 6) {
+                Label(character.jobRole.displayName, systemImage: character.jobRole.icon)
+                    .font(Theme.mono(8, weight: .semibold))
+                    .foregroundColor(roleTint)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(roleTint.opacity(0.1))
+                    .cornerRadius(5)
+
+                if character.isOnVacation {
+                    Text("휴가 중")
+                        .font(Theme.mono(8, weight: .bold))
+                        .foregroundColor(Theme.orange)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Theme.orange.opacity(0.1))
+                        .cornerRadius(5)
+                }
+
+                Text(character.jobRole.relationshipHint)
+                    .font(Theme.mono(8))
+                    .foregroundColor(Theme.textDim)
+
+                if character.jobRole.usesExtraTokensWarning {
+                    Spacer()
+                    Text("추가 토큰 사용 가능")
+                        .font(Theme.mono(8, weight: .bold))
+                        .foregroundColor(Theme.yellow)
+                }
+            }
+        }
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 6).fill(isHired ? Theme.bgSelected.opacity(0.5) : Theme.bgSurface.opacity(0.3)))
+    }
+
+    private var roleMenu: some View {
+        Menu {
+            ForEach(WorkerJob.allCases) { role in
+                Button {
+                    registry.setJobRole(role, for: character.id)
+                } label: {
+                    Label(role.displayName, systemImage: role.icon)
+                }
+            }
+        } label: {
+            Label(character.jobRole.shortLabel, systemImage: character.jobRole.icon)
+                .font(Theme.mono(8, weight: .bold))
+                .foregroundColor(roleTint)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(roleTint.opacity(0.12))
+                .cornerRadius(5)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private var vacationButton: some View {
+        Button(action: { registry.setVacation(!character.isOnVacation, for: character.id) }) {
+            Text(character.isOnVacation ? "복귀" : "휴가")
+                .font(Theme.mono(8, weight: .medium))
+                .foregroundColor(character.isOnVacation ? Theme.green : Theme.orange)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background((character.isOnVacation ? Theme.green : Theme.orange).opacity(0.1))
+                .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var roleTint: Color {
+        switch character.jobRole {
+        case .developer: return Theme.accent
+        case .qa: return Theme.green
+        case .reporter: return Theme.purple
+        case .boss: return Theme.orange
+        case .planner: return Theme.cyan
+        case .reviewer: return Theme.yellow
+        case .designer: return Theme.pink
+        case .sre: return Theme.red
         }
     }
 }
@@ -355,83 +1044,236 @@ struct CharacterCard: View {
     @State private var isHovered = false
 
     private var shirtColor: Color { Color(hex: character.shirtColor) }
+    private var roleTint: Color {
+        switch character.jobRole {
+        case .developer: return Theme.accent
+        case .qa: return Theme.green
+        case .reporter: return Theme.purple
+        case .boss: return Theme.orange
+        case .planner: return Theme.cyan
+        case .reviewer: return Theme.yellow
+        case .designer: return Theme.pink
+        case .sre: return Theme.red
+        }
+    }
 
     var body: some View {
-        VStack(spacing: 8) {
-            // Pixel character + 배경
-            ZStack {
-                // 배경 글로우
-                if isHired {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(RadialGradient(
-                            colors: [shirtColor.opacity(0.12), .clear],
-                            center: .center, startRadius: 0, endRadius: 40
-                        ))
-                }
-                Canvas { context, size in drawCharacter(context: context, size: size) }
-                    .frame(width: 48, height: 64)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    shirtColor.opacity(isHired ? 0.14 : 0.08),
+                                    Theme.bgSurface.opacity(0.65)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
 
-                // Species badge
-                VStack { Spacer(); HStack { Spacer()
-                    Text(speciesEmoji(character.species)).font(.system(size: 10))
-                        .padding(2).background(Circle().fill(Theme.bgCard.opacity(0.9)))
-                } }
-                .frame(width: 52, height: 68)
-            }
-            .frame(width: 52, height: 68)
-
-            // Name
-            if editingId == character.id {
-                TextField("이름", text: $editName)
-                    .textFieldStyle(.plain).font(Theme.mono(10, weight: .bold))
-                    .foregroundColor(shirtColor).multilineTextAlignment(.center).frame(width: 70)
-                    .onSubmit {
-                        if !editName.trimmingCharacters(in: .whitespaces).isEmpty { registry.rename(character.id, to: editName) }
-                        editingId = nil
+                    if isHired {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(
+                                RadialGradient(
+                                    colors: [shirtColor.opacity(0.14), .clear],
+                                    center: .center,
+                                    startRadius: 0,
+                                    endRadius: 40
+                                )
+                            )
                     }
-            } else {
-                Text(character.name).font(Theme.mono(10, weight: .bold)).foregroundColor(shirtColor).lineLimit(1)
-                    .onTapGesture(count: 2) { editName = character.name; editingId = character.id }
+
+                    Canvas { context, size in
+                        drawCharacter(context: context, size: size)
+                    }
+                    .frame(width: 58, height: 72)
+
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Text(speciesEmoji(character.species))
+                                .font(.system(size: 10))
+                                .padding(4)
+                                .background(Circle().fill(Theme.bgCard.opacity(0.92)))
+                        }
+                        Spacer()
+                    }
+                    .padding(6)
+                }
+                .frame(width: 82, height: 96)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    if editingId == character.id {
+                        TextField("이름", text: $editName)
+                            .textFieldStyle(.plain)
+                            .font(Theme.mono(12, weight: .bold))
+                            .foregroundColor(shirtColor)
+                            .onSubmit {
+                                if !editName.trimmingCharacters(in: .whitespaces).isEmpty {
+                                    registry.rename(character.id, to: editName)
+                                }
+                                editingId = nil
+                            }
+                    } else {
+                        Text(character.name)
+                            .font(Theme.mono(13, weight: .black))
+                            .foregroundColor(shirtColor)
+                            .lineLimit(1)
+                            .onTapGesture(count: 2) {
+                                editName = character.name
+                                editingId = character.id
+                            }
+                    }
+
+                    Text(character.archetype)
+                        .font(Theme.mono(8, weight: .medium))
+                        .foregroundColor(Theme.textDim)
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        Label(character.jobRole.displayName, systemImage: character.jobRole.icon)
+                            .font(Theme.mono(8, weight: .bold))
+                            .foregroundColor(roleTint)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(roleTint.opacity(0.12))
+                            .cornerRadius(6)
+
+                        if character.isOnVacation {
+                            Text("휴가 중")
+                                .font(Theme.mono(8, weight: .bold))
+                                .foregroundColor(Theme.orange)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 4)
+                                .background(Theme.orange.opacity(0.12))
+                                .cornerRadius(6)
+                        }
+                    }
+
+                    HStack(spacing: 5) {
+                        if character.hatType != .none {
+                            badgeText(hatEmoji(character.hatType), tint: Theme.textSecondary)
+                        }
+                        if character.accessory != .none {
+                            badgeText(accessoryEmoji(character.accessory), tint: Theme.textSecondary)
+                        }
+                        if character.jobRole.usesExtraTokensWarning {
+                            badgeText("추가 토큰", tint: Theme.yellow)
+                        }
+                    }
+                }
             }
 
-            // Role
-            Text(character.archetype).font(Theme.mono(7)).foregroundColor(Theme.textDim).lineLimit(1)
+            Text(character.jobRole.description)
+                .font(Theme.mono(8))
+                .foregroundColor(Theme.textSecondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
 
-            // Items (항상 고정 높이)
-            HStack(spacing: 2) {
-                if character.hatType != .none { Text(hatEmoji(character.hatType)).font(.system(size: 9)) }
-                if character.accessory != .none { Text(accessoryEmoji(character.accessory)).font(.system(size: 9)) }
-            }.frame(height: 12)
+            if isHired {
+                HStack(spacing: 8) {
+                    Menu {
+                        ForEach(WorkerJob.allCases) { role in
+                            Button {
+                                registry.setJobRole(role, for: character.id)
+                            } label: {
+                                Label(role.displayName, systemImage: role.icon)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "briefcase.fill")
+                            Text("직업 설정")
+                                .font(Theme.mono(8, weight: .bold))
+                        }
+                        .foregroundColor(roleTint)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(roleTint.opacity(0.08))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(roleTint.opacity(0.18), lineWidth: 0.7)
+                                )
+                        )
+                    }
+                    .menuStyle(.borderlessButton)
 
-            // Action button
+                    Button(action: { registry.setVacation(!character.isOnVacation, for: character.id) }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: character.isOnVacation ? "airplane.arrival" : "airplane.departure")
+                            Text(character.isOnVacation ? "업무 복귀" : "휴가")
+                                .font(Theme.mono(8, weight: .bold))
+                        }
+                        .foregroundColor(character.isOnVacation ? Theme.green : Theme.orange)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill((character.isOnVacation ? Theme.green : Theme.orange).opacity(0.08))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke((character.isOnVacation ? Theme.green : Theme.orange).opacity(0.18), lineWidth: 0.7)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Spacer(minLength: 0)
+
             Button(action: { isHired ? registry.fire(character.id) : registry.hire(character.id) }) {
                 Text(isHired ? "해고" : "고용")
-                    .font(Theme.mono(8, weight: .medium))
+                    .font(Theme.mono(10, weight: .bold))
                     .foregroundColor(isHired ? Theme.red : Theme.green)
-                    .frame(maxWidth: .infinity).padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 5).fill(isHired ? Theme.red.opacity(0.08) : Theme.green.opacity(0.08))
-                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(isHired ? Theme.red.opacity(0.15) : Theme.green.opacity(0.15), lineWidth: 0.5)))
-            }.buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(isHired ? Theme.red.opacity(0.08) : Theme.green.opacity(0.08))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(isHired ? Theme.red.opacity(0.16) : Theme.green.opacity(0.16), lineWidth: 0.7)
+                            )
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(!isHired && !registry.canHire(character.id))
+            .opacity((!isHired && !registry.canHire(character.id)) ? 0.45 : 1)
         }
-        .padding(10)
+        .padding(14)
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 12).fill(Theme.bgCard)
                 if isHired {
                     VStack { RoundedRectangle(cornerRadius: 1).fill(
                         LinearGradient(colors: [shirtColor.opacity(0.5), shirtColor.opacity(0.1)], startPoint: .leading, endPoint: .trailing)
-                    ).frame(height: 2).padding(.horizontal, 10); Spacer() }
+                    ).frame(height: 2).padding(.horizontal, 12); Spacer() }
                 }
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(isHired ? shirtColor.opacity(isHovered ? 0.4 : 0.2) : Theme.border.opacity(isHovered ? 0.4 : 0.15), lineWidth: isHired ? 1 : 0.5)
             }
         )
-        .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 180, alignment: .top)
+        .frame(maxWidth: .infinity, minHeight: 256, idealHeight: 272, alignment: .top)
         .opacity(isHired ? 1 : 0.65)
         .shadow(color: isHired && isHovered ? shirtColor.opacity(0.15) : .clear, radius: 8)
         .scaleEffect(isHovered ? 1.03 : 1.0)
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .onHover { isHovered = $0 }
+    }
+
+    private func badgeText(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(Theme.mono(7, weight: .bold))
+            .foregroundColor(tint)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(tint.opacity(0.1))
+            .cornerRadius(5)
     }
 
     // MARK: - Draw Character
@@ -613,6 +1455,122 @@ struct CharacterCard: View {
             px(9, 9, 1, 3, c)
             px(11, 9, 1, 3, c)
 
+        case .alien:
+            // 큰 머리 + 큰 눈 + 가는 몸
+            px(3, -1, 10, 2, fur) // 이마
+            px(2, 1, 12, 6, fur)  // 큰 머리
+            px(4, 3, 3, 3, Color(hex: "101010")) // 왼쪽 큰 눈
+            px(9, 3, 3, 3, Color(hex: "101010"))
+            px(5, 4, 1, 1, Color(hex: "40ff80")) // 동공
+            px(10, 4, 1, 1, Color(hex: "40ff80"))
+            px(5, 7, 6, 5, shirt) // 가느다란 몸
+            px(3, 8, 2, 4, shirt); px(11, 8, 2, 4, shirt) // 팔
+            px(5, 12, 2, 4, fur); px(9, 12, 2, 4, fur) // 다리
+            // 안테나
+            px(7, -3, 2, 2, Color(hex: "40ff80")); px(8, -4, 1, 1, Color(hex: "80ffa0"))
+
+        case .ghost:
+            // 둥근 머리 + 물결 아래
+            px(4, 0, 8, 3, fur)
+            px(3, 3, 10, 6, fur)
+            px(5, 4, 2, 2, Color(hex: "303040")) // 큰 눈
+            px(9, 4, 2, 2, Color(hex: "303040"))
+            px(6, 7, 4, 1, Color(hex: "404050")) // 입
+            // 물결치는 아랫부분
+            px(3, 9, 3, 3, fur); px(6, 10, 4, 2, fur); px(10, 9, 3, 3, fur)
+            px(4, 12, 2, 1, fur); px(8, 12, 2, 1, fur); px(12, 12, 1, 1, fur)
+
+        case .dragon:
+            // 뿔 + 비늘 몸 + 꼬리 + 작은 날개
+            px(4, -2, 2, 2, Color(hex: "f0c030")) // 왼쪽 뿔
+            px(10, -2, 2, 2, Color(hex: "f0c030")) // 오른쪽 뿔
+            px(4, 0, 8, 6, fur) // 머리
+            px(5, 2, 2, 2, Color(hex: "ff4020")) // 눈
+            px(9, 2, 2, 2, Color(hex: "ff4020"))
+            px(6, 5, 4, 1, Color(hex: "f06030")) // 입
+            px(3, 6, 10, 6, shirt) // 몸
+            px(0, 5, 3, 5, shirt.opacity(0.6)) // 왼 날개
+            px(13, 5, 3, 5, shirt.opacity(0.6)) // 오른 날개
+            px(4, 12, 3, 4, fur); px(9, 12, 3, 4, fur) // 다리
+            px(13, 10, 3, 2, shirt); px(14, 12, 2, 1, shirt) // 꼬리
+
+        case .chicken:
+            // 볏 + 둥근 몸 + 부리 + 다리
+            px(6, -2, 4, 2, Color(hex: "e03020")) // 볏
+            px(5, 0, 6, 5, fur) // 머리
+            px(6, 2, 2, 2, Color(hex: "101010")) // 눈
+            px(11, 3, 2, 1, Color(hex: "f0a020")) // 부리
+            px(6, 5, 1, 2, Color(hex: "f03020")) // 턱수염
+            px(4, 5, 8, 7, shirt) // 둥근 몸
+            px(2, 6, 2, 4, shirt.opacity(0.7)) // 왼 날개
+            px(12, 6, 2, 4, shirt.opacity(0.7))
+            px(5, 12, 2, 4, Color(hex: "f0a020")) // 왼 다리
+            px(9, 12, 2, 4, Color(hex: "f0a020"))
+
+        case .owl:
+            // 큰 둥근 눈 + 귀 깃 + 날개
+            px(3, -1, 3, 3, hair) // 왼 귀깃
+            px(10, -1, 3, 3, hair)
+            px(4, 1, 8, 6, fur) // 머리
+            px(4, 3, 3, 3, Color(hex: "f0e0a0")) // 눈 테두리 왼
+            px(9, 3, 3, 3, Color(hex: "f0e0a0"))
+            px(5, 4, 2, 2, Color(hex: "202020")) // 동공
+            px(10, 4, 2, 2, Color(hex: "202020"))
+            px(7, 6, 2, 1, Color(hex: "d09030")) // 부리
+            px(3, 7, 10, 6, shirt)
+            px(1, 8, 2, 4, hair); px(13, 8, 2, 4, hair) // 날개
+            px(5, 13, 2, 3, fur); px(9, 13, 2, 3, fur)
+
+        case .frog:
+            // 튀어나온 눈 + 넓은 입 + 초록
+            px(3, 0, 4, 3, fur); px(9, 0, 4, 3, fur) // 튀어나온 눈
+            px(4, 1, 2, 2, Color(hex: "101010")); px(10, 1, 2, 2, Color(hex: "101010"))
+            px(3, 3, 10, 5, fur) // 머리
+            px(4, 6, 8, 1, Color(hex: "f06060")) // 넓은 입
+            px(3, 8, 10, 5, shirt)
+            px(1, 9, 2, 4, shirt); px(13, 9, 2, 4, shirt)
+            px(4, 13, 3, 3, fur); px(9, 13, 3, 3, fur)
+
+        case .panda:
+            // 둥근 귀 + 눈 패치
+            px(2, -1, 4, 3, Color(hex: "1a1a1a")) // 왼 귀
+            px(10, -1, 4, 3, Color(hex: "1a1a1a"))
+            px(4, 1, 8, 6, fur) // 흰 머리
+            px(4, 3, 3, 3, Color(hex: "1a1a1a")) // 눈 패치 왼
+            px(9, 3, 3, 3, Color(hex: "1a1a1a"))
+            px(5, 4, 1, 1, .white); px(10, 4, 1, 1, .white) // 동공
+            px(7, 5, 2, 1, Color(hex: "1a1a1a")) // 코
+            px(3, 7, 10, 6, shirt)
+            px(1, 8, 2, 5, Color(hex: "1a1a1a")); px(13, 8, 2, 5, Color(hex: "1a1a1a"))
+            px(4, 13, 3, 3, Color(hex: "1a1a1a")); px(9, 13, 3, 3, Color(hex: "1a1a1a"))
+
+        case .unicorn:
+            // 뿔 + 갈기 + 말 형태
+            px(7, -4, 2, 1, Color(hex: "f0d040")) // 뿔 끝
+            px(7, -3, 2, 1, Color(hex: "f0c040"))
+            px(7, -2, 2, 2, Color(hex: "f0b040"))
+            px(4, 0, 8, 6, fur) // 머리
+            px(2, 0, 2, 5, hair) // 갈기
+            px(5, 2, 2, 2, .white); px(6, 3, 1, 1, Color(hex: "c060c0")) // 눈
+            px(9, 2, 2, 2, .white); px(10, 3, 1, 1, Color(hex: "c060c0"))
+            px(3, 6, 10, 7, shirt)
+            px(1, 7, 2, 4, shirt); px(13, 7, 2, 4, shirt)
+            px(4, 13, 3, 3, fur); px(9, 13, 3, 3, fur)
+
+        case .skeleton:
+            // 두개골 + 갈비뼈 + 뼈 팔다리
+            let bone = Color(hex: "f0f0e0")
+            px(4, 0, 8, 6, bone) // 두개골
+            px(5, 2, 2, 2, Color(hex: "1a1a1a")) // 눈구멍
+            px(9, 2, 2, 2, Color(hex: "1a1a1a"))
+            px(6, 4, 1, 1, Color(hex: "1a1a1a")) // 코
+            px(5, 5, 6, 1, Color(hex: "1a1a1a")) // 이빨줄
+            px(5, 5, 1, 1, bone); px(7, 5, 1, 1, bone); px(9, 5, 1, 1, bone) // 이빨
+            px(5, 6, 6, 6, Color(hex: "404040")) // 몸 (어두운 옷)
+            px(6, 7, 4, 1, bone); px(6, 9, 4, 1, bone) // 갈비뼈
+            px(3, 7, 2, 5, Color(hex: "404040")); px(11, 7, 2, 5, Color(hex: "404040"))
+            px(5, 12, 2, 4, bone); px(9, 12, 2, 4, bone) // 다리뼈
+
         case .human:
             // 기존 사람 그리기
             // Hat
@@ -684,6 +1642,15 @@ struct CharacterCard: View {
         case .fox: return "🦊"
         case .robot: return "🤖"
         case .claude: return "✦"
+        case .alien: return "👽"
+        case .ghost: return "👻"
+        case .dragon: return "🐉"
+        case .chicken: return "🐔"
+        case .owl: return "🦉"
+        case .frog: return "🐸"
+        case .panda: return "🐼"
+        case .unicorn: return "🦄"
+        case .skeleton: return "💀"
         }
     }
 }

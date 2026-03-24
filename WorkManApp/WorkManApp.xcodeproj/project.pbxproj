@@ -16,13 +16,22 @@
 		A10007 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007; };
 		A10008 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10008; };
 		A10009 /* MenuBarWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10009; };
-		A10010 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; 
+		A10010 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile;
 fileRef = B10010; };
+		A10020 /* OfficeWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020; };
 		9141A180C2CDC4F91C87AA78 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01FB8028B43E80A3835392CA /* UpdateChecker.swift */; };
 		A10011 /* GameSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10011; };
 		A10012 /* CharacterSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012; };
 		A10013 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10013; };
 		A10014 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = B10014; };
+		A20001 /* OfficeTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20001; };
+		A20002 /* OfficeMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20002; };
+		A20003 /* OfficeCharacterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20003; };
+		A20004 /* OfficeSpriteRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20004; };
+		A20005 /* OfficeSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20005; };
+		A20006 /* OfficeSpriteData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20006; };
+		A20007 /* OfficeSceneSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20007; };
+		A20008 /* OfficeLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20008; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,8 +44,9 @@ fileRef = B10010; };
 		B10007 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		B10008 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		B10009 /* MenuBarWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarWidget.swift; sourceTree = "<group>"; };
-		B10010 /* SessionStore.swift */ = {isa = PBXFileReference; 
+		B10010 /* SessionStore.swift */ = {isa = PBXFileReference;
 lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
+		B10020 /* OfficeWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeWindowView.swift; sourceTree = "<group>"; };
 		01FB8028B43E80A3835392CA /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		B10011 /* GameSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSystem.swift; sourceTree = "<group>"; };
 		B10012 /* CharacterSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterSystem.swift; sourceTree = "<group>"; };
@@ -45,6 +55,14 @@ lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<
 		E10002 /* WorkManApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WorkManApp.entitlements; sourceTree = "<group>"; };
 		B10013 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10014 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		B20001 /* OfficeTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeTypes.swift; sourceTree = "<group>"; };
+		B20002 /* OfficeMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeMap.swift; sourceTree = "<group>"; };
+		B20003 /* OfficeCharacterController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeCharacterController.swift; sourceTree = "<group>"; };
+		B20004 /* OfficeSpriteRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeSpriteRenderer.swift; sourceTree = "<group>"; };
+		B20005 /* OfficeSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeSceneView.swift; sourceTree = "<group>"; };
+		B20006 /* OfficeSpriteData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeSpriteData.swift; sourceTree = "<group>"; };
+		B20007 /* OfficeSceneSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeSceneSupport.swift; sourceTree = "<group>"; };
+		B20008 /* OfficeLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeLayoutStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,11 +110,28 @@ lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<
 				B10007 /* SidebarView.swift */,
 				B10009 /* MenuBarWidget.swift */,
 				B10010 /* SessionStore.swift */,
+				B10020 /* OfficeWindowView.swift */,
 				01FB8028B43E80A3835392CA /* UpdateChecker.swift */,
 				B10011 /* GameSystem.swift */,
 				B10012 /* CharacterSystem.swift */,
+				G20001 /* Office */,
 			);
 			path = Sources;
+			sourceTree = "<group>";
+		};
+		G20001 /* Office */ = {
+			isa = PBXGroup;
+			children = (
+				B20001 /* OfficeTypes.swift */,
+				B20002 /* OfficeMap.swift */,
+				B20003 /* OfficeCharacterController.swift */,
+				B20004 /* OfficeSpriteRenderer.swift */,
+				B20005 /* OfficeSceneView.swift */,
+				B20006 /* OfficeSpriteData.swift */,
+				B20007 /* OfficeSceneSupport.swift */,
+				B20008 /* OfficeLayoutStore.swift */,
+			);
+			path = Office;
 			sourceTree = "<group>";
 		};
 		G10003 /* Resources */ = {
@@ -181,9 +216,18 @@ lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<
 				A10007 /* SidebarView.swift in Sources */,
 				A10009 /* MenuBarWidget.swift in Sources */,
 				A10010 /* SessionStore.swift in Sources */,
+				A10020 /* OfficeWindowView.swift in Sources */,
 				9141A180C2CDC4F91C87AA78 /* UpdateChecker.swift in Sources */,
 				A10011 /* GameSystem.swift in Sources */,
 				A10012 /* CharacterSystem.swift in Sources */,
+				A20001 /* OfficeTypes.swift in Sources */,
+				A20002 /* OfficeMap.swift in Sources */,
+				A20003 /* OfficeCharacterController.swift in Sources */,
+				A20004 /* OfficeSpriteRenderer.swift in Sources */,
+				A20005 /* OfficeSceneView.swift in Sources */,
+				A20006 /* OfficeSpriteData.swift in Sources */,
+				A20007 /* OfficeSceneSupport.swift in Sources */,
+				A20008 /* OfficeLayoutStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -210,7 +254,7 @@ lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.junha.workman;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -238,7 +282,7 @@ lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.junha.workman;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

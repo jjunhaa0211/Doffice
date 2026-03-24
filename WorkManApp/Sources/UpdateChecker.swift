@@ -165,7 +165,10 @@ class UpdateChecker: ObservableObject {
         let proc = Process()
         let pipe = Pipe()
         proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-l", "-c", command]
+        proc.arguments = ["-il", "-c", command]
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = TerminalTab.buildFullPATH()
+        proc.environment = env
         proc.standardOutput = pipe
         proc.standardError = pipe
         do {

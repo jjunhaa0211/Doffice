@@ -1,4 +1,6 @@
 import SwiftUI
+import Darwin
+import AppKit
 
 class SessionManager: ObservableObject {
     static let shared = SessionManager()
@@ -9,25 +11,122 @@ class SessionManager: ObservableObject {
     @Published var groups: [SessionGroup] = []
     @Published var selectedGroupPath: String? = nil  // nil = 전체 보기
     @Published var focusSingleTab: Bool = false       // 개별 워커 포커스
+    @Published private(set) var availableReportCount: Int = 0
 
     var totalTokensUsed: Int {
         tabs.reduce(0) { $0 + $1.tokensUsed }
     }
 
+    var userVisibleTabs: [TerminalTab] {
+        tabs.filter { $0.automationSourceTabId == nil }
+    }
+
+    var userVisibleTabCount: Int {
+        userVisibleTabs.count
+    }
+
+    var manualLaunchCapacity: Int {
+        let registry = CharacterRegistry.shared
+        let occupiedIds = occupiedCharacterIds()
+        let freeDevelopers = registry.hiredCharacters(for: .developer).filter {
+            !$0.isOnVacation && !occupiedIds.contains($0.id)
+        }.count
+        let remainingHireSlots = max(0, CharacterRegistry.maxHiredCount - registry.hiredCharacters.count)
+        let unlockedAvailable = registry.availableCharacters.filter {
+            registry.isUnlocked($0)
+        }.count
+        return freeDevelopers + min(remainingHireSlots, unlockedAvailable)
+    }
+
     // 현재 선택된 그룹의 탭들 (nil이면 전체)
     var visibleTabs: [TerminalTab] {
-        guard let path = selectedGroupPath else { return tabs }
-        return tabs.filter { $0.projectPath == path }
+        guard let path = selectedGroupPath else { return userVisibleTabs }
+        return userVisibleTabs.filter { $0.projectPath == path }
     }
 
     let workerNames = ["Pixel", "Byte", "Code", "Bug", "Chip", "Kit", "Dot", "Rex"]
 
     private var workerIndex = 0
     private var scanTimer: Timer?
-    private var saveTickCount = 0
+    private var autoSaveTimer: Timer?
+    private var scanTickCount = 0
+    private var cachedProjectGroups: [ProjectGroup]?
+    private var cachedAvailableReports: [ReportReference] = []
+    private var cachedAvailableReportsSignature: Int?
+    private var cachedAvailableReportsAt: TimeInterval = 0
+    private var tabCompletionObserver: NSObjectProtocol?
+    private var sessionStoreObserver: NSObjectProtocol?
+    private var appLifecycleObservers: [NSObjectProtocol] = []
+    private let reportScanQueue = DispatchQueue(label: "workman.report-count", qos: .utility)
+    private var reportScanWorkItem: DispatchWorkItem?
+    private var reportRefreshToken = UUID()
+    private var isAppActive = true
 
     var activeTab: TerminalTab? {
-        tabs.first(where: { $0.id == activeTabId })
+        guard let activeTabId,
+              let tab = tabs.first(where: { $0.id == activeTabId }) else {
+            return userVisibleTabs.first
+        }
+        if let sourceId = tab.automationSourceTabId {
+            return tabs.first(where: { $0.id == sourceId }) ?? tab
+        }
+        return tab
+    }
+
+    private init() {
+        isAppActive = NSApplication.shared.isActive
+        tabCompletionObserver = NotificationCenter.default.addObserver(
+            forName: .workmanTabCycleCompleted,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let tab = notification.object as? TerminalTab else { return }
+            self?.handleTabCycleCompleted(tab)
+        }
+        sessionStoreObserver = NotificationCenter.default.addObserver(
+            forName: .workmanSessionStoreDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.invalidateAvailableReportsCache()
+            self?.scheduleAvailableReportCountRefresh()
+        }
+        appLifecycleObservers = [
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.isAppActive = true
+                self?.scheduleAvailableReportCountRefresh()
+            },
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.didResignActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.isAppActive = false
+            }
+        ]
+        scheduleAvailableReportCountRefresh()
+
+        // 30초마다 자동 저장 (강제 종료 대비)
+        autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.saveSessions()
+        }
+    }
+
+    deinit {
+        autoSaveTimer?.invalidate()
+        if let tabCompletionObserver {
+            NotificationCenter.default.removeObserver(tabCompletionObserver)
+        }
+        if let sessionStoreObserver {
+            NotificationCenter.default.removeObserver(sessionStoreObserver)
+        }
+        for observer in appLifecycleObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     // 프로젝트 경로별 그룹 (순서 유지)
@@ -38,14 +137,23 @@ class SessionManager: ObservableObject {
         var hasActiveTab: Bool
     }
 
+    struct ReportReference: Identifiable {
+        let id: String
+        let projectName: String
+        let projectPath: String
+        let path: String
+        let updatedAt: Date
+    }
+
     var projectGroups: [ProjectGroup] {
+        if let cached = cachedProjectGroups { return cached }
         var dict: [String: [TerminalTab]] = [:]
         var order: [String] = []
-        for tab in tabs {
+        for tab in userVisibleTabs {
             if dict[tab.projectPath] == nil { order.append(tab.projectPath) }
             dict[tab.projectPath, default: []].append(tab)
         }
-        return order.compactMap { path in
+        let result = order.compactMap { path -> ProjectGroup? in
             guard let tabs = dict[path], let first = tabs.first else { return nil }
             return ProjectGroup(
                 id: path,
@@ -54,6 +162,19 @@ class SessionManager: ObservableObject {
                 hasActiveTab: tabs.contains(where: { $0.id == activeTabId })
             )
         }
+        cachedProjectGroups = result
+        return result
+    }
+
+    /// Call whenever tabs or activeTabId change to invalidate the cached project groups.
+    private func invalidateProjectGroupsCache() {
+        cachedProjectGroups = nil
+    }
+
+    private func invalidateAvailableReportsCache() {
+        cachedAvailableReports.removeAll()
+        cachedAvailableReportsSignature = nil
+        cachedAvailableReportsAt = 0
     }
 
     // MARK: - Auto Detect on Launch
@@ -101,18 +222,23 @@ class SessionManager: ObservableObject {
             }
         }
 
-        // 5초마다 리스캔 + git 정보 갱신 + 주기적 저장
-        scanTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            self?.rescanForNewSessions()
-            self?.tabs.forEach { $0.refreshGitInfo() }
-            // 업적 체크
-            if let tabs = self?.tabs {
-                AchievementManager.shared.checkSessionAchievements(tabs: tabs)
+        // 10초마다 리스캔, git 갱신은 30초마다, 업적/저장은 60초마다
+        scanTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.scanTickCount += 1
+            let isBackground = !self.isAppActive
+            if !isBackground || self.scanTickCount % 6 == 0 {
+                self.rescanForNewSessions()
             }
-            // 30초마다 세션 저장 (6번째 tick마다)
-            self?.saveTickCount += 1
-            if (self?.saveTickCount ?? 0) % 6 == 0 {
-                self?.saveSessions()
+            // git 정보 갱신: 매 3번째 tick (30초)
+            if (!isBackground && self.scanTickCount % 3 == 0) || (isBackground && self.scanTickCount % 12 == 0) {
+                self.tabs.forEach { $0.refreshGitInfo() }
+            }
+            // 업적 체크 + 세션 저장: 매 6번째 tick (60초)
+            if (!isBackground && self.scanTickCount % 6 == 0) || (isBackground && self.scanTickCount % 18 == 0) {
+                AchievementManager.shared.checkSessionAchievements(tabs: self.tabs)
+                self.saveSessions()
+                self.scheduleAvailableReportCountRefresh()
             }
         }
 
@@ -154,23 +280,10 @@ class SessionManager: ObservableObject {
     private func findClaudeCodeSessions() -> [DetectedSession] {
         var results: [DetectedSession] = []
 
-        // 진짜 터미널(ttys*)에 붙어있는 claude 프로세스만 찾기
-        // tty가 ??인 것은 WorkManApp이 spawn한 자식 프로세스이므로 제외
-        guard let output = shell("""
-            ps -eo pid,tty,args 2>/dev/null \
-            | grep -E 'claude\\s+--' \
-            | grep -v grep \
-            | grep -v Claude.app \
-            | grep 'ttys'
-            """) else {
-            return results
-        }
+        // 네이티브 API로 claude 프로세스 찾기 (ps/lsof 불필요 → 권한 팝업 없음)
+        let pids = findClaudePidsNative()
 
-        for line in output.components(separatedBy: "\n") where !line.isEmpty {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            let cols = trimmed.split(separator: " ", maxSplits: 2)
-            guard cols.count >= 2, let pid = Int(cols[0]) else { continue }
-
+        for pid in pids {
             if let projectPath = getClaudeProjectPath(pid: pid) {
                 let projectName = getProjectName(path: projectPath)
                 let branch = getBranch(path: projectPath)
@@ -181,7 +294,7 @@ class SessionManager: ObservableObject {
                     projectName: projectName,
                     branch: branch,
                     isClaude: true,
-                    parentApp: getTerminalApp(pid: pid)
+                    parentApp: nil
                 ))
             }
         }
@@ -189,68 +302,92 @@ class SessionManager: ObservableObject {
         return results
     }
 
-    /// Claude Code의 lsof 출력에서 프로젝트 경로를 추출
+    /// 네이티브 API로 claude 프로세스 PID 찾기
+    private func findClaudePidsNative() -> [Int] {
+        // proc_listallpids로 모든 PID 가져오기
+        let bufferSize = proc_listallpids(nil, 0)
+        guard bufferSize > 0 else { return [] }
+
+        var pids = [Int32](repeating: 0, count: Int(bufferSize))
+        let actualSize = proc_listallpids(&pids, Int32(MemoryLayout<Int32>.size * pids.count))
+        guard actualSize > 0 else { return [] }
+
+        var claudePids: [Int] = []
+        let count = Int(actualSize) / MemoryLayout<Int32>.size
+
+        for i in 0..<count {
+            let pid = pids[i]
+            guard pid > 0 else { continue }
+
+            // proc_pidpath로 실행 파일 경로 확인
+            var pathBuf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            let pathLen = proc_pidpath(pid, &pathBuf, UInt32(MAXPATHLEN))
+            guard pathLen > 0 else { continue }
+
+            let execPath = String(cString: pathBuf)
+
+            // claude 실행파일인지 확인
+            let lower = execPath.lowercased()
+            guard lower.contains("claude") || lower.contains("node") else { continue }
+
+            // node인 경우 커맨드 라인에 claude가 포함되는지 확인
+            if lower.contains("node") && !lower.contains("claude") {
+                // proc_pidinfo로 args 대신 cwd에서 .claude 폴더 확인
+                if let cwd = getCwdNative(pid: Int(pid)) {
+                    if !cwd.contains(".claude") { continue }
+                }
+            }
+
+            // WorkManApp 자체가 spawn한 프로세스 제외 (ppid 확인)
+            var bsdInfo = proc_bsdinfo()
+            let infoSize = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &bsdInfo, Int32(MemoryLayout<proc_bsdinfo>.size))
+            if infoSize > 0 {
+                if bsdInfo.pbi_ppid == UInt32(ProcessInfo.processInfo.processIdentifier) { continue }
+                // tty 없는 프로세스 제외 (백그라운드)
+                // dev_t가 0이면 tty 없음 → 하지만 우리가 spawn한 것은 이미 위에서 제외
+            }
+
+            // claude 실행파일 경로를 가진 프로세스
+            if lower.hasSuffix("/claude") || lower.contains("/claude-") || lower.contains("/@anthropic") {
+                claudePids.append(Int(pid))
+            }
+        }
+
+        return claudePids
+    }
+
+    /// Claude Code 프로세스의 프로젝트 경로를 추출 (lsof 미사용 → 화면 녹화 권한 불필요)
     private func getClaudeProjectPath(pid: Int) -> String? {
         let home = NSHomeDirectory()
 
-        // Strategy A: lsof에서 열린 파일 중 프로젝트 경로 추출
-        if let output = shell("lsof -p \(pid) -Fn 2>/dev/null | grep '^n/Users/' | grep -v '/Library/' | grep -v '/.claude/' | grep -v '/tmp/' | grep -v '/var/' | grep -v '/node_modules/' | head -10") {
+        // Strategy A: proc_pidinfo로 cwd 가져오기 (권한 불필요)
+        if let cwd = getCwdNative(pid: pid), cwd != "/", cwd != home {
+            if let repoRoot = shell("git -C \"\(cwd)\" rev-parse --show-toplevel 2>/dev/null")?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !repoRoot.isEmpty, repoRoot != home {
+                return repoRoot
+            }
+            return cwd
+        }
 
-            for line in output.components(separatedBy: "\n") {
-                var path = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                if path.hasPrefix("n") { path = String(path.dropFirst()) }
-                guard !path.isEmpty, path != "/", path != home else { continue }
+        // Strategy B: 부모 프로세스 cwd 확인 (네이티브 API)
+        var current = pid
+        for _ in 0..<5 {
+            guard let ppid = getParentPidNative(pid: current), ppid > 1 else { break }
 
-                // 파일이면 디렉토리로
-                var isDir: ObjCBool = false
-                if FileManager.default.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue {
-                    path = (path as NSString).deletingLastPathComponent
-                }
-                guard path != home else { continue }
-
-                // git root 시도
-                if let repoRoot = shell("git -C \"\(path)\" rev-parse --show-toplevel 2>/dev/null")?
+            if let cwd = getCwdNative(pid: ppid), cwd != "/", cwd != home {
+                if let repoRoot = shell("git -C \"\(cwd)\" rev-parse --show-toplevel 2>/dev/null")?
                     .trimmingCharacters(in: .whitespacesAndNewlines),
                    !repoRoot.isEmpty, repoRoot != home {
                     return repoRoot
                 }
-
-                return path
-            }
-        }
-
-        // Strategy B: Claude의 parent shell의 parent가 어디서 실행됐는지 확인
-        var current = pid
-        for _ in 0..<5 {
-            guard let ppidStr = shell("ps -p \(current) -o ppid= 2>/dev/null")?.trimmingCharacters(in: .whitespaces),
-                  let ppid = Int(ppidStr), ppid > 1 else { break }
-
-            // parent의 열린 파일 확인
-            if let parentFiles = shell("lsof -p \(ppid) -Fn 2>/dev/null | grep '^n/Users/' | grep -v Library | grep -v '.claude' | head -3") {
-                for line in parentFiles.components(separatedBy: "\n") {
-                    var path = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if path.hasPrefix("n") { path = String(path.dropFirst()) }
-                    guard !path.isEmpty, path != "/", path != home else { continue }
-
-                    var isDir: ObjCBool = false
-                    if FileManager.default.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue {
-                        path = (path as NSString).deletingLastPathComponent
-                    }
-                    guard path != home else { continue }
-
-                    if let repoRoot = shell("git -C \"\(path)\" rev-parse --show-toplevel 2>/dev/null")?
-                        .trimmingCharacters(in: .whitespacesAndNewlines),
-                       !repoRoot.isEmpty, repoRoot != home {
-                        return repoRoot
-                    }
-                    return path
-                }
+                return cwd
             }
             current = ppid
         }
 
-        // Strategy C: claude-*-cwd 임시 파일
-        if let cwdFiles = shell("find /var/folders -name 'claude-*-cwd' -newer /var/folders 2>/dev/null | head -10") {
+        // Strategy D: claude 임시 파일
+        if let cwdFiles = shell("find /var/folders -name 'claude-*-cwd' -newer /var/folders 2>/dev/null | head -5") {
             for cwdFile in cwdFiles.components(separatedBy: "\n") where !cwdFile.isEmpty {
                 if let content = shell("cat \"\(cwdFile)\" 2>/dev/null")?
                     .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -261,6 +398,19 @@ class SessionManager: ObservableObject {
         }
 
         return nil
+    }
+
+    /// macOS 네이티브 API로 프로세스 cwd 가져오기 (권한 불필요)
+    private func getCwdNative(pid: Int) -> String? {
+        // proc_pidinfo PROC_PIDVNODEPATHINFO
+        var pathInfo = proc_vnodepathinfo()
+        let size = MemoryLayout<proc_vnodepathinfo>.size
+        let ret = proc_pidinfo(Int32(pid), PROC_PIDVNODEPATHINFO, 0, &pathInfo, Int32(size))
+        guard ret == size else { return nil }
+        let cwd = withUnsafePointer(to: pathInfo.pvi_cdir.vip_path) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+        }
+        return cwd.isEmpty ? nil : cwd
     }
 
     // MARK: - Rescan (periodic)
@@ -312,45 +462,27 @@ class SessionManager: ObservableObject {
     // MARK: - Helper: Process Info
 
     private func getCwd(pid: Int) -> String? {
-        // lsof -d cwd
-        if let out = shell("lsof -p \(pid) -d cwd -Fn 2>/dev/null | grep '^n/' | head -1") {
-            let path = out.trimmingCharacters(in: .whitespacesAndNewlines)
-                .replacingOccurrences(of: "^n", with: "", options: .regularExpression)
-            if !path.isEmpty && path != "/" { return path }
-        }
-
-        // Fallback: 열린 파일에서 프로젝트 경로 추론
-        if let out = shell("lsof -p \(pid) -Fn 2>/dev/null | grep '/Users/' | grep -E '(develop|projects|src|code)' | grep -v Library | head -1") {
-            var path = out.trimmingCharacters(in: .whitespacesAndNewlines)
-                .replacingOccurrences(of: "^n", with: "", options: .regularExpression)
-            if !path.isEmpty && path != "/" {
-                // git root 시도
-                if let root = shell("git -C \"\(path)\" rev-parse --show-toplevel 2>/dev/null")?
-                    .trimmingCharacters(in: .whitespacesAndNewlines), !root.isEmpty {
-                    return root
-                }
-                // 파일이면 디렉토리로
-                var isDir: ObjCBool = false
-                if FileManager.default.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue {
-                    path = (path as NSString).deletingLastPathComponent
-                }
-                if path != NSHomeDirectory() { return path }
-            }
-        }
-
-        return nil
+        // 네이티브 API로 cwd 가져오기 (lsof 불필요)
+        return getCwdNative(pid: pid)
     }
 
     private func getParentCwd(pid: Int) -> String? {
-        // 부모 → 조부모 → 증조부모까지 3단계 탐색
         var current = pid
         for _ in 0..<3 {
-            guard let ppidStr = shell("ps -p \(current) -o ppid= 2>/dev/null")?.trimmingCharacters(in: .whitespaces),
-                  let ppid = Int(ppidStr), ppid > 1 else { return nil }
+            guard let ppid = getParentPidNative(pid: current), ppid > 1 else { return nil }
             if let cwd = getCwd(pid: ppid) { return cwd }
             current = ppid
         }
         return nil
+    }
+
+    /// 네이티브 API로 부모 PID 가져오기
+    private func getParentPidNative(pid: Int) -> Int? {
+        var info = proc_bsdinfo()
+        let ret = proc_pidinfo(Int32(pid), PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
+        guard ret > 0 else { return nil }
+        let ppid = Int(info.pbi_ppid)
+        return ppid > 0 ? ppid : nil
     }
 
     private func getProjectName(path: String) -> String {
@@ -368,37 +500,26 @@ class SessionManager: ObservableObject {
     }
 
     private func hasClaudeChild(pid: Int) -> Bool {
-        if let children = shell("pgrep -P \(pid) 2>/dev/null") {
-            for cpidStr in children.components(separatedBy: "\n") {
-                if let cpid = Int(cpidStr.trimmingCharacters(in: .whitespaces)) {
-                    if let cmdLine = shell("ps -p \(cpid) -o args= 2>/dev/null") {
-                        let lower = cmdLine.lowercased()
-                        if lower.contains("claude") || lower.contains("anthropic") {
-                            return true
-                        }
-                    }
-                    // Check grandchildren too
-                    if hasClaudeChild(pid: cpid) { return true }
-                }
-            }
-        }
+        // 네이티브 API — 이미 findClaudePidsNative에서 처리하므로 간소화
         return false
     }
 
     private func getTerminalApp(pid: Int) -> String? {
-        // Walk up the process tree to find the terminal app
+        // 네이티브 API로 부모 프로세스 트리 탐색
         var currentPid = pid
         for _ in 0..<10 {
-            guard let ppidStr = shell("ps -p \(currentPid) -o ppid= 2>/dev/null")?.trimmingCharacters(in: .whitespaces),
-                  let ppid = Int(ppidStr), ppid > 1 else { break }
+            guard let ppid = getParentPidNative(pid: currentPid), ppid > 1 else { break }
 
-            if let cmd = shell("ps -p \(ppid) -o comm= 2>/dev/null")?.trimmingCharacters(in: .whitespaces) {
-                if cmd.contains("Terminal") { return "Terminal" }
-                if cmd.contains("iTerm") { return "iTerm2" }
-                if cmd.contains("Warp") { return "Warp" }
-                if cmd.contains("Alacritty") { return "Alacritty" }
-                if cmd.contains("kitty") { return "kitty" }
-                if cmd.contains("tmux") { return "tmux" }
+            var pathBuf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            let pathLen = proc_pidpath(Int32(ppid), &pathBuf, UInt32(MAXPATHLEN))
+            if pathLen > 0 {
+                let execPath = String(cString: pathBuf)
+                if execPath.contains("Terminal") { return "Terminal" }
+                if execPath.contains("iTerm") { return "iTerm2" }
+                if execPath.contains("Warp") { return "Warp" }
+                if execPath.contains("Alacritty") { return "Alacritty" }
+                if execPath.contains("kitty") { return "kitty" }
+                if execPath.contains("tmux") { return "tmux" }
             }
             currentPid = ppid
         }
@@ -407,27 +528,30 @@ class SessionManager: ObservableObject {
 
     // MARK: - Tab Management
 
-    func addTab(projectName: String, projectPath: String, isClaude: Bool = false, detectedPid: Int? = nil, sessionCount: Int = 1, branch: String? = nil, initialPrompt: String? = nil) {
-        // CharacterRegistry에서 고용된 캐릭터 중 아직 배정 안 된 캐릭터 선택
+    @discardableResult
+    func addTab(projectName: String, projectPath: String, isClaude: Bool = false, detectedPid: Int? = nil, sessionCount: Int = 1, branch: String? = nil, initialPrompt: String? = nil, preferredCharacterId: String? = nil, automationSourceTabId: String? = nil, automationReportPath: String? = nil, manualLaunch: Bool = false) -> TerminalTab {
         let registry = CharacterRegistry.shared
-        let assignedNames = Set(tabs.map { $0.workerName })
-        let available = registry.hiredCharacters.filter { !assignedNames.contains($0.name) }
+        let occupiedIds = occupiedCharacterIds()
+        let availableDevelopers = registry.hiredCharacters(for: .developer).filter {
+            !$0.isOnVacation && !occupiedIds.contains($0.id)
+        }
 
         let name: String
         let color: Color
         let characterId: String?
 
-        if let char = available.first {
+        if let preferred = registry.character(with: preferredCharacterId),
+           preferred.isHired, !preferred.isOnVacation,
+           (automationSourceTabId != nil || !occupiedIds.contains(preferred.id)) {
+            name = preferred.name
+            color = Color(hex: preferred.shirtColor)
+            characterId = preferred.id
+        } else if manualLaunch, let char = randomManualCharacter() {
             name = char.name
             color = Color(hex: char.shirtColor)
             characterId = char.id
-        } else if !registry.hiredCharacters.isEmpty {
-            // 모두 배정됐으면 라운드로빈 + 순번 붙이기
-            let hired = registry.hiredCharacters
-            let idx = tabs.count % hired.count
-            let char = hired[idx]
-            let sameCount = tabs.filter { $0.workerName.hasPrefix(char.name) }.count
-            name = "\(char.name) \(sameCount + 1)"
+        } else if let char = availableDevelopers.first {
+            name = char.name
             color = Color(hex: char.shirtColor)
             characterId = char.id
         } else {
@@ -452,32 +576,108 @@ class SessionManager: ObservableObject {
         tab.branch = branch
         tab.initialPrompt = initialPrompt
         tab.characterId = characterId
+        tab.automationSourceTabId = automationSourceTabId
+        tab.automationReportPath = automationReportPath
 
         tabs.append(tab)
+        invalidateProjectGroupsCache()
+        invalidateAvailableReportsCache()
+        scheduleAvailableReportCountRefresh()
         if activeTabId == nil {
             activeTabId = tab.id
         }
         workerIndex += 1
 
         tab.start()
+        return tab
+    }
+
+    private func occupiedCharacterIds() -> Set<String> {
+        Set(
+            tabs.compactMap { tab in
+                guard let characterId = tab.characterId else { return nil }
+                if tab.automationSourceTabId != nil {
+                    return tab.isProcessing ? characterId : nil
+                }
+                return tab.isCompleted ? nil : characterId
+            }
+        )
+    }
+
+    private func randomManualCharacter() -> WorkerCharacter? {
+        let registry = CharacterRegistry.shared
+        let occupiedIds = occupiedCharacterIds()
+
+        let hiredDevelopers = registry.hiredCharacters(for: .developer).filter {
+            !$0.isOnVacation && !occupiedIds.contains($0.id)
+        }
+        if let hired = hiredDevelopers.randomElement() {
+            return hired
+        }
+
+        let unlockedAvailable = registry.availableCharacters.filter {
+            registry.isUnlocked($0)
+        }
+        guard registry.hiredCharacters.count < CharacterRegistry.maxHiredCount else {
+            return nil
+        }
+        guard let candidate = unlockedAvailable.randomElement() else {
+            return nil
+        }
+
+        registry.hire(candidate.id)
+        registry.setJobRole(.developer, for: candidate.id)
+        return registry.character(with: candidate.id)
+    }
+
+    func notifyManualLaunchCapacity(requested: Int = 1) {
+        let message: String
+        if CharacterRegistry.shared.hiredCharacters.count >= CharacterRegistry.maxHiredCount && manualLaunchCapacity == 0 {
+            message = "직원은 최대 \(CharacterRegistry.maxHiredCount)명까지 권장합니다. 지금은 더 이상 새 터미널에 배정할 수 없습니다."
+        } else if manualLaunchCapacity == 0 {
+            message = "지금 바로 투입 가능한 직원이 없습니다. 현재 작업이 끝난 뒤 다시 시도해주세요."
+        } else {
+            message = "현재 바로 배정 가능한 직원은 \(manualLaunchCapacity)명뿐입니다. 요청한 \(requested)개 전체를 동시에 만들 수 없습니다."
+        }
+
+        NotificationCenter.default.post(
+            name: .workmanRoleNotice,
+            object: nil,
+            userInfo: [
+                "title": "터미널 추가 제한",
+                "message": message
+            ]
+        )
     }
 
     func removeTab(_ id: String) {
         if let tab = tabs.first(where: { $0.id == id }) {
             tab.stop()
+            if tab.automationSourceTabId == nil {
+                let childTabs = tabs.filter { $0.automationSourceTabId == tab.id }
+                for childTab in childTabs {
+                    childTab.stop()
+                }
+                tabs.removeAll { $0.automationSourceTabId == tab.id }
+            }
         }
         tabs.removeAll(where: { $0.id == id })
+        invalidateProjectGroupsCache()
+        invalidateAvailableReportsCache()
+        scheduleAvailableReportCountRefresh()
         if activeTabId == id {
-            activeTabId = tabs.last?.id
+            activeTabId = userVisibleTabs.last?.id
         }
     }
 
     func selectTab(_ id: String) {
         activeTabId = id
+        invalidateProjectGroupsCache()
     }
 
     func moveTab(from source: IndexSet, to destination: Int) {
         tabs.move(fromOffsets: source, toOffset: destination)
+        invalidateProjectGroupsCache()
     }
 
     // MARK: - Group Management
@@ -526,23 +726,1203 @@ class SessionManager: ObservableObject {
         tabs.filter { $0.groupId == nil }
     }
 
-    // Feature 4: 세션 저장
+    func prepareDirectDeveloperWorkflowIfNeeded(for tab: TerminalTab, prompt: String) {
+        guard tab.workerJob == .developer,
+              tab.automationSourceTabId == nil,
+              !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        tab.resetWorkflowTracking(request: prompt)
+        tab.upsertWorkflowStage(
+            role: .developer,
+            workerName: tab.workerName,
+            assigneeCharacterId: tab.characterId,
+            state: .running,
+            handoffLabel: "사용자 → \(tab.workerName)",
+            detail: "사용자 요구사항을 받아 개발을 시작합니다."
+        )
+    }
+
+    func routePromptIfNeeded(for tab: TerminalTab, prompt: String) -> Bool {
+        guard tab.workerJob == .developer,
+              tab.automationSourceTabId == nil,
+              !tab.isProcessing else {
+            return false
+        }
+
+        if let reason = automationThrottleReason(for: .planner) {
+            tab.appendBlock(.status(message: "토큰 보호 모드"), content: reason)
+            return false
+        }
+
+        guard let plannerCharacter = availableAutomationCharacter(for: .planner, sourceId: tab.id) else {
+            if !CharacterRegistry.shared.hiredCharacters(for: .planner).isEmpty {
+                tab.appendBlock(.status(message: "기획자 대기 중"), content: "지금 비어 있는 기획자가 없어 이번 작업은 개발자가 바로 이어받습니다.")
+            }
+            return false
+        }
+
+        guard !hasAutomationInFlight(for: tab.id, roles: [.planner, .designer, .reviewer, .qa, .reporter, .sre]) else {
+            tab.appendBlock(
+                .status(message: "협업 단계 진행 중"),
+                content: "현재 다른 역할이 이 작업을 정리하고 있습니다. 완료 후 개발자에게 전달됩니다."
+            )
+            return true
+        }
+
+        tab.resetWorkflowTracking(request: prompt)
+        tab.officeSeatLockReason = "기획 정리 대기"
+        tab.lastActivityTime = Date()
+        tab.appendBlock(.userPrompt, content: prompt)
+
+        let plannerPrompt = buildPlannerPrompt(for: tab, request: prompt)
+        let plannerTab = startOrReuseAutomationTab(
+            role: .planner,
+            projectName: "\(tab.projectName) Plan",
+            projectPath: tab.projectPath,
+            prompt: plannerPrompt,
+            preferredCharacter: plannerCharacter,
+            automationSourceTabId: tab.id
+        )
+        tab.upsertWorkflowStage(
+            role: .planner,
+            workerName: plannerTab.workerName,
+            assigneeCharacterId: plannerCharacter.id,
+            state: .running,
+            handoffLabel: "사용자 → \(plannerTab.workerName)",
+            detail: "기획자가 요구사항을 정리하고 필요하면 디자이너와 협의합니다."
+        )
+
+        tab.appendBlock(
+            .status(message: "기획자 투입: \(plannerTab.workerName)"),
+            content: "기획자가 요구사항을 정리하고 필요하면 디자이너와 협의한 뒤 개발자에게 전달합니다."
+        )
+        return true
+    }
+
+    private func hasAutomationInFlight(for sourceId: String, roles: [WorkerJob]) -> Bool {
+        tabs.contains {
+            roles.contains($0.workerJob) &&
+            $0.automationSourceTabId == sourceId &&
+            $0.isProcessing
+        }
+    }
+
+    private func automationThrottleReason(for role: WorkerJob) -> String? {
+        let tracker = TokenTracker.shared
+        let critical = tracker.dailyUsagePercent >= 0.9 ||
+            tracker.weeklyUsagePercent >= 0.9 ||
+            tracker.dailyRemaining < 25_000 ||
+            tracker.weeklyRemaining < 80_000
+        if critical {
+            return "토큰 사용량이 높아 자동 \(role.displayName) 단계를 잠시 줄였습니다."
+        }
+
+        let conservativeRoles: Set<WorkerJob> = [.planner, .designer, .reporter, .sre]
+        let conserve = tracker.dailyUsagePercent >= 0.75 ||
+            tracker.weeklyUsagePercent >= 0.75 ||
+            tracker.dailyRemaining < 80_000 ||
+            tracker.weeklyRemaining < 250_000
+        if conserve && conservativeRoles.contains(role) {
+            return "토큰 사용량 절약을 위해 자동 \(role.displayName) 단계를 생략합니다."
+        }
+        return nil
+    }
+
+    private func availableAutomationCharacter(for role: WorkerJob, sourceId: String) -> WorkerCharacter? {
+        let registry = CharacterRegistry.shared
+        let occupiedIds = occupiedCharacterIds()
+        return registry.hiredCharacters(for: role).first { character in
+            if reusableAutomationTab(for: sourceId, role: role, preferredCharacterId: character.id) != nil {
+                return true
+            }
+            return !occupiedIds.contains(character.id)
+        }
+    }
+
+    private func reusableAutomationTab(
+        for sourceId: String,
+        role: WorkerJob,
+        preferredCharacterId: String?
+    ) -> TerminalTab? {
+        let matches = tabs.filter {
+            $0.automationSourceTabId == sourceId &&
+            $0.workerJob == role &&
+            (preferredCharacterId == nil || $0.characterId == preferredCharacterId)
+        }
+
+        guard let keeper = matches.first(where: \.isProcessing) ?? matches.first else {
+            return nil
+        }
+
+        for duplicate in matches where duplicate.id != keeper.id && !duplicate.isProcessing {
+            removeTab(duplicate.id)
+        }
+
+        return keeper
+    }
+
+    @discardableResult
+    private func startOrReuseAutomationTab(
+        role: WorkerJob,
+        projectName: String,
+        projectPath: String,
+        prompt: String,
+        preferredCharacter: WorkerCharacter,
+        automationSourceTabId: String,
+        automationReportPath: String? = nil
+    ) -> TerminalTab {
+        if let existing = reusableAutomationTab(
+            for: automationSourceTabId,
+            role: role,
+            preferredCharacterId: preferredCharacter.id
+        ) {
+            existing.projectName = projectName
+            existing.projectPath = projectPath
+            existing.workerName = preferredCharacter.name
+            existing.workerColor = Color(hex: preferredCharacter.shirtColor)
+            existing.characterId = preferredCharacter.id
+            existing.automationSourceTabId = automationSourceTabId
+            existing.automationReportPath = automationReportPath
+            existing.lastActivityTime = Date()
+            applyAutomationSettings(to: existing, role: role)
+            existing.sendPrompt(prompt, bypassWorkflowRouting: true)
+            return existing
+        }
+
+        let tab = addTab(
+            projectName: projectName,
+            projectPath: projectPath,
+            initialPrompt: prompt,
+            preferredCharacterId: preferredCharacter.id,
+            automationSourceTabId: automationSourceTabId,
+            automationReportPath: automationReportPath
+        )
+        applyAutomationSettings(to: tab, role: role)
+        return tab
+    }
+
+    private func applyAutomationSettings(to tab: TerminalTab, role: WorkerJob) {
+        switch role {
+        case .planner, .designer, .reporter, .sre:
+            tab.selectedModel = .haiku
+            tab.effortLevel = .low
+            tab.tokenLimit = 8_000
+        case .reviewer, .qa:
+            tab.selectedModel = .sonnet
+            tab.effortLevel = .low
+            tab.tokenLimit = 12_000
+        default:
+            break
+        }
+    }
+
+    private func handleTabCycleCompleted(_ tab: TerminalTab) {
+        switch tab.workerJob {
+        case .planner:
+            handlePlannerCompletion(tab)
+        case .designer:
+            handleDesignerCompletion(tab)
+        case .developer:
+            handleDeveloperCompletion(tab)
+        case .reviewer:
+            handleReviewerCompletion(tab)
+        case .qa:
+            handleQACompletion(tab)
+        case .reporter:
+            handleReporterCompletion(tab)
+        case .sre:
+            handleSRECompletion(tab)
+        default:
+            break
+        }
+    }
+
+    private func handlePlannerCompletion(_ plannerTab: TerminalTab) {
+        guard let sourceId = plannerTab.automationSourceTabId,
+              let sourceTab = tabs.first(where: { $0.id == sourceId }) else { return }
+
+        sourceTab.workflowPlanSummary = plannerTab.lastCompletionSummary
+        sourceTab.updateWorkflowStage(
+            role: .planner,
+            state: .completed,
+            detail: plannerTab.lastCompletionSummary.isEmpty
+                ? "기획 정리가 완료되었습니다."
+                : String(plannerTab.lastCompletionSummary.prefix(260))
+        )
+        sourceTab.appendBlock(
+            .status(message: "기획 완료"),
+            content: plannerTab.lastCompletionSummary.isEmpty
+                ? "기획자가 요구사항과 수용 기준을 정리했습니다."
+                : String(plannerTab.lastCompletionSummary.prefix(260))
+        )
+
+        if let reason = automationThrottleReason(for: .designer) {
+            sourceTab.appendBlock(.status(message: "디자인 단계 생략"), content: reason)
+        } else if let designerCharacter = availableAutomationCharacter(for: .designer, sourceId: sourceId),
+                  !hasAutomationInFlight(for: sourceId, roles: [.designer]) {
+            sourceTab.officeSeatLockReason = "디자인 협의 대기"
+            let designerPrompt = buildDesignerPrompt(for: sourceTab)
+            let designerTab = startOrReuseAutomationTab(
+                role: .designer,
+                projectName: "\(sourceTab.projectName) Design",
+                projectPath: sourceTab.projectPath,
+                prompt: designerPrompt,
+                preferredCharacter: designerCharacter,
+                automationSourceTabId: sourceId
+            )
+            sourceTab.upsertWorkflowStage(
+                role: .designer,
+                workerName: designerTab.workerName,
+                assigneeCharacterId: designerCharacter.id,
+                state: .running,
+                handoffLabel: "\(plannerTab.workerName) → \(designerTab.workerName)",
+                detail: "기획 정리 결과를 바탕으로 UI/UX와 표현 방향을 정리합니다."
+            )
+            sourceTab.appendBlock(
+                .status(message: "디자이너 투입: \(designerTab.workerName)"),
+                content: "디자이너가 화면 흐름과 상호작용 포인트를 정리합니다."
+            )
+            return
+        }
+
+        dispatchDeveloperFromPreparation(for: sourceTab, handoffSourceName: plannerTab.workerName)
+    }
+
+    private func handleDesignerCompletion(_ designerTab: TerminalTab) {
+        guard let sourceId = designerTab.automationSourceTabId,
+              let sourceTab = tabs.first(where: { $0.id == sourceId }) else { return }
+
+        sourceTab.workflowDesignSummary = designerTab.lastCompletionSummary
+        sourceTab.updateWorkflowStage(
+            role: .designer,
+            state: .completed,
+            detail: designerTab.lastCompletionSummary.isEmpty
+                ? "디자인 협의가 완료되었습니다."
+                : String(designerTab.lastCompletionSummary.prefix(260))
+        )
+        sourceTab.appendBlock(
+            .status(message: "디자인 협의 완료"),
+            content: designerTab.lastCompletionSummary.isEmpty
+                ? "디자이너가 UI/UX 보강 포인트를 정리했습니다."
+                : String(designerTab.lastCompletionSummary.prefix(260))
+        )
+
+        dispatchDeveloperFromPreparation(for: sourceTab, handoffSourceName: designerTab.workerName)
+    }
+
+    private func handleDeveloperCompletion(_ tab: TerminalTab) {
+        guard tab.hasCodeChanges else {
+            tab.officeSeatLockReason = nil
+            tab.updateWorkflowStage(
+                role: .developer,
+                state: .completed,
+                detail: "코드 수정 없이 답변을 마쳤습니다."
+            )
+            tab.appendBlock(.status(message: "검토 단계 스킵 · 코드 수정 없음"))
+            launchCompletionRecipients(
+                for: tab,
+                validationSummary: "코드 수정 없음",
+                qaSummary: nil,
+                handoffSourceName: tab.workerName
+            )
+            return
+        }
+
+        tab.updateWorkflowStage(
+            role: .developer,
+            state: .completed,
+            detail: "구현을 마치고 검토 단계로 넘깁니다."
+        )
+
+        if let reason = automationThrottleReason(for: .reviewer) {
+            tab.appendBlock(.status(message: "리뷰 단계 생략"), content: reason)
+            launchQA(for: tab, reviewSummary: nil, handoffSourceName: tab.workerName)
+            return
+        }
+
+        if AppSettings.shared.reviewerMaxPasses == 0 {
+            tab.updateWorkflowStage(
+                role: .reviewer,
+                state: .skipped,
+                detail: "설정에서 코드 리뷰 자동 단계를 비활성화했습니다."
+            )
+            tab.appendBlock(.status(message: "리뷰 단계 생략"), content: "설정에서 코드 리뷰 자동 단계를 끄셨습니다.")
+            launchQA(for: tab, reviewSummary: nil, handoffSourceName: tab.workerName)
+            return
+        }
+
+        if tab.reviewerAttemptCount >= AppSettings.shared.reviewerMaxPasses {
+            tab.officeSeatLockReason = nil
+            tab.updateWorkflowStage(
+                role: .reviewer,
+                state: .failed,
+                detail: "코드 리뷰 자동 한도(\(AppSettings.shared.reviewerMaxPasses)회)에 도달했습니다."
+            )
+            tab.appendBlock(
+                .status(message: "리뷰 자동 한도 도달"),
+                content: "코드 리뷰어가 최대 \(AppSettings.shared.reviewerMaxPasses)회까지 검토했습니다. 토큰 보호를 위해 자동 재검토를 중단합니다."
+            )
+            return
+        }
+
+        if let reviewerCharacter = availableAutomationCharacter(for: .reviewer, sourceId: tab.id) {
+            guard !tabs.contains(where: {
+                $0.projectPath == tab.projectPath &&
+                $0.workerJob == .reviewer &&
+                $0.isProcessing &&
+                $0.automationSourceTabId == tab.id
+            }) else { return }
+
+            let reviewPrompt = buildReviewPrompt(for: tab)
+            let reviewTab = startOrReuseAutomationTab(
+                role: .reviewer,
+                projectName: "\(tab.projectName) Review",
+                projectPath: tab.projectPath,
+                prompt: reviewPrompt,
+                preferredCharacter: reviewerCharacter,
+                automationSourceTabId: tab.id
+            )
+            tab.reviewerAttemptCount += 1
+            tab.officeSeatLockReason = "코드 리뷰 대기"
+            tab.upsertWorkflowStage(
+                role: .reviewer,
+                workerName: reviewTab.workerName,
+                assigneeCharacterId: reviewerCharacter.id,
+                state: .running,
+                handoffLabel: "\(tab.workerName) → \(reviewTab.workerName)",
+                detail: "리뷰어가 변경 파일과 리스크를 검토합니다."
+            )
+            tab.appendBlock(.status(message: "코드 리뷰 투입: \(reviewTab.workerName)"), content: "리뷰어가 변경 파일과 리스크를 먼저 확인합니다.")
+            return
+        }
+
+        launchQA(for: tab, reviewSummary: nil, handoffSourceName: tab.workerName)
+    }
+
+    private func handleReviewerCompletion(_ reviewerTab: TerminalTab) {
+        guard let sourceId = reviewerTab.automationSourceTabId,
+              let sourceTab = tabs.first(where: { $0.id == sourceId }) else { return }
+
+        sourceTab.workflowReviewSummary = reviewerTab.lastCompletionSummary
+        let summary = reviewerTab.lastCompletionSummary.uppercased()
+        if summary.contains("REVIEW_STATUS: PASS") {
+            sourceTab.updateWorkflowStage(
+                role: .reviewer,
+                state: .completed,
+                detail: reviewerTab.lastCompletionSummary.isEmpty
+                    ? "리뷰가 통과되었습니다."
+                    : String(reviewerTab.lastCompletionSummary.prefix(240))
+            )
+            sourceTab.appendBlock(
+                .status(message: "리뷰 통과"),
+                content: reviewerTab.lastCompletionSummary.isEmpty
+                    ? "리뷰어가 치명적인 문제를 찾지 못했습니다."
+                    : String(reviewerTab.lastCompletionSummary.prefix(240))
+            )
+            if CharacterRegistry.shared.hiredCharacters(for: .qa).isEmpty {
+                sourceTab.officeSeatLockReason = nil
+                launchCompletionRecipients(
+                    for: sourceTab,
+                    validationSummary: reviewerTab.lastCompletionSummary,
+                    qaSummary: nil,
+                    handoffSourceName: reviewerTab.workerName
+                )
+            } else {
+                launchQA(
+                    for: sourceTab,
+                    reviewSummary: reviewerTab.lastCompletionSummary,
+                    handoffSourceName: reviewerTab.workerName
+                )
+            }
+            return
+        }
+
+        if summary.contains("REVIEW_STATUS: FAIL") || summary.contains("REVIEW_STATUS: BLOCKED") {
+            sourceTab.officeSeatLockReason = nil
+            sourceTab.updateWorkflowStage(
+                role: .reviewer,
+                state: .failed,
+                detail: reviewerTab.lastCompletionSummary.isEmpty
+                    ? "리뷰 피드백이 발생했습니다."
+                    : String(reviewerTab.lastCompletionSummary.prefix(260))
+            )
+            sourceTab.appendBlock(
+                .status(message: "리뷰 수정 필요"),
+                content: reviewerTab.lastCompletionSummary.isEmpty
+                    ? "리뷰어가 수정이 필요한 이슈를 남겼습니다."
+                    : String(reviewerTab.lastCompletionSummary.prefix(260))
+            )
+            guard sourceTab.automatedRevisionCount < AppSettings.shared.automationRevisionLimit else {
+                sourceTab.appendBlock(
+                    .status(message: "자동 재작업 한도 도달"),
+                    content: "자동 재작업은 최대 \(AppSettings.shared.automationRevisionLimit)회까지만 진행합니다. 추가 검토는 수동으로 진행해주세요."
+                )
+                return
+            }
+            requestDeveloperRevision(
+                for: sourceTab,
+                feedback: reviewerTab.lastCompletionSummary,
+                from: .reviewer
+            )
+        }
+    }
+
+    private func handleQACompletion(_ qaTab: TerminalTab) {
+        guard let sourceId = qaTab.automationSourceTabId,
+              let sourceTab = tabs.first(where: { $0.id == sourceId }) else { return }
+
+        sourceTab.workflowQASummary = qaTab.lastCompletionSummary
+        let summary = qaTab.lastCompletionSummary.uppercased()
+        if summary.contains("QA_STATUS: PASS") {
+            sourceTab.officeSeatLockReason = nil
+            sourceTab.updateWorkflowStage(
+                role: .qa,
+                state: .completed,
+                detail: qaTab.lastCompletionSummary.isEmpty
+                    ? "QA가 통과되었습니다."
+                    : String(qaTab.lastCompletionSummary.prefix(240))
+            )
+            launchCompletionRecipients(
+                for: sourceTab,
+                validationSummary: sourceTab.workflowReviewSummary,
+                qaSummary: qaTab.lastCompletionSummary,
+                handoffSourceName: qaTab.workerName
+            )
+            return
+        }
+
+        if summary.contains("QA_STATUS: FAIL") || summary.contains("QA_STATUS: BLOCKED") {
+            sourceTab.officeSeatLockReason = nil
+            sourceTab.updateWorkflowStage(
+                role: .qa,
+                state: .failed,
+                detail: qaTab.lastCompletionSummary.isEmpty
+                    ? "QA에서 이슈를 발견했습니다."
+                    : String(qaTab.lastCompletionSummary.prefix(240))
+            )
+            sourceTab.appendBlock(.status(message: "QA 미통과"), content: qaTab.lastCompletionSummary.isEmpty ? "QA가 이슈를 발견했습니다." : String(qaTab.lastCompletionSummary.prefix(240)))
+            guard sourceTab.automatedRevisionCount < AppSettings.shared.automationRevisionLimit else {
+                sourceTab.appendBlock(
+                    .status(message: "자동 재작업 한도 도달"),
+                    content: "자동 재작업은 최대 \(AppSettings.shared.automationRevisionLimit)회까지만 진행합니다. 추가 검토는 수동으로 진행해주세요."
+                )
+                return
+            }
+            requestDeveloperRevision(
+                for: sourceTab,
+                feedback: qaTab.lastCompletionSummary,
+                from: .qa
+            )
+        }
+    }
+
+    private func handleReporterCompletion(_ reporterTab: TerminalTab) {
+        guard let sourceId = reporterTab.automationSourceTabId,
+              let sourceTab = tabs.first(where: { $0.id == sourceId }) else { return }
+
+        sourceTab.updateWorkflowStage(
+            role: .reporter,
+            state: .completed,
+            detail: reporterTab.lastCompletionSummary.isEmpty
+                ? "최종 보고서 작성이 완료되었습니다."
+                : String(reporterTab.lastCompletionSummary.prefix(240))
+        )
+        if let reportPath = reporterTab.automationReportPath {
+            sourceTab.automationReportPath = reportPath
+            invalidateAvailableReportsCache()
+            scheduleAvailableReportCountRefresh()
+            sourceTab.appendBlock(
+                .status(message: "보고서 작성 완료"),
+                content: "Markdown: \(reportPath)"
+            )
+        } else {
+            sourceTab.appendBlock(.status(message: "보고자 완료"), content: reporterTab.lastCompletionSummary)
+        }
+    }
+
+    private func handleSRECompletion(_ sreTab: TerminalTab) {
+        guard let sourceId = sreTab.automationSourceTabId,
+              let sourceTab = tabs.first(where: { $0.id == sourceId }) else { return }
+
+        sourceTab.workflowSRESummary = sreTab.lastCompletionSummary
+        sourceTab.updateWorkflowStage(
+            role: .sre,
+            state: .completed,
+            detail: sreTab.lastCompletionSummary.isEmpty
+                ? "SRE 검토가 완료되었습니다."
+                : String(sreTab.lastCompletionSummary.prefix(260))
+        )
+        sourceTab.appendBlock(
+            .status(message: "SRE 검토 완료"),
+            content: sreTab.lastCompletionSummary.isEmpty
+                ? "SRE가 운영/배포 관점 점검을 마쳤습니다."
+                : String(sreTab.lastCompletionSummary.prefix(260))
+        )
+    }
+
+    private func launchQA(for sourceTab: TerminalTab, reviewSummary: String?, handoffSourceName: String) {
+        if let reason = automationThrottleReason(for: .qa) {
+            sourceTab.officeSeatLockReason = nil
+            sourceTab.appendBlock(.status(message: "QA 단계 생략"), content: reason)
+            launchCompletionRecipients(
+                for: sourceTab,
+                validationSummary: reviewSummary ?? sourceTab.workflowReviewSummary,
+                qaSummary: nil,
+                handoffSourceName: handoffSourceName
+            )
+            return
+        }
+
+        if AppSettings.shared.qaMaxPasses == 0 {
+            sourceTab.officeSeatLockReason = nil
+            sourceTab.updateWorkflowStage(
+                role: .qa,
+                state: .skipped,
+                detail: "설정에서 QA 자동 단계를 비활성화했습니다."
+            )
+            sourceTab.appendBlock(.status(message: "QA 단계 생략"), content: "설정에서 QA 자동 단계를 끄셨습니다.")
+            launchCompletionRecipients(
+                for: sourceTab,
+                validationSummary: reviewSummary ?? sourceTab.workflowReviewSummary,
+                qaSummary: nil,
+                handoffSourceName: handoffSourceName
+            )
+            return
+        }
+
+        guard !tabs.contains(where: {
+            $0.projectPath == sourceTab.projectPath &&
+            $0.workerJob == .qa &&
+            $0.isProcessing &&
+            $0.automationSourceTabId == sourceTab.id
+        }) else { return }
+
+        if sourceTab.qaAttemptCount >= AppSettings.shared.qaMaxPasses {
+            sourceTab.officeSeatLockReason = nil
+            sourceTab.updateWorkflowStage(
+                role: .qa,
+                state: .failed,
+                detail: "QA 자동 한도(\(AppSettings.shared.qaMaxPasses)회)에 도달했습니다."
+            )
+            sourceTab.appendBlock(
+                .status(message: "QA 자동 한도 도달"),
+                content: "QA는 최대 \(AppSettings.shared.qaMaxPasses)회까지만 자동으로 재시도합니다. 토큰 보호를 위해 자동 테스트를 중단합니다."
+            )
+            return
+        }
+
+        guard let qaCharacter = availableAutomationCharacter(for: .qa, sourceId: sourceTab.id) else {
+            sourceTab.officeSeatLockReason = nil
+            sourceTab.appendBlock(.status(message: "QA 담당자가 없거나 바쁩니다"))
+            launchCompletionRecipients(
+                for: sourceTab,
+                validationSummary: reviewSummary ?? sourceTab.workflowReviewSummary,
+                qaSummary: nil,
+                handoffSourceName: handoffSourceName
+            )
+            return
+        }
+
+        let qaPrompt = buildQAPrompt(for: sourceTab, reviewSummary: reviewSummary)
+        let qaTab = startOrReuseAutomationTab(
+            role: .qa,
+            projectName: "\(sourceTab.projectName) QA",
+            projectPath: sourceTab.projectPath,
+            prompt: qaPrompt,
+            preferredCharacter: qaCharacter,
+            automationSourceTabId: sourceTab.id
+        )
+        sourceTab.qaAttemptCount += 1
+        sourceTab.officeSeatLockReason = "QA 검토 대기"
+        sourceTab.upsertWorkflowStage(
+            role: .qa,
+            workerName: qaTab.workerName,
+            assigneeCharacterId: qaCharacter.id,
+            state: .running,
+            handoffLabel: "\(handoffSourceName) → \(qaTab.workerName)",
+            detail: "QA가 변경된 기능을 직접 테스트합니다."
+        )
+        let message = reviewSummary == nil ? "QA 투입: \(qaTab.workerName)" : "리뷰 통과 · QA 투입"
+        sourceTab.appendBlock(.status(message: message), content: "QA가 변경된 기능을 직접 테스트합니다.")
+    }
+
+    private func dispatchDeveloperFromPreparation(for sourceTab: TerminalTab, handoffSourceName: String) {
+        sourceTab.officeSeatLockReason = nil
+        sourceTab.upsertWorkflowStage(
+            role: .developer,
+            workerName: sourceTab.workerName,
+            assigneeCharacterId: sourceTab.characterId,
+            state: .running,
+            handoffLabel: "\(handoffSourceName) → \(sourceTab.workerName)",
+            detail: sourceTab.workflowDesignSummary.isEmpty
+                ? "기획 정리 내용을 바탕으로 개발을 진행합니다."
+                : "기획/디자인 정리 내용을 바탕으로 개발을 진행합니다."
+        )
+        sourceTab.appendBlock(
+            .status(message: "개발 시작"),
+            content: sourceTab.workflowDesignSummary.isEmpty
+                ? "기획 정리 내용을 바탕으로 개발자가 구현을 시작합니다."
+                : "기획/디자인 정리 내용을 바탕으로 개발자가 구현을 시작합니다."
+        )
+        sourceTab.sendPrompt(
+            buildDeveloperExecutionPrompt(for: sourceTab),
+            bypassWorkflowRouting: true
+        )
+    }
+
+    private func requestDeveloperRevision(for sourceTab: TerminalTab, feedback: String, from role: WorkerJob) {
+        guard sourceTab.automatedRevisionCount < AppSettings.shared.automationRevisionLimit else {
+            sourceTab.officeSeatLockReason = nil
+            sourceTab.appendBlock(
+                .status(message: "자동 재작업 한도 도달"),
+                content: "자동 재작업은 최대 \(AppSettings.shared.automationRevisionLimit)회까지만 진행합니다. 이후에는 사용자가 직접 판단할 수 있도록 멈춥니다."
+            )
+            return
+        }
+        sourceTab.automatedRevisionCount += 1
+        sourceTab.upsertWorkflowStage(
+            role: .developer,
+            workerName: sourceTab.workerName,
+            assigneeCharacterId: sourceTab.characterId,
+            state: .running,
+            handoffLabel: "\(role.displayName) → \(sourceTab.workerName)",
+            detail: "피드백을 반영해 재작업을 진행합니다."
+        )
+        sourceTab.appendBlock(
+            .status(message: "\(role.displayName) 피드백 반영"),
+            content: "개발자가 피드백을 반영해 다시 작업합니다."
+        )
+        sourceTab.sendPrompt(
+            buildDeveloperRevisionPrompt(for: sourceTab, feedback: feedback, from: role),
+            bypassWorkflowRouting: true
+        )
+    }
+
+    private func launchCompletionRecipients(
+        for sourceTab: TerminalTab,
+        validationSummary: String?,
+        qaSummary: String?,
+        handoffSourceName: String
+    ) {
+        let reporterCharacter = automationThrottleReason(for: .reporter) == nil
+            ? availableAutomationCharacter(for: .reporter, sourceId: sourceTab.id)
+            : nil
+        let sreCharacter = automationThrottleReason(for: .sre) == nil
+            ? availableAutomationCharacter(for: .sre, sourceId: sourceTab.id)
+            : nil
+        var launchedAny = false
+
+        if let reporterCharacter,
+           !tabs.contains(where: {
+               $0.projectPath == sourceTab.projectPath &&
+               $0.workerJob == .reporter &&
+               $0.isProcessing &&
+               $0.automationSourceTabId == sourceTab.id
+           }) {
+            let reportPath = makeReportPath(for: sourceTab)
+            ensureReportDirectoryExists(for: reportPath)
+            let reporterPrompt = buildReporterPrompt(
+                for: sourceTab,
+                qaSummary: qaSummary,
+                validationSummary: validationSummary,
+                reportPath: reportPath
+            )
+            let reporterTab = startOrReuseAutomationTab(
+                role: .reporter,
+                projectName: "\(sourceTab.projectName) Report",
+                projectPath: sourceTab.projectPath,
+                prompt: reporterPrompt,
+                preferredCharacter: reporterCharacter,
+                automationSourceTabId: sourceTab.id,
+                automationReportPath: reportPath
+            )
+            sourceTab.automationReportPath = reportPath
+            sourceTab.upsertWorkflowStage(
+                role: .reporter,
+                workerName: reporterTab.workerName,
+                assigneeCharacterId: reporterCharacter.id,
+                state: .running,
+                handoffLabel: "\(handoffSourceName) → \(reporterTab.workerName)",
+                detail: "최종 결과와 요구사항을 Markdown으로 정리합니다."
+            )
+            sourceTab.appendBlock(
+                .status(message: "보고자 투입: \(reporterTab.workerName)"),
+                content: "최종 요구사항, 구현 결과, 검증 내용을 Markdown으로 정리합니다."
+            )
+            launchedAny = true
+        }
+
+        if let sreCharacter,
+           !tabs.contains(where: {
+               $0.projectPath == sourceTab.projectPath &&
+               $0.workerJob == .sre &&
+               $0.isProcessing &&
+               $0.automationSourceTabId == sourceTab.id
+           }) {
+            let srePrompt = buildSREPrompt(for: sourceTab, qaSummary: qaSummary, validationSummary: validationSummary)
+            let sreTab = startOrReuseAutomationTab(
+                role: .sre,
+                projectName: "\(sourceTab.projectName) SRE",
+                projectPath: sourceTab.projectPath,
+                prompt: srePrompt,
+                preferredCharacter: sreCharacter,
+                automationSourceTabId: sourceTab.id
+            )
+            sourceTab.upsertWorkflowStage(
+                role: .sre,
+                workerName: sreTab.workerName,
+                assigneeCharacterId: sreCharacter.id,
+                state: .running,
+                handoffLabel: "\(handoffSourceName) → \(sreTab.workerName)",
+                detail: "배포/운영 리스크와 실행 환경을 점검합니다."
+            )
+            sourceTab.appendBlock(
+                .status(message: "SRE 투입: \(sreTab.workerName)"),
+                content: "배포/운영 리스크와 실행 환경 관점을 점검합니다."
+            )
+            launchedAny = true
+        }
+
+        if !launchedAny {
+            if let reporterReason = automationThrottleReason(for: .reporter) {
+                sourceTab.appendBlock(.status(message: "보고 단계 생략"), content: reporterReason)
+            }
+            if let sreReason = automationThrottleReason(for: .sre) {
+                sourceTab.appendBlock(.status(message: "SRE 단계 생략"), content: sreReason)
+            }
+            sourceTab.appendBlock(
+                .status(message: "후속 단계 완료"),
+                content: "사용 가능한 후속 역할이 없어 이 단계에서 마무리합니다."
+            )
+        }
+    }
+
+    private func buildPlannerPrompt(for tab: TerminalTab, request: String) -> String {
+        """
+        당신은 WorkMan의 기획자입니다.
+        아래 사용자 요구사항을 보고 개발자가 바로 구현할 수 있게 정리하세요.
+
+        프로젝트: \(tab.projectName)
+        경로: \(tab.projectPath)
+
+        사용자 요구사항:
+        \(request)
+
+        해야 할 일:
+        1. 요구사항을 짧게 요약하세요.
+        2. 반드시 구현해야 할 핵심 항목을 정리하세요.
+        3. 수용 기준과 주의할 점을 정리하세요.
+        4. 디자이너와 개발자가 바로 참고할 수 있게 구체적으로 써주세요.
+        5. 응답 마지막에 아래 한 줄을 정확히 남기세요.
+           PLANNER_STATUS: READY
+        """
+    }
+
+    private func buildDesignerPrompt(for tab: TerminalTab) -> String {
+        let requestText = tab.workflowRequirementText.isEmpty ? "요구사항 정보가 없습니다." : tab.workflowRequirementText
+        let planSummary = tab.workflowPlanSummary.isEmpty ? "기획 요약 없음" : tab.workflowPlanSummary
+
+        return """
+        당신은 WorkMan의 디자이너입니다.
+        아래 요구사항과 기획 요약을 바탕으로 UI/UX, 상호작용, 화면 흐름 관점의 정리본을 만들어 주세요.
+
+        프로젝트: \(tab.projectName)
+        경로: \(tab.projectPath)
+
+        원래 요구사항:
+        \(requestText)
+
+        기획 요약:
+        \(planSummary)
+
+        해야 할 일:
+        1. 화면/상태 흐름을 정리하세요.
+        2. 사용자 경험상 주의할 점과 edge case를 적으세요.
+        3. 개발자가 바로 구현할 수 있는 구체적인 디자인 메모를 남기세요.
+        4. 응답 마지막에 아래 한 줄을 정확히 남기세요.
+           DESIGN_STATUS: READY
+        """
+    }
+
+    private func buildDeveloperExecutionPrompt(for tab: TerminalTab) -> String {
+        let requestText = tab.workflowRequirementText.isEmpty ? "요구사항 정보가 없습니다." : tab.workflowRequirementText
+        let planSection = tab.workflowPlanSummary.isEmpty ? "" : """
+
+        기획 요약:
+        \(tab.workflowPlanSummary)
+        """
+        let designSection = tab.workflowDesignSummary.isEmpty ? "" : """
+
+        디자인/경험 메모:
+        \(tab.workflowDesignSummary)
+        """
+
+        return """
+        아래 요구사항을 구현하세요.
+
+        프로젝트: \(tab.projectName)
+        경로: \(tab.projectPath)
+
+        원래 요구사항:
+        \(requestText)
+        \(planSection)
+        \(designSection)
+
+        구현 지침:
+        1. 필요한 코드를 직접 수정하세요.
+        2. 변경 파일과 검증 결과를 명확히 남기세요.
+        3. 작업을 마치면 완료 요약을 짧게 정리하세요.
+        """
+    }
+
+    private func buildDeveloperRevisionPrompt(for tab: TerminalTab, feedback: String, from role: WorkerJob) -> String {
+        let basePrompt = buildDeveloperExecutionPrompt(for: tab)
+        return """
+        \(basePrompt)
+
+        추가 수정 피드백 (\(role.displayName)):
+        \(feedback.isEmpty ? "구체적인 피드백 없음" : feedback)
+
+        위 피드백을 반영해 다시 구현하고, 어떤 점을 수정했는지 완료 요약에 포함하세요.
+        """
+    }
+
+    private func buildReviewPrompt(for tab: TerminalTab) -> String {
+        let recentFiles = Array(Set(tab.fileChanges.suffix(10).map(\.path))).sorted()
+        let filesSection = recentFiles.isEmpty ? "- 변경 파일 정보 없음" : recentFiles.map { "- \($0)" }.joined(separator: "\n")
+        let requestText = tab.workflowRequirementText.isEmpty ? "요구사항 정보가 없습니다. 변경 파일과 최근 완료 요약을 기준으로 검토하세요." : tab.workflowRequirementText
+        let completionSummary = tab.lastCompletionSummary.isEmpty ? "개발 완료 메시지 없음" : tab.lastCompletionSummary
+        let planSection = tab.workflowPlanSummary.isEmpty ? "" : """
+
+        기획 요약:
+        \(tab.workflowPlanSummary)
+        """
+        let designSection = tab.workflowDesignSummary.isEmpty ? "" : """
+
+        디자인 요약:
+        \(tab.workflowDesignSummary)
+        """
+
+        return """
+        당신은 WorkMan의 코드 리뷰어입니다.
+        아래 개발 작업이 완료되었고 코드 수정도 발생했습니다. 코드는 수정하지 말고, 변경 내용과 리스크를 검토하세요.
+
+        프로젝트: \(tab.projectName)
+        경로: \(tab.projectPath)
+        최근 요구사항:
+        \(requestText)
+        \(planSection)
+        \(designSection)
+
+        개발 완료 요약:
+        \(completionSummary)
+
+        변경된 파일:
+        \(filesSection)
+
+        해야 할 일:
+        1. 변경 파일을 읽고 요구사항 대비 구현 누락, 위험, 회귀 가능성을 찾으세요.
+        2. 테스트 부족, 예외 처리 누락, 상태 동기화 문제를 우선적으로 보세요.
+        3. 코드는 수정하지 말고, 리뷰 코멘트처럼 짧고 명확하게 정리하세요.
+        4. 응답 마지막에 반드시 아래 중 하나를 정확히 한 줄로 남기세요.
+           REVIEW_STATUS: PASS
+           REVIEW_STATUS: FAIL
+           REVIEW_STATUS: BLOCKED
+        """
+    }
+
+    private func buildQAPrompt(for tab: TerminalTab, reviewSummary: String?) -> String {
+        let recentFiles = Array(Set(tab.fileChanges.suffix(8).map(\.path))).sorted()
+        let filesSection = recentFiles.isEmpty ? "- 변경 파일 정보 없음" : recentFiles.map { "- \($0)" }.joined(separator: "\n")
+        let requestText = tab.workflowRequirementText.isEmpty ? "요구사항 정보가 없습니다. 최근 변경 사항과 결과를 기준으로 검증하세요." : tab.workflowRequirementText
+        let completionSummary = tab.lastCompletionSummary.isEmpty ? "개발 완료 메시지 없음" : tab.lastCompletionSummary
+        let planSection = tab.workflowPlanSummary.isEmpty ? "" : """
+
+        기획 요약:
+        \(tab.workflowPlanSummary)
+        """
+        let designSection = tab.workflowDesignSummary.isEmpty ? "" : """
+
+        디자인 요약:
+        \(tab.workflowDesignSummary)
+        """
+        let reviewSection = reviewSummary?.isEmpty == false ? """
+
+        코드 리뷰 요약:
+        \(reviewSummary!)
+        """ : ""
+
+        return """
+        당신은 WorkMan의 QA 담당자입니다.
+        아래 개발 작업이 완료되었습니다. 코드 수정이 실제로 발생한 경우에만 테스트를 진행하며, 이번 작업은 이미 코드 수정이 발생한 상태입니다.
+
+        프로젝트: \(tab.projectName)
+        경로: \(tab.projectPath)
+        최근 요구사항:
+        \(requestText)
+        \(planSection)
+        \(designSection)
+
+        개발 완료 요약:
+        \(completionSummary)
+        \(reviewSection)
+
+        변경된 파일:
+        \(filesSection)
+
+        해야 할 일:
+        1. 변경된 파일과 관련 흐름을 읽고 직접 실행/테스트하세요.
+        2. 가능한 경우 테스트 명령, 앱 실행, 브라우저 확인 등을 통해 실제 동작을 검증하세요.
+        3. 기본적으로 코드는 수정하지 말고, 발견한 이슈는 명확히 적으세요.
+        4. 응답 마지막에 반드시 아래 중 하나를 정확히 한 줄로 남기세요.
+           QA_STATUS: PASS
+           QA_STATUS: FAIL
+           QA_STATUS: BLOCKED
+        """
+    }
+
+    private func buildReporterPrompt(for sourceTab: TerminalTab, qaSummary: String?, validationSummary: String?, reportPath: String) -> String {
+        let requestText = sourceTab.workflowRequirementText.isEmpty ? "요구사항 정보가 없습니다." : sourceTab.workflowRequirementText
+        let changedFiles = Array(Set(sourceTab.fileChanges.map(\.path))).sorted()
+        let filesSection = changedFiles.isEmpty ? "- 변경 파일 없음" : changedFiles.map { "- \($0)" }.joined(separator: "\n")
+        let devSummary = sourceTab.lastCompletionSummary.isEmpty ? "개발 완료 요약 없음" : sourceTab.lastCompletionSummary
+        let reviewSummary = sourceTab.workflowReviewSummary.isEmpty ? "리뷰 요약 없음" : sourceTab.workflowReviewSummary
+        let qaSummaryText = qaSummary?.isEmpty == false ? qaSummary! : "QA 요약 없음"
+        let sreHint = validationSummary?.isEmpty == false ? validationSummary! : "추가 검증 요약 없음"
+        let planSection = sourceTab.workflowPlanSummary.isEmpty ? "" : """
+
+        기획 요약:
+        \(sourceTab.workflowPlanSummary)
+        """
+        let designSection = sourceTab.workflowDesignSummary.isEmpty ? "" : """
+
+        디자인 요약:
+        \(sourceTab.workflowDesignSummary)
+        """
+
+        return """
+        당신은 WorkMan의 보고자입니다.
+        QA가 통과한 프로젝트에 대해 최종 Markdown 보고서를 작성하세요.
+
+        프로젝트: \(sourceTab.projectName)
+        저장 경로: \(reportPath)
+
+        원래 요구사항:
+        \(requestText)
+        \(planSection)
+        \(designSection)
+
+        개발 결과 요약:
+        \(devSummary)
+
+        코드 리뷰 요약:
+        \(reviewSummary)
+
+        QA 결과:
+        \(qaSummaryText)
+
+        추가 검증 요약:
+        \(sreHint)
+
+        변경 파일:
+        \(filesSection)
+
+        해야 할 일:
+        1. \(reportPath) 파일을 Markdown으로 작성하거나 갱신하세요.
+        2. 반드시 아래 섹션을 포함하세요.
+           - 요구사항
+           - 구현 결과
+           - QA 검증 결과
+           - 변경 파일
+           - 남은 리스크 및 다음 단계
+        3. 응답 마지막에는 아래 두 줄을 정확히 남기세요.
+           REPORT_STATUS: WRITTEN
+           REPORT_PATH: \(reportPath)
+        """
+    }
+
+    private func buildSREPrompt(for sourceTab: TerminalTab, qaSummary: String?, validationSummary: String?) -> String {
+        let requestText = sourceTab.workflowRequirementText.isEmpty ? "요구사항 정보가 없습니다." : sourceTab.workflowRequirementText
+        let changedFiles = Array(Set(sourceTab.fileChanges.map(\.path))).sorted()
+        let filesSection = changedFiles.isEmpty ? "- 변경 파일 없음" : changedFiles.map { "- \($0)" }.joined(separator: "\n")
+        let devSummary = sourceTab.lastCompletionSummary.isEmpty ? "개발 완료 요약 없음" : sourceTab.lastCompletionSummary
+        let qaSection = qaSummary?.isEmpty == false ? qaSummary! : "QA 요약 없음"
+        let validationSection = validationSummary?.isEmpty == false ? validationSummary! : "추가 검증 요약 없음"
+
+        return """
+        당신은 WorkMan의 SRE입니다.
+        아래 구현 결과를 운영/배포/실행 안정성 관점에서 점검하세요.
+
+        프로젝트: \(sourceTab.projectName)
+        경로: \(sourceTab.projectPath)
+
+        원래 요구사항:
+        \(requestText)
+
+        개발 결과 요약:
+        \(devSummary)
+
+        QA 요약:
+        \(qaSection)
+
+        추가 검증 요약:
+        \(validationSection)
+
+        변경 파일:
+        \(filesSection)
+
+        해야 할 일:
+        1. 실행 환경, 배포, 운영 리스크를 점검하세요.
+        2. 모니터링, 롤백, 환경 변수, 수동 점검 포인트를 정리하세요.
+        3. 응답 마지막에 아래 한 줄을 정확히 남기세요.
+           SRE_STATUS: CHECKED
+        """
+    }
+
+    private func makeReportPath(for tab: TerminalTab) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let safeProjectName = tab.projectName
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9_-]+", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        let fileName = "\(formatter.string(from: Date()))-\(safeProjectName.isEmpty ? "report" : safeProjectName)-report.md"
+        return (tab.projectPath as NSString).appendingPathComponent(".workman/reports/\(fileName)")
+    }
+
+    private func ensureReportDirectoryExists(for reportPath: String) {
+        let directory = (reportPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: nil)
+    }
+
+    func availableReports() -> [ReportReference] {
+        let currentProjects = userVisibleTabs.map { ($0.projectName, $0.projectPath) }
+        let savedProjects = SessionStore.shared.load().map { ($0.projectName, $0.projectPath) }
+        let signature = availableReportsSignature(currentProjects: currentProjects, savedProjects: savedProjects)
+        let now = Date().timeIntervalSinceReferenceDate
+        if cachedAvailableReportsSignature == signature, now - cachedAvailableReportsAt < 4 {
+            return cachedAvailableReports
+        }
+
+        var uniqueProjects: [(String, String)] = []
+        var seenPaths = Set<String>()
+        for (projectName, projectPath) in currentProjects + savedProjects {
+            guard seenPaths.insert(projectPath).inserted else { continue }
+            uniqueProjects.append((projectName, projectPath))
+        }
+
+        var references: [ReportReference] = []
+        for (projectName, projectPath) in uniqueProjects {
+            let reportsDir = (projectPath as NSString).appendingPathComponent(".workman/reports")
+            guard let files = try? FileManager.default.contentsOfDirectory(atPath: reportsDir) else { continue }
+
+            for file in files where file.hasSuffix(".md") {
+                let fullPath = (reportsDir as NSString).appendingPathComponent(file)
+                let attrs = try? FileManager.default.attributesOfItem(atPath: fullPath)
+                let updatedAt = attrs?[.modificationDate] as? Date ?? .distantPast
+                references.append(
+                    ReportReference(
+                        id: fullPath,
+                        projectName: projectName,
+                        projectPath: projectPath,
+                        path: fullPath,
+                        updatedAt: updatedAt
+                    )
+                )
+            }
+        }
+
+        let sorted = references.sorted { lhs, rhs in
+            if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+            return lhs.path.localizedCaseInsensitiveCompare(rhs.path) == .orderedAscending
+        }
+        cachedAvailableReports = sorted
+        cachedAvailableReportsSignature = signature
+        cachedAvailableReportsAt = now
+        availableReportCount = sorted.count
+        return sorted
+    }
+
+    // Feature 4: 세션 저장 (빈 자동화 탭 제외)
     func saveSessions() {
-        SessionStore.shared.save(tabs: tabs)
+        let savableTabs = userVisibleTabs.filter { tab in
+            // 토큰 사용 없고, 완료되지 않았고, 처리 중도 아닌 빈 탭은 저장하지 않음
+            if tab.tokensUsed == 0 && !tab.isCompleted && !tab.isProcessing && tab.completedPromptCount == 0 {
+                return false
+            }
+            return true
+        }
+        SessionStore.shared.save(tabs: savableTabs)
     }
 
     // Feature 4: 세션 복원 (이전 기록에서 경로 로드 - 같은 프로젝트 여러 탭 지원)
     func restoreSessions() {
         let saved = SessionStore.shared.load()
+        var interruptedSessions: [SavedSession] = []
+
+        // 워크플로우 자동 생성 탭 키워드 (Plan, Review, QA, Report 등이 중첩된 이름)
+        let workflowSuffixes = ["Plan", "Review", "QA", "Report"]
+
         for session in saved {
             // 완료된 세션은 복원하지 않음
             guard !session.isCompleted && FileManager.default.fileExists(atPath: session.projectPath) else { continue }
+
+            // 토큰 사용 없고 프롬프트도 없는 빈 세션은 건너뜀
+            if session.tokensUsed == 0 && (session.initialPrompt == nil || session.initialPrompt?.isEmpty == true) && session.wasProcessing != true {
+                continue
+            }
+
+            // 워크플로우 자동 생성 탭 필터링 (이름에 Plan/Review/QA/Report가 2개 이상 포함)
+            let suffixCount = workflowSuffixes.reduce(0) { count, suffix in
+                count + session.projectName.components(separatedBy: " ").filter { $0 == suffix }.count
+            }
+            if suffixCount >= 2 {
+                continue
+            }
+
+            // 강제 종료로 중단된 세션 감지
+            if session.wasProcessing == true {
+                interruptedSessions.append(session)
+            }
+
             addTab(
                 projectName: session.projectName,
                 projectPath: session.projectPath,
                 branch: session.branch,
                 initialPrompt: session.initialPrompt
             )
+        }
+
+        // 강제 종료로 중단된 작업이 있으면 알림
+        if !interruptedSessions.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                self.showInterruptedSessionsAlert(interruptedSessions)
+            }
+        }
+    }
+
+    private func showInterruptedSessionsAlert(_ sessions: [SavedSession]) {
+        let alert = NSAlert()
+        let names = sessions.map { $0.projectName }.joined(separator: ", ")
+        alert.messageText = "이전에 중단된 작업이 \(sessions.count)개 있습니다"
+        alert.informativeText = "앱이 비정상 종료되어 다음 작업이 완료되지 못했습니다:\n\(names)\n\n변경사항이 남아있을 수 있습니다. 작업 전 상태로 되돌리시겠습니까?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "모두 되돌리기")
+        alert.addButton(withTitle: "그대로 유지")
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            for session in sessions {
+                let path = session.projectPath
+                // git 저장소인 경우 변경사항 롤백
+                let isGitRepo = TerminalTab.shellSync("git -C \"\(path)\" rev-parse --is-inside-work-tree 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines) == "true"
+                if isGitRepo {
+                    _ = TerminalTab.shellSync("git -C \"\(path)\" checkout -- . 2>/dev/null")
+                    _ = TerminalTab.shellSync("git -C \"\(path)\" clean -fd 2>/dev/null")
+                }
+            }
         }
     }
 
@@ -555,6 +1935,9 @@ class SessionManager: ObservableObject {
         }
         tabs.removeAll()
         activeTabId = nil
+        invalidateProjectGroupsCache()
+        invalidateAvailableReportsCache()
+        scheduleAvailableReportCountRefresh()
         workerIndex = 0
 
         // 다시 스캔
@@ -566,6 +1949,68 @@ class SessionManager: ObservableObject {
         scanTimer = nil
     }
 
+    func scheduleAvailableReportCountRefresh() {
+        reportScanWorkItem?.cancel()
+
+        let currentProjects = userVisibleTabs.map { ($0.projectName, $0.projectPath) }
+        let savedProjects = SessionStore.shared.load().map { ($0.projectName, $0.projectPath) }
+        let signature = availableReportsSignature(currentProjects: currentProjects, savedProjects: savedProjects)
+
+        if cachedAvailableReportsSignature == signature {
+            availableReportCount = cachedAvailableReports.count
+            return
+        }
+
+        let refreshToken = UUID()
+        reportRefreshToken = refreshToken
+        let workItem = DispatchWorkItem { [weak self] in
+            let count = Self.computeReportCount(currentProjects: currentProjects, savedProjects: savedProjects)
+            DispatchQueue.main.async {
+                guard let self = self,
+                      self.reportRefreshToken == refreshToken else { return }
+                if self.cachedAvailableReportsSignature == signature {
+                    self.availableReportCount = self.cachedAvailableReports.count
+                } else {
+                    self.availableReportCount = count
+                }
+            }
+        }
+        reportScanWorkItem = workItem
+        reportScanQueue.async(execute: workItem)
+    }
+
+    private func availableReportsSignature(
+        currentProjects: [(String, String)],
+        savedProjects: [(String, String)]
+    ) -> Int {
+        var hasher = Hasher()
+        for pair in (currentProjects + savedProjects).sorted(by: { $0.1 < $1.1 }) {
+            hasher.combine(pair.0)
+            hasher.combine(pair.1)
+        }
+        return hasher.finalize()
+    }
+
+    private static func computeReportCount(
+        currentProjects: [(String, String)],
+        savedProjects: [(String, String)]
+    ) -> Int {
+        var uniqueProjects: [(String, String)] = []
+        var seenPaths = Set<String>()
+        for (projectName, projectPath) in currentProjects + savedProjects {
+            guard seenPaths.insert(projectPath).inserted else { continue }
+            uniqueProjects.append((projectName, projectPath))
+        }
+
+        var count = 0
+        for (_, projectPath) in uniqueProjects {
+            let reportsDir = (projectPath as NSString).appendingPathComponent(".workman/reports")
+            guard let files = try? FileManager.default.contentsOfDirectory(atPath: reportsDir) else { continue }
+            count += files.filter { $0.hasSuffix(".md") }.count
+        }
+        return count
+    }
+
     // MARK: - Shell Helper
 
     private func shell(_ command: String) -> String? {
@@ -574,13 +2019,9 @@ class SessionManager: ObservableObject {
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-l", "-c", command]
-        // GUI 앱에서 PATH 보장
+        process.arguments = ["-il", "-c", command]
         var env = ProcessInfo.processInfo.environment
-        let existing = env["PATH"] ?? "/usr/bin:/bin"
-        let extra = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/homebrew/sbin",
-                     NSHomeDirectory() + "/.local/bin"]
-        env["PATH"] = (extra + [existing]).joined(separator: ":")
+        env["PATH"] = TerminalTab.buildFullPATH()
         process.environment = env
 
         do {
@@ -594,4 +2035,3 @@ class SessionManager: ObservableObject {
         }
     }
 }
-

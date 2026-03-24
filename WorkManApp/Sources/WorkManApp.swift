@@ -17,6 +17,16 @@ struct WorkManApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1200, height: 800)
+
+        // 오피스 전용 창 (듀얼 모니터용)
+        WindowGroup("WorkMan Office", id: "office-window") {
+            OfficeWindowView()
+                .environmentObject(manager)
+                .environmentObject(settings)
+                .preferredColorScheme(settings.colorScheme)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 900, height: 600)
         .commands {
             CommandGroup(after: .toolbar) {
                 Button("Refresh Sessions") {
@@ -69,6 +79,9 @@ extension Notification.Name {
     static let workmanToggleSplit = Notification.Name("workmanToggleSplit")
     static let workmanExportLog = Notification.Name("workmanExportLog")
     static let workmanClaudeNotInstalled = Notification.Name("workmanClaudeNotInstalled")
+    static let workmanTabCycleCompleted = Notification.Name("workmanTabCycleCompleted")
+    static let workmanRoleNotice = Notification.Name("workmanRoleNotice")
+    static let workmanSessionStoreDidChange = Notification.Name("workmanSessionStoreDidChange")
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -89,6 +102,43 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         SessionManager.shared.saveSessions()
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let manager = SessionManager.shared
+        let runningTabs = manager.tabs.filter { $0.isProcessing }
+
+        // 진행 중인 작업이 없으면 바로 종료
+        guard !runningTabs.isEmpty else { return .terminateNow }
+
+        let alert = NSAlert()
+        alert.messageText = "진행 중인 작업이 \(runningTabs.count)개 있습니다"
+        alert.informativeText = "앱을 종료하면 현재 진행 중인 작업은 완료되지 않습니다.\n모든 작업을 취소하고 변경사항을 작업 전 상태로 되돌릴 수 있습니다."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "모든 작업 취소 후 종료")
+        alert.addButton(withTitle: "그대로 종료")
+        alert.addButton(withTitle: "취소")
+
+        let response = alert.runModal()
+        switch response {
+        case .alertFirstButtonReturn:
+            // 모든 진행 중인 작업을 취소하고 git 롤백
+            for tab in runningTabs {
+                tab.cancelAndRevert()
+            }
+            manager.saveSessions()
+            return .terminateNow
+        case .alertSecondButtonReturn:
+            // 롤백 없이 그대로 종료
+            for tab in runningTabs {
+                tab.forceStop()
+            }
+            manager.saveSessions()
+            return .terminateNow
+        default:
+            // 취소 - 종료하지 않음
+            return .terminateCancel
+        }
     }
 
     // Feature 3: 메뉴바에서 창 다시 열기

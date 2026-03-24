@@ -26,5 +26,7 @@
 	<string></string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>WorkMan은 실행 중인 Claude Code 세션을 감지하기 위해 프로세스 정보를 조회합니다. 화면 녹화 기능은 사용하지 않습니다.</string>
 </dict>
 </plist>

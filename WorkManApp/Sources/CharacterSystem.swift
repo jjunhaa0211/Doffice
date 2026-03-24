@@ -221,39 +221,125 @@ class CharacterRegistry: ObservableObject {
     static let maxHiredCount = 13
 
     @Published var allCharacters: [WorkerCharacter] = []
+    @Published private(set) var manuallyUnlockedCharacterIDs: Set<String> = []
 
     private let saveKey = "WorkManCharacters"
+    private let manualUnlockKey = "WorkManCharacterManualUnlocks"
     let bossLines: [String] = [
         "열심히 일해라. 내가 보고 있다.",
-        "버그는 잡고, 월급은 내가 잡는다.",
-        "야근은 짧게, 성과는 길게.",
-        "오늘도 KPI가 당신을 응원합니다.",
-        "커피는 회사가, 책임은 개발자가.",
-        "문서는 미래의 나를 위한 선물이다.",
-        "테스트 없는 배포는 스릴러 장르다.",
-        "회의는 짧게, 코드는 길게.",
-        "에러도 경험이다. 남의 경험이면 더 좋고.",
-        "리팩토링은 사랑이지만 일정은 현실이다.",
+        "나는 돈이 제일 좋아",
+        "자기전에 생각 많이 날거야",
+        "매끈매끈하다 매끈매끈한 퉁퉁하다 뚱뚱한",
+        "너 내가 봤는데 좀 밤티다.",
+        "이런 샤갈!",
+        "허거덩거덩스한 상황이군;;",
+        "chill: 빠라바라빠바바",
+        "오늘도 실적 좋게 때려 부순다",
+        "보고서는 필요 없다. 결과만 있으면 된다",
         "일단 돌아가면 절반은 성공이다.",
         "주석은 거짓말할 수 있지만 로그는 못 한다.",
         "배포 전 심호흡, 배포 후 기도.",
         "오늘의 아재개그: 버그가 왜 울었나? 잡혔으니까.",
-        "커밋 메시지가 길면 양심도 길다.",
-        "코드 리뷰는 공격이 아니라 보험이다.",
-        "빨리 가려면 혼자, 멀리 가려면 브랜치부터 정리해라.",
-        "스펙은 바뀌어도 마감은 안 바뀐다.",
-        "오늘도 서버는 평화롭길 빈다.",
-        "QA를 사랑하라. 내일의 너다.",
-        "문제가 없다고? 아직 못 찾은 거다.",
-        "좋은 개발자는 에러를 줄이고, 위대한 개발자는 재현법을 남긴다.",
-        "README는 한 번쯤은 읽혀야 한다.",
-        "사수는 없지만 git blame은 있다.",
-        "핫픽스는 뜨겁고 마음은 차갑게.",
-        "코드는 정직하다. 사람이 둘러말할 뿐.",
-        "버전업은 쉽고 롤백은 빠르게.",
-        "오늘의 목표: 안 터뜨리기.",
-        "농담 하나. 완벽한 첫 배포라는 건 없다.",
-        "다들 힘내라. 내가 마음으로 응원한다."
+        "커피가 슬프면? 에스프레소.",
+        "세상에서 가장 뜨거운 과일은? 천도복숭아.",
+        "가장 야한 채소는? 오이.",
+        "가장 억울한 도형은? 원통해.",
+        "신이 화가 나면? 신경질.",
+        "왕이 넘어지면? 킹콩.",
+        "소가 웃으면? 우하하.",
+        "소가 계단 오를 때 하는 말은? 소오름.",
+        "세상에서 가장 쉬운 숫자는? 십구만. 쉽구만.",
+        "가장 지저분한 집은? 돼지우리.",
+        "가장 차가운 바다는? 썰렁해.",
+        "바나나가 웃으면? 바나나킥.",
+        "빵이 화나면? 빵빵.",
+        "자동차가 놀라면? 카놀라유.",
+        "사과가 웃으면? 풋사과.",
+        "도둑이 가장 좋아하는 아이스크림은? 보석바.",
+        "아기가 타는 차는? 유모차.",
+        "말이 물에 빠지면? 허우적허우적.",
+        "개가 사람을 가르치면? 개인지도.",
+        "세상에서 가장 긴 음식은? 참기름.",
+        "세상에서 가장 가난한 왕은? 최저임금.",
+        "가장 무서운 비는? 사이비.",
+        "추운 곳에서 하는 욕은? 동상 걸리겠다.",
+        "가장 잘생긴 말은? 미남말.",
+        "오리가 얼면? 언덕.",
+        "신발이 화나면? 신발끈.",
+        "눈이 오면 강아지가 하는 말은? 개추워.",
+        "닭이 가장 싫어하는 야채는? 도라지. 돌아지.",
+        "문이 화나면? 문짝.",
+        "토끼가 쓰는 빗은? 래빗.",
+        "세상에서 가장 뜨거운 전화는? 화상전화.",
+        "가장 억울한 나무는? 원망무.",
+        "달이 떴는데 반만 보이면? 반달가슴곰은 아니고 반갑다.",
+        "펭귄이 다니는 중학교는? 냉방중.",
+        "다리미가 좋아하는 음식은? 피자. 쭉 펴지니까.",
+        "가장 조용한 음식은? 쉿빵.",
+        "비가 자기소개하면? 나 비야.",
+        "가장 답답한 절은? 좌절.",
+        "세상에서 가장 착한 사자는? 자원봉사자.",
+        "아재가 제일 좋아하는 과자는? 아재비누는 아니고 홈런볼.",
+        "세상에서 가장 빠른 닭은? 후다닥.",
+        "고양이가 지하철 타면? 야옹철.",
+        "소금이 죽으면? 염.",
+        "세상에서 가장 용감한 물고기는? 대담치.",
+        "가장 얇은 종이는? 간지.",
+        "학생들이 가장 싫어하는 피자는? 책피자.",
+        "세상에서 가장 쉬운 일은? 숨 쉬운 일.",
+        "돼지가 갑자기 열받으면? 돈까스.",
+        "아재개그는 왜 위험하냐고? 분위기를 얼리니까.",
+        "웃지 마라. 이제 시작이다.",
+        "세상에서 가장 많이 맞는 사람은? 피부미인. 늘 스킨 맞음.",
+        "개가 사람을 정말 잘 가르치면? 개명강사.",
+        "세상에서 가장 뜨거운 복숭아는? 천도복숭아.",
+        "왕이 헤어지자고 하면? 바이킹.",
+        "왕이 궁에 가기 싫으면? 궁시렁궁시렁.",
+        "세상에서 가장 쉬운 돈은? 식은 죽 먹기보다 쉬운 용돈.",
+        "사람이 몸무게 재다 놀라면? 체중계엄.",
+        "닭이 회의하면? 닭살회의.",
+        "세상에서 가장 억울한 도형은? 원통해.",
+        "신이 버럭 화내면? 신경질.",
+        "빵이 목장 가면? 소보로.",
+        "세상에서 가장 무서운 전화는? 무선전화. 선이 없어서.",
+        "말이 정말 예쁘게 웃으면? 말끔.",
+        "콩이 죽으면? 홍콩. 콩 gone.",
+        "원숭이가 장난전화하면? 따르릉따르릉 원숭이.",
+        "세상에서 가장 지루한 중학교는? 로딩중.",
+        "바다가 화나면? 파도친다.",
+        "가수가 차를 못 타면? 버스커.",
+        "소가 시험 보면? 우수.",
+        "소가 정말 열심히 공부하면? 우등생.",
+        "아몬드가 죽으면? 다이아몬드.",
+        "오리가 얼면? 언덕.",
+        "문어가 지은 건물은? 문어발식.",
+        "도둑이 가장 싫어하는 아이스크림은? 누가바.",
+        "세상에서 가장 가벼운 숫자는? 오. 오~",
+        "세상에서 가장 무서운 비는? 사이비.",
+        "고양이가 좋아하는 차는? 카푸치노.",
+        "곰이 목욕하면? 북극곰.",
+        "돼지가 넘어지면? 돈사.",
+        "돼지가 미안하면? 돈워리.",
+        "세상에서 가장 긴 음식은? 참기름.",
+        "세상에서 가장 뜨거운 전화는? 화상전화.",
+        "달리기 제일 못하는 닭은? 헉헉대닭.",
+        "닭이 은행 가면? 치킨계좌.",
+        "세상에서 가장 잘생긴 말은? 미남말.",
+        "토끼가 화장하면? 반할 토끼.",
+        "오징어가 학교 가면? 문어체는 아니고 오답지.",
+        "눈이 내리면 개가 하는 말은? 개추워.",
+        "세상에서 가장 조용한 빵은? 쉿빵.",
+        "가장 답답한 절은? 좌절.",
+        "가장 뜨거운 바다는? 열받아.",
+        "공이 웃으면? 풋볼.",
+        "펭귄이 다니는 중학교는? 냉방중.",
+        "차가 놀라면? 카톡.",
+        "치과의사가 제일 좋아하는 아침은? 이쑤시개운.",
+        "세상에서 가장 슬픈 새는? 우는새.",
+        "수박이 박수치면? 수박수.",
+        "세상에서 가장 시원한 말은? 썰렁.",
+        "아재개그가 무서운 이유는? 안 웃어도 끝까지 한다.",
+        "웃겼으면 인정, 안 웃겼으면 더 인정."
     ]
 
     init() {
@@ -279,6 +365,7 @@ class CharacterRegistry: ObservableObject {
         } else {
             allCharacters = Self.defaultCharacters
         }
+        loadManualUnlocks()
     }
 
     func save() {
@@ -305,6 +392,9 @@ class CharacterRegistry: ObservableObject {
 
     /// 해당 캐릭터의 도전과제 잠금이 해제되었는지 확인
     func isUnlocked(_ character: WorkerCharacter) -> Bool {
+        if manuallyUnlockedCharacterIDs.contains(character.id) {
+            return true
+        }
         guard let req = character.requiredAchievement else { return true }
         return AchievementManager.shared.achievements.first(where: { $0.id == req })?.unlocked == true
     }
@@ -327,6 +417,23 @@ class CharacterRegistry: ObservableObject {
             }
         }
         save()
+    }
+
+    @discardableResult
+    func unlockAllCharacters() -> Int {
+        let unlockableIDs = Set(allCharacters.compactMap { character in
+            character.requiredAchievement == nil ? nil : character.id
+        })
+        let newlyUnlocked = unlockableIDs.subtracting(manuallyUnlockedCharacterIDs)
+        guard !newlyUnlocked.isEmpty else { return 0 }
+        manuallyUnlockedCharacterIDs = manuallyUnlockedCharacterIDs.union(newlyUnlocked)
+        saveManualUnlocks()
+        return newlyUnlocked.count
+    }
+
+    func clearManualUnlocks() {
+        manuallyUnlockedCharacterIDs = []
+        saveManualUnlocks()
     }
 
     func fire(_ id: String) {
@@ -431,6 +538,26 @@ class CharacterRegistry: ObservableObject {
                 "message": "직원은 최대 \(Self.maxHiredCount)명까지 권장합니다. 이 이상은 세션 증가와 메모리 사용량 문제를 만들 수 있어 막아두었습니다."
             ]
         )
+    }
+
+    private func loadManualUnlocks() {
+        guard let data = UserDefaults.standard.data(forKey: manualUnlockKey),
+              let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+            manuallyUnlockedCharacterIDs = []
+            return
+        }
+        manuallyUnlockedCharacterIDs = Set(decoded)
+    }
+
+    private func saveManualUnlocks() {
+        if manuallyUnlockedCharacterIDs.isEmpty {
+            UserDefaults.standard.removeObject(forKey: manualUnlockKey)
+            return
+        }
+        let sortedIDs = manuallyUnlockedCharacterIDs.sorted()
+        if let data = try? JSONEncoder().encode(sortedIDs) {
+            UserDefaults.standard.set(data, forKey: manualUnlockKey)
+        }
     }
 
     // MARK: - Default Characters (20개)

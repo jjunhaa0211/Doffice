@@ -77,11 +77,68 @@ class AppSettings: ObservableObject {
     @AppStorage("companyName") var companyName: String = "" {
         didSet { objectWillChange.send() }
     }
+    @AppStorage("coffeeSupportEnabled") var coffeeSupportEnabled: Bool = true {
+        didSet { objectWillChange.send() }
+    }
+    @AppStorage("coffeeSupportButtonTitle") var coffeeSupportButtonTitle: String = "후원하기" {
+        didSet { objectWillChange.send() }
+    }
+    @AppStorage("coffeeSupportMessage") var coffeeSupportMessage: String = "카카오뱅크 7777015832634로 커피 후원해주세요. 카카오뱅크나 토스를 열면 계좌가 먼저 복사됩니다." {
+        didSet { objectWillChange.send() }
+    }
+    @AppStorage("coffeeSupportBankName") var coffeeSupportBankName: String = "카카오뱅크" {
+        didSet { objectWillChange.send() }
+    }
+    @AppStorage("coffeeSupportAccountNumber") var coffeeSupportAccountNumber: String = "7777015832634" {
+        didSet { objectWillChange.send() }
+    }
+    @AppStorage("coffeeSupportURL") var coffeeSupportURL: String = "" {
+        didSet { objectWillChange.send() }
+    }
+    @AppStorage("coffeeSupportCopyValue") var coffeeSupportCopyValue: String = "" {
+        didSet { objectWillChange.send() }
+    }
+    @AppStorage("coffeeSupportPresetVersion") private var coffeeSupportPresetVersion: Int = 0
 
     // ── 편집 모드 ──
     @Published var isEditMode: Bool = false
 
     var colorScheme: ColorScheme { isDarkMode ? .dark : .light }
+
+    var coffeeSupportDisplayTitle: String {
+        let trimmed = coffeeSupportButtonTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "후원하기" : trimmed
+    }
+
+    var trimmedCoffeeSupportBankName: String {
+        coffeeSupportBankName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedCoffeeSupportAccountNumber: String {
+        coffeeSupportAccountNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var coffeeSupportAccountDisplayText: String {
+        let bank = trimmedCoffeeSupportBankName.isEmpty ? "카카오뱅크" : trimmedCoffeeSupportBankName
+        let account = trimmedCoffeeSupportAccountNumber.isEmpty ? "7777015832634" : trimmedCoffeeSupportAccountNumber
+        return "\(bank) \(account)"
+    }
+
+    var trimmedCoffeeSupportURL: String {
+        coffeeSupportURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedCoffeeSupportCopyValue: String {
+        coffeeSupportCopyValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var normalizedCoffeeSupportURL: URL? {
+        Self.normalizedCoffeeSupportURL(from: trimmedCoffeeSupportURL)
+    }
+
+    var hasCoffeeSupportDestination: Bool {
+        !trimmedCoffeeSupportAccountNumber.isEmpty || normalizedCoffeeSupportURL != nil || !trimmedCoffeeSupportCopyValue.isEmpty
+    }
 
     // ── 가구 위치 헬퍼 ──
     func furniturePosition(for id: String) -> CGPoint? {
@@ -107,6 +164,68 @@ class AppSettings: ObservableObject {
 
     func resetFurniturePositions() {
         furniturePositionsJSON = ""
+    }
+
+    func ensureCoffeeSupportPreset() {
+        let targetVersion = 1
+        guard coffeeSupportPresetVersion < targetVersion else { return }
+
+        let currentTitle = coffeeSupportButtonTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if currentTitle.isEmpty || currentTitle == "커피 후원" {
+            coffeeSupportButtonTitle = "후원하기"
+        }
+
+        let currentMessage = coffeeSupportMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        if currentMessage.isEmpty || currentMessage == "이 앱이 도움이 되셨다면 커피 한 잔으로 응원해주세요." {
+            coffeeSupportMessage = "카카오뱅크 7777015832634로 커피 후원해주세요. 카카오뱅크나 토스를 열면 계좌가 먼저 복사됩니다."
+        }
+
+        if trimmedCoffeeSupportBankName.isEmpty {
+            coffeeSupportBankName = "카카오뱅크"
+        }
+        if trimmedCoffeeSupportAccountNumber.isEmpty {
+            coffeeSupportAccountNumber = "7777015832634"
+        }
+        if trimmedCoffeeSupportCopyValue.isEmpty {
+            coffeeSupportCopyValue = coffeeSupportAccountDisplayText
+        }
+
+        coffeeSupportPresetVersion = targetVersion
+    }
+
+    func coffeeSupportURL(for tier: CoffeeSupportTier) -> URL? {
+        Self.normalizedCoffeeSupportURL(from: renderCoffeeSupportTemplate(trimmedCoffeeSupportURL, tier: tier))
+    }
+
+    func coffeeSupportCopyText(for tier: CoffeeSupportTier) -> String {
+        renderCoffeeSupportTemplate(trimmedCoffeeSupportCopyValue, tier: tier)
+    }
+
+    private func renderCoffeeSupportTemplate(_ template: String, tier: CoffeeSupportTier) -> String {
+        guard !template.isEmpty else { return "" }
+        let replacements: [String: String] = [
+            "{{amount}}": "\(tier.amount)",
+            "{{amount_text}}": tier.amountLabel,
+            "{{tier}}": tier.title,
+            "{{app_name}}": appDisplayName
+        ]
+
+        var rendered = template
+        for (token, value) in replacements {
+            rendered = rendered.replacingOccurrences(of: token, with: value)
+        }
+        return rendered.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func normalizedCoffeeSupportURL(from raw: String) -> URL? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let url = URL(string: trimmed), let scheme = url.scheme, !scheme.isEmpty {
+            return url
+        }
+
+        return URL(string: "https://" + trimmed)
     }
 }
 
@@ -715,6 +834,40 @@ struct FurnitureItem: Identifiable {
     ]
 }
 
+struct CoffeeSupportTier: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let amount: Int
+    let icon: String
+
+    private static let formatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter
+    }()
+
+    var amountLabel: String {
+        let number = NSNumber(value: amount)
+        let formatted = Self.formatter.string(from: number) ?? "\(amount)"
+        return "\(formatted)원"
+    }
+
+    var tint: Color {
+        switch id {
+        case "starter": return Theme.orange
+        case "booster": return Theme.cyan
+        default: return Theme.pink
+        }
+    }
+
+    static let presets: [CoffeeSupportTier] = [
+        CoffeeSupportTier(id: "starter", title: "아메리카노", subtitle: "가볍게 응원하기", amount: 3000, icon: "cup.and.saucer.fill"),
+        CoffeeSupportTier(id: "booster", title: "라떼", subtitle: "조금 더 든든하게", amount: 5000, icon: "mug.fill"),
+        CoffeeSupportTier(id: "nightshift", title: "야근 세트", subtitle: "큰 힘이 되는 한 잔", amount: 10000, icon: "takeoutbag.and.cup.and.straw.fill")
+    ]
+}
+
 // ═══════════════════════════════════════════════════════
 // MARK: - Theme (동적 테마)
 // ═══════════════════════════════════════════════════════
@@ -741,6 +894,11 @@ enum Theme {
     static var textSecondary: Color { dark ? Color(hex: "8690a4") : Color(hex: "4a5060") }
     static var textDim: Color { dark ? Color(hex: "485068") : Color(hex: "8a8ea0") }
     static var textTerminal: Color { dark ? Color(hex: "cdd6e6") : Color(hex: "222838") }
+
+    // Button text on colored backgrounds
+    static var textOnAccent: Color { .white }
+    static var overlay: Color { dark ? Color.white : Color.black }
+    static var overlayBg: Color { dark ? Color.black : Color.white }
 
     // Accents
     static var accent: Color { dark ? Color(hex: "5a9af4") : Color(hex: "2868e0") }
@@ -846,6 +1004,7 @@ struct SettingsView: View {
                 settingsTabButton("토큰", icon: "bolt.fill", tab: 3)
                 settingsTabButton("데이터", icon: "externaldrive.fill", tab: 4)
                 settingsTabButton("양식", icon: "doc.text.fill", tab: 5)
+                settingsTabButton("후원하기", icon: "cup.and.saucer.fill", tab: 6)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
@@ -862,6 +1021,7 @@ struct SettingsView: View {
                     case 3: tokenTab
                     case 4: dataTab
                     case 5: templateTab
+                    case 6: supportTab
                     default: generalTab
                     }
                 }
@@ -871,6 +1031,7 @@ struct SettingsView: View {
         .frame(width: 560, height: 660)
         .background(Theme.bg)
         .onAppear {
+            settings.ensureCoffeeSupportPreset()
             editingAppName = settings.appDisplayName
             editingCompanyName = settings.companyName
             calculateCacheSize()
@@ -953,14 +1114,14 @@ struct SettingsView: View {
                             .onSubmit { applySecretKey() }
 
                         Button(action: { applySecretKey() }) {
-                            Text("적용").font(Theme.mono(10, weight: .bold)).foregroundColor(.white)
+                            Text("적용").font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.textOnAccent)
                                 .padding(.horizontal, 14).padding(.vertical, 8)
                                 .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accent))
                         }.buttonStyle(.plain)
                     }
 
                     if secretKeyResult == .success {
-                        statusHint(icon: "checkmark.circle.fill", text: "전체 캐릭터가 해금되었습니다!", tint: Theme.green)
+                        statusHint(icon: "checkmark.circle.fill", text: "잠금 캐릭터가 해제되었습니다. 고용은 캐릭터 화면에서 직접 진행해주세요.", tint: Theme.green)
                     } else if secretKeyResult == .wrong {
                         statusHint(icon: "xmark.circle.fill", text: "올바르지 않은 키입니다.", tint: Theme.red)
                     }
@@ -1322,6 +1483,97 @@ struct SettingsView: View {
         }
     }
 
+    private var supportTab: some View {
+        let titleBinding = Binding(
+            get: { settings.coffeeSupportButtonTitle },
+            set: { settings.coffeeSupportButtonTitle = $0 }
+        )
+        let messageBinding = Binding(
+            get: { settings.coffeeSupportMessage },
+            set: { settings.coffeeSupportMessage = $0 }
+        )
+        let bankBinding = Binding(
+            get: { settings.coffeeSupportBankName },
+            set: { settings.coffeeSupportBankName = $0 }
+        )
+        let accountBinding = Binding(
+            get: { settings.coffeeSupportAccountNumber },
+            set: { settings.coffeeSupportAccountNumber = $0 }
+        )
+
+        return VStack(spacing: 14) {
+            settingsSection(title: "안내", subtitle: "설정 안에서 바로 후원") {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: settings.hasCoffeeSupportDestination ? "checkmark.circle.fill" : "info.circle.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(settings.hasCoffeeSupportDestination ? Theme.green : Theme.orange)
+                    Text(settings.hasCoffeeSupportDestination
+                         ? "후원하기는 이제 설정 안에서만 보입니다. 아래에서 계좌를 확인하고 카카오뱅크나 토스로 바로 이동할 수 있습니다."
+                         : "은행명과 계좌번호를 입력하면 이 화면에서 카카오뱅크/토스 버튼이 바로 동작합니다.")
+                        .font(Theme.mono(8))
+                        .foregroundColor(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Theme.bgSurface.opacity(0.45))
+                )
+            }
+
+            settingsSection(title: "후원 계좌", subtitle: settings.coffeeSupportAccountDisplayText) {
+                VStack(spacing: 10) {
+                    labeledField(title: "버튼", text: titleBinding, placeholder: "후원하기", emphasized: true) {}
+                    labeledField(title: "은행", text: bankBinding, placeholder: "카카오뱅크") {}
+                    labeledField(title: "계좌", text: accountBinding, placeholder: "7777015832634") {}
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("안내 문구")
+                            .font(Theme.mono(9, weight: .bold))
+                            .foregroundColor(Theme.textDim)
+
+                        TextEditor(text: messageBinding)
+                            .scrollContentBackground(.hidden)
+                            .font(Theme.mono(10))
+                            .foregroundColor(Theme.textPrimary)
+                            .frame(height: 88)
+                            .padding(10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Theme.bgSurface)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Theme.border.opacity(0.35), lineWidth: 1)
+                            )
+                    }
+
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "iphone.gen3")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(Theme.orange)
+                        Text("macOS에서 카카오뱅크나 토스 앱이 직접 열리지 않으면 공식 웹사이트를 대신 열고, 계좌번호는 이미 복사된 상태로 남겨둡니다.")
+                            .font(Theme.mono(8))
+                            .foregroundColor(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            settingsSection(title: "바로 후원", subtitle: settings.coffeeSupportDisplayTitle) {
+                VStack(alignment: .leading, spacing: 10) {
+                    CoffeeSupportPopoverView()
+                    Text("아래 버튼은 미리보기가 아니라 실제 동작입니다. 누르면 계좌 복사 후 카카오뱅크/토스를 엽니다.")
+                        .font(Theme.mono(8))
+                        .foregroundColor(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
     // MARK: - 데이터 탭
 
     private var dataTab: some View {
@@ -1402,7 +1654,7 @@ struct SettingsView: View {
             }
         }
         // UserDefaults 추정 (대략적)
-        let udKeys = ["WorkManTokenHistory", "WorkManCharacters", "WorkManAchievements"]
+        let udKeys = ["WorkManTokenHistory", "WorkManCharacters", "WorkManCharacterManualUnlocks", "WorkManAchievements"]
         for key in udKeys {
             if let data = UserDefaults.standard.data(forKey: key) {
                 totalBytes += Int64(data.count)
@@ -1437,6 +1689,8 @@ struct SettingsView: View {
         UserDefaults.standard.removeObject(forKey: "WorkManAchievements")
         // 캐릭터 데이터 삭제
         UserDefaults.standard.removeObject(forKey: "WorkManCharacters")
+        CharacterRegistry.shared.clearManualUnlocks()
+        UserDefaults.standard.removeObject(forKey: "WorkManCharacterManualUnlocks")
         // 오피스 레이아웃 삭제
         for preset in OfficePreset.allCases {
             UserDefaults.standard.removeObject(forKey: "workman.office.layout.\(preset.rawValue).v1")
@@ -1911,16 +2165,22 @@ struct SettingsView: View {
     @State private var secretKeyResult: SecretKeyResult = .none
     enum SecretKeyResult { case none, success, wrong }
 
-    private static let validKeys: Set<String> = [
-        "I don't like Snatch",
-        "I don't like snatch",
-        "i don't like snatch",
-    ]
+    private static let normalizedSecretKey = "i dont like snatch"
+
+    private static func normalizeSecretKey(_ value: String) -> String {
+        let folded = value.folding(options: [.diacriticInsensitive, .widthInsensitive], locale: .current).lowercased()
+        let allowed = CharacterSet.alphanumerics.union(.whitespacesAndNewlines)
+        let stripped = String(folded.unicodeScalars.filter { allowed.contains($0) })
+        return stripped
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
 
     private func applySecretKey() {
-        let key = secretKeyInput.trimmingCharacters(in: .whitespaces)
-        if Self.validKeys.contains(key) {
-            CharacterRegistry.shared.hireAll()
+        let key = Self.normalizeSecretKey(secretKeyInput)
+        if key == Self.normalizedSecretKey {
+            _ = CharacterRegistry.shared.unlockAllCharacters()
             withAnimation(.easeInOut(duration: 0.3)) { secretKeyResult = .success }
             secretKeyInput = ""
         } else {
@@ -1930,6 +2190,294 @@ struct SettingsView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             withAnimation { secretKeyResult = .none }
         }
+    }
+}
+
+enum CoffeeSupportProvider: String, CaseIterable, Identifiable {
+    case kakaoBank
+    case toss
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .kakaoBank: return "카카오뱅크"
+        case .toss: return "토스"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .kakaoBank: return "building.columns.fill"
+        case .toss: return "paperplane.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .kakaoBank: return Theme.yellow
+        case .toss: return Theme.cyan
+        }
+    }
+
+    var appURL: URL? {
+        switch self {
+        case .kakaoBank:
+            return URL(string: "kakaobank://")
+        case .toss:
+            return URL(string: "supertoss://toss/pay")
+        }
+    }
+
+    var fallbackURL: URL? {
+        switch self {
+        case .kakaoBank:
+            return URL(string: "https://www.kakaobank.com/view/main")
+        case .toss:
+            return URL(string: "https://toss.im")
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .kakaoBank: return "카카오뱅크 앱 또는 웹 열기"
+        case .toss: return "토스 앱 또는 웹 열기"
+        }
+    }
+}
+
+struct CoffeeSupportPopoverView: View {
+    @ObservedObject private var settings = AppSettings.shared
+    var onRequestSettings: (() -> Void)? = nil
+
+    @State private var feedback: Feedback?
+
+    private struct Feedback {
+        let icon: String
+        let text: String
+        let tint: Color
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(Theme.orange.opacity(0.14))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: "cup.and.saucer.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(Theme.orange)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(settings.coffeeSupportDisplayTitle)
+                        .font(Theme.mono(12, weight: .black))
+                        .foregroundColor(Theme.textPrimary)
+                    Text(settings.coffeeSupportMessage)
+                        .font(Theme.mono(8))
+                        .foregroundColor(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if settings.hasCoffeeSupportDestination {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("후원 계좌")
+                        .font(Theme.mono(8, weight: .bold))
+                        .foregroundColor(Theme.textDim)
+
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(settings.trimmedCoffeeSupportBankName.isEmpty ? "카카오뱅크" : settings.trimmedCoffeeSupportBankName)
+                                .font(Theme.mono(9, weight: .bold))
+                                .foregroundColor(Theme.textSecondary)
+                            Text(settings.trimmedCoffeeSupportAccountNumber.isEmpty ? "7777015832634" : settings.trimmedCoffeeSupportAccountNumber)
+                                .font(Theme.mono(13, weight: .black))
+                                .foregroundColor(Theme.textPrimary)
+                        }
+
+                        Spacer()
+
+                        Button(action: { copySupportAccount(showFeedback: true) }) {
+                            Text("계좌 복사")
+                                .font(Theme.mono(8, weight: .bold))
+                                .foregroundColor(Theme.orange)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(
+                                    Capsule()
+                                        .fill(Theme.orange.opacity(0.1))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Theme.bgSurface.opacity(0.65))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Theme.border.opacity(0.28), lineWidth: 1)
+                    )
+                }
+
+                VStack(spacing: 8) {
+                    ForEach(CoffeeSupportProvider.allCases) { provider in
+                        providerButton(provider)
+                    }
+                }
+
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(Theme.textDim)
+                    Text("버튼을 누르면 계좌가 먼저 복사되고, 이 Mac에서 앱을 열 수 없으면 공식 웹사이트로 넘어갑니다.")
+                        .font(Theme.mono(8))
+                        .foregroundColor(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(Theme.orange)
+                        Text("후원 계좌를 아직 입력하지 않았습니다. 설정에서 은행명과 계좌번호를 채우면 바로 사용할 수 있습니다.")
+                            .font(Theme.mono(8))
+                            .foregroundColor(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let onRequestSettings {
+                        Button(action: onRequestSettings) {
+                            Text("후원 설정 열기")
+                                .font(Theme.mono(9, weight: .bold))
+                                .foregroundColor(Theme.orange)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 9)
+                                        .fill(Theme.orange.opacity(0.1))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 9)
+                                        .stroke(Theme.orange.opacity(0.24), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Theme.bgSurface.opacity(0.6))
+                )
+            }
+
+            if let feedback {
+                HStack(spacing: 6) {
+                    Image(systemName: feedback.icon)
+                        .font(.system(size: 10, weight: .bold))
+                    Text(feedback.text)
+                        .font(Theme.mono(8, weight: .medium))
+                }
+                .foregroundColor(feedback.tint)
+            }
+        }
+        .padding(16)
+        .frame(width: 320, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Theme.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Theme.border.opacity(0.35), lineWidth: 1)
+        )
+        .onAppear {
+            settings.ensureCoffeeSupportPreset()
+        }
+    }
+
+    private func providerButton(_ provider: CoffeeSupportProvider) -> some View {
+        Button(action: { openProvider(provider) }) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(provider.tint.opacity(0.12))
+                        .frame(width: 38, height: 38)
+                    Image(systemName: provider.icon)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(provider.tint)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(provider.title)
+                        .font(Theme.mono(10, weight: .bold))
+                        .foregroundColor(Theme.textPrimary)
+                    Text(provider.subtitle)
+                        .font(Theme.mono(8))
+                        .foregroundColor(Theme.textSecondary)
+                }
+
+                Spacer(minLength: 0)
+
+                Text("열기")
+                    .font(Theme.mono(8, weight: .bold))
+                    .foregroundColor(provider.tint)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(provider.tint.opacity(0.1))
+                    )
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Theme.bgSurface.opacity(0.65))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(provider.tint.opacity(0.18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func openProvider(_ provider: CoffeeSupportProvider) {
+        guard copySupportAccount(showFeedback: false) else {
+            feedback = Feedback(icon: "exclamationmark.triangle.fill", text: "후원 계좌가 비어 있습니다.", tint: Theme.orange)
+            return
+        }
+
+        if let appURL = provider.appURL, NSWorkspace.shared.open(appURL) {
+            feedback = Feedback(icon: "arrow.up.right.square.fill", text: "\(provider.title)을 열었습니다. 계좌도 함께 복사했습니다.", tint: provider.tint)
+            return
+        }
+
+        if let fallbackURL = provider.fallbackURL, NSWorkspace.shared.open(fallbackURL) {
+            feedback = Feedback(icon: "safari.fill", text: "\(provider.title) 앱을 찾지 못해 공식 웹사이트를 열었습니다. 계좌는 복사되어 있습니다.", tint: provider.tint)
+            return
+        }
+
+        feedback = Feedback(icon: "doc.on.doc.fill", text: "\(provider.title)을 열지 못해 계좌만 복사했습니다.", tint: provider.tint)
+    }
+
+    @discardableResult
+    private func copySupportAccount(showFeedback: Bool) -> Bool {
+        let accountText = settings.coffeeSupportAccountDisplayText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !accountText.isEmpty else { return false }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(accountText, forType: .string)
+
+        if showFeedback {
+            feedback = Feedback(icon: "doc.on.doc.fill", text: "후원 계좌를 복사했습니다.", tint: Theme.orange)
+        }
+        return true
     }
 }
 
@@ -2005,10 +2553,10 @@ struct AccessoryView: View {
 
                     Button(action: { settings.isEditMode = true; dismiss() }) {
                         HStack(spacing: 8) {
-                            Image(systemName: "hand.draw.fill").font(.system(size: Theme.iconSize(12))).foregroundColor(.white)
-                            Text("드래그로 가구 배치하기").font(Theme.mono(11, weight: .bold)).foregroundColor(.white)
+                            Image(systemName: "hand.draw.fill").font(.system(size: Theme.iconSize(12))).foregroundColor(Theme.textOnAccent)
+                            Text("드래그로 가구 배치하기").font(Theme.mono(11, weight: .bold)).foregroundColor(Theme.textOnAccent)
                             Spacer()
-                            Image(systemName: "arrow.right.circle.fill").font(.system(size: Theme.iconSize(14))).foregroundColor(.white.opacity(0.7))
+                            Image(systemName: "arrow.right.circle.fill").font(.system(size: Theme.iconSize(14))).foregroundColor(Theme.textOnAccent.opacity(0.7))
                         }
                         .padding(12)
                         .background(RoundedRectangle(cornerRadius: 10).fill(
@@ -2886,9 +3434,9 @@ func drawAccessoryPixelFurniture(context: GraphicsContext, itemId: String, at po
         let paper = dark ? Color(hex: "EDF0F5") : Color(hex: "FFFDF8")
         px(x, y, 14, 14, paper, 0.95)
         px(x, y, 14, 4, Theme.red, 0.82)
-        px(x + 3, y + 2, 2, 2, Color.white, 0.18)
+        px(x + 3, y + 2, 2, 2, Theme.overlayBg, 0.18)
         context.draw(
-            Text("23").font(.system(size: 6, weight: .bold, design: .monospaced)).foregroundColor(Color.black.opacity(0.55)),
+            Text("23").font(.system(size: 6, weight: .bold, design: .monospaced)).foregroundColor(Theme.overlay.opacity(0.55)),
             at: CGPoint(x: x + 7, y: y + 10)
         )
 

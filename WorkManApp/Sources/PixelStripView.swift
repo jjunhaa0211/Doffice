@@ -785,7 +785,7 @@ struct PixelStripView: View {
 
         // 화면 코드 라인 애니메이션
         if group.isAnyRunning {
-            let lc = dark ? screenColor.opacity(2) : Color.white.opacity(0.4)
+            let lc = dark ? screenColor.opacity(2) : Theme.overlayBg.opacity(0.4)
             for l in 0..<5 {
                 let indent = CGFloat((l * 3 + frame / 6) % 4) * 3
                 let w = CGFloat(5 + (frame / 4 + l * 7) % 22)
@@ -1349,7 +1349,7 @@ struct PixelStripView: View {
             let size = geo.size
 
             // Dim overlay
-            Color.black.opacity(0.15)
+            Theme.overlay.opacity(0.15)
                 .allowsHitTesting(false)
 
             // Draggable handles for each visible furniture
@@ -1365,9 +1365,9 @@ struct PixelStripView: View {
                 HStack(spacing: 10) {
                     HStack(spacing: 6) {
                         Image(systemName: "hand.draw.fill").font(.system(size: 10)).foregroundColor(Theme.yellow)
-                        Text("가구 배치 모드").font(Theme.mono(10, weight: .bold)).foregroundColor(.white)
+                        Text("가구 배치 모드").font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.textOnAccent)
                     }
-                    Text("— 드래그하여 이동").font(Theme.mono(9)).foregroundColor(.white.opacity(0.6))
+                    Text("— 드래그하여 이동").font(Theme.mono(9)).foregroundColor(Theme.textOnAccent.opacity(0.6))
                     Spacer()
                     Button(action: { settings.isEditMode = false }) {
                         Text("완료").font(Theme.mono(11, weight: .bold)).foregroundColor(Theme.yellow)
@@ -1377,7 +1377,7 @@ struct PixelStripView: View {
                     }.buttonStyle(.plain)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(Color.black.opacity(0.6))
+                .background(Theme.overlay.opacity(0.6))
 
                 Spacer()
             }

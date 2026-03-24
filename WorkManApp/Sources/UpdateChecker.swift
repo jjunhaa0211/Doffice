@@ -257,7 +257,7 @@ struct UpdateSheet: View {
                         Image(systemName: "arrow.clockwise").font(.system(size: 10))
                         Text("지금 재시작").font(Theme.mono(10, weight: .bold))
                     }
-                    .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 8)
+                    .foregroundColor(Theme.textOnAccent).padding(.horizontal, 16).padding(.vertical, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Theme.green))
                 }.buttonStyle(.plain)
             }
@@ -288,7 +288,7 @@ struct UpdateSheet: View {
                             Image(systemName: "arrow.down.circle.fill").font(.system(size: 10))
                             Text("brew로 업데이트").font(Theme.mono(10, weight: .bold))
                         }
-                        .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 7)
+                        .foregroundColor(Theme.textOnAccent).padding(.horizontal, 16).padding(.vertical, 7)
                         .background(RoundedRectangle(cornerRadius: 6).fill(Theme.green))
                     }.buttonStyle(.plain).keyboardShortcut(.return)
                     .disabled(updater.isUpdating)

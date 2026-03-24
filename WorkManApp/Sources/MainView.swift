@@ -84,6 +84,7 @@ struct MainView: View {
             Text(roleNoticeMessage)
         }
         .onAppear {
+            settings.ensureCoffeeSupportPreset()
             if manager.userVisibleTabs.isEmpty {
                 manager.restoreSessions()
                 manager.autoDetectAndConnect()
@@ -449,7 +450,7 @@ struct BugReportView: View {
                             else { Image(systemName: "paperplane.fill").font(Theme.monoSmall) }
                             Text("보내기").font(Theme.mono(11, weight: .medium))
                         }
-                        .foregroundColor(.white)
+                        .foregroundColor(Theme.textOnAccent)
                         .padding(.horizontal, 16).padding(.vertical, 6)
                         .background(RoundedRectangle(cornerRadius: 6).fill(title.isEmpty ? Theme.textDim : Theme.accent))
                     }

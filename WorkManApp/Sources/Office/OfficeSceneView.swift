@@ -32,6 +32,28 @@ struct OfficeSceneView: View {
         OfficeScenePalette(theme: sceneTheme, dark: settings.isDarkMode)
     }
 
+    private var viewportBackground: LinearGradient {
+        if settings.isDarkMode {
+            return LinearGradient(
+                colors: [
+                    Theme.bgCard.opacity(0.98),
+                    Theme.bg
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+
+        return LinearGradient(
+            colors: [
+                Color(hex: scenePalette.backdropTop).opacity(0.92),
+                Color(hex: scenePalette.backdropBottom)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
     private var isFocusMode: Bool {
         settings.officeViewMode == "side"
     }
@@ -80,7 +102,7 @@ struct OfficeSceneView: View {
                         )
                     }
                 }
-                .background(Color(hex: scenePalette.backdropBottom))
+                .background(viewportBackground)
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0)
@@ -110,7 +132,7 @@ struct OfficeSceneView: View {
                 }
             }
         }
-        .background(Color(hex: scenePalette.backdropBottom))
+        .background(viewportBackground)
         .clipped()
         .task(id: "\(sceneTheme.rawValue)-\(settings.isDarkMode)-\(store.currentPreset.rawValue)") {
             await MainActor.run {

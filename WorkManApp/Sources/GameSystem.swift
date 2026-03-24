@@ -10,7 +10,13 @@ struct WorkerLevel {
     let xpRequired: Int
     let badge: String
 
-    static let levels: [WorkerLevel] = [
+    private struct Tier {
+        let title: String
+        let badge: String
+        let xpStep: Int
+    }
+
+    private static let legacyLevels: [WorkerLevel] = [
         WorkerLevel(level: 1, title: "인턴", xpRequired: 0, badge: "🌱"),
         WorkerLevel(level: 2, title: "주니어", xpRequired: 100, badge: "🔰"),
         WorkerLevel(level: 3, title: "미들", xpRequired: 300, badge: "⚙️"),
@@ -22,6 +28,42 @@ struct WorkerLevel {
         WorkerLevel(level: 9, title: "신", xpRequired: 6000, badge: "👑"),
         WorkerLevel(level: 10, title: "우주", xpRequired: 10000, badge: "🌌"),
     ]
+
+    private static let advancedTiers: [Tier] = [
+        Tier(title: "성운", badge: "🌠", xpStep: 100),
+        Tier(title: "은하", badge: "🌌", xpStep: 120),
+        Tier(title: "초신성", badge: "☄️", xpStep: 140),
+        Tier(title: "차원", badge: "🌀", xpStep: 160),
+        Tier(title: "특이점", badge: "♾️", xpStep: 180),
+        Tier(title: "초월", badge: "🔱", xpStep: 200),
+        Tier(title: "불멸", badge: "💎", xpStep: 220),
+        Tier(title: "신화", badge: "🔥", xpStep: 240),
+        Tier(title: "창세", badge: "☀️", xpStep: 260),
+    ]
+
+    static let levels: [WorkerLevel] = makeLevels()
+
+    private static func makeLevels() -> [WorkerLevel] {
+        var generated = legacyLevels
+        var requiredXP = legacyLevels.last?.xpRequired ?? 0
+
+        for level in 11...100 {
+            let tierIndex = min((level - 11) / 10, advancedTiers.count - 1)
+            let tier = advancedTiers[tierIndex]
+            requiredXP += tier.xpStep
+
+            generated.append(
+                WorkerLevel(
+                    level: level,
+                    title: level == 100 ? "절대자" : tier.title,
+                    xpRequired: requiredXP,
+                    badge: level == 100 ? "🪐" : tier.badge
+                )
+            )
+        }
+
+        return generated
+    }
 
     static func forXP(_ xp: Int) -> WorkerLevel { levels.last(where: { $0.xpRequired <= xp }) ?? levels[0] }
 

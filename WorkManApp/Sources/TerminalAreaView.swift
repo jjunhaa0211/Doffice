@@ -1803,7 +1803,7 @@ struct ApprovalSheet: View {
                 }.buttonStyle(.plain).keyboardShortcut(.escape)
                 Spacer()
                 Button(action: { approval.onApprove?(); dismiss() }) {
-                    Text("승인").font(Theme.mono(11, weight: .medium)).foregroundColor(.white)
+                    Text("승인").font(Theme.mono(11, weight: .medium)).foregroundColor(Theme.textOnAccent)
                         .padding(.horizontal, 20).padding(.vertical, 8)
                         .background(Theme.accent).cornerRadius(6)
                 }.buttonStyle(.plain).keyboardShortcut(.return)
@@ -2119,7 +2119,7 @@ struct NewTabSheet: View {
                         Text(terminalCount > 1 ? "Create \(terminalCount)개" : "Create")
                             .font(Theme.mono(11, weight: .medium))
                     }
-                    .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 6)
+                    .foregroundColor(Theme.textOnAccent).padding(.horizontal, 16).padding(.vertical, 6)
                     .background(Theme.accent).cornerRadius(6)
                 }
                 .buttonStyle(.plain).keyboardShortcut(.return)

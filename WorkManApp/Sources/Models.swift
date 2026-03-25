@@ -208,6 +208,22 @@ struct ParallelTaskRecord: Identifiable, Equatable {
     var state: ParallelTaskState
 }
 
+enum TabStatusCategory: String, CaseIterable {
+    case active
+    case processing
+    case completed
+    case attention
+    case idle
+}
+
+struct TabStatusPresentation {
+    let category: TabStatusCategory
+    let label: String
+    let symbol: String
+    let tint: Color
+    let sortPriority: Int
+}
+
 enum WorkflowStageState: String {
     case queued
     case running
@@ -439,6 +455,24 @@ class TokenTracker: ObservableObject {
             return "자동 보조 작업 토큰 보호선에 도달해 중단했습니다. \(protectionUsageSummary())"
         }
 
+        // 비용 제한 체크
+        let settings = AppSettings.shared
+        if settings.dailyCostLimit > 0 && todayCost >= settings.dailyCostLimit {
+            return "일일 비용 제한($\(String(format: "%.2f", settings.dailyCostLimit)))에 도달해 중단했습니다. 오늘 사용: $\(String(format: "%.2f", todayCost))"
+        }
+
+        return nil
+    }
+
+    func costWarningNeeded(tabCost: Double) -> String? {
+        let settings = AppSettings.shared
+        guard settings.costWarningAt80 else { return nil }
+        if settings.perSessionCostLimit > 0 && tabCost >= settings.perSessionCostLimit * 0.8 {
+            return "세션 비용이 제한의 80%에 도달했습니다: $\(String(format: "%.2f", tabCost)) / $\(String(format: "%.2f", settings.perSessionCostLimit))"
+        }
+        if settings.dailyCostLimit > 0 && todayCost >= settings.dailyCostLimit * 0.8 {
+            return "일일 비용이 제한의 80%에 도달했습니다: $\(String(format: "%.2f", todayCost)) / $\(String(format: "%.2f", settings.dailyCostLimit))"
+        }
         return nil
     }
 
@@ -485,6 +519,46 @@ class TokenTracker: ObservableObject {
         if weeklyTokenLimit < Self.recommendedWeeklyLimit {
             weeklyTokenLimit = Self.recommendedWeeklyLimit
         }
+    }
+
+    /// Returns records for the last 7 days (oldest first), filling missing days with zero records.
+    var last7DaysRecords: [DayRecord] {
+        let cal = Calendar.current
+        let now = Date()
+        var result: [DayRecord] = []
+        for offset in (0..<7).reversed() {
+            let day = cal.date(byAdding: .day, value: -offset, to: now)!
+            let key = dateFormatter.string(from: day)
+            if let record = history.first(where: { $0.date == key }) {
+                result.append(record)
+            } else {
+                result.append(DayRecord(date: key, inputTokens: 0, outputTokens: 0, cost: 0))
+            }
+        }
+        return result
+    }
+
+    /// Short weekday label for a date string
+    func weekdayLabel(for dateString: String) -> String {
+        guard let date = dateFormatter.date(from: dateString) else { return "?" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ko_KR")
+        f.dateFormat = "E"
+        return f.string(from: date)
+    }
+
+    /// Average daily tokens over last 7 days
+    var averageDailyTokens: Int {
+        let records = last7DaysRecords
+        let total = records.reduce(0) { $0 + $1.totalTokens }
+        return total / max(1, records.count)
+    }
+
+    /// Average daily cost over last 7 days
+    var averageDailyCost: Double {
+        let records = last7DaysRecords
+        let total = records.reduce(0.0) { $0 + $1.cost }
+        return total / Double(max(1, records.count))
     }
 
     func formatTokens(_ c: Int) -> String {
@@ -551,6 +625,17 @@ class TerminalTab: ObservableObject, Identifiable {
     var readCommandCount: Int = 0
     @Published var pendingApproval: PendingApproval?
     @Published var lastResultText: String = ""
+
+    // 보안 경고
+    @Published var dangerousCommandWarning: String?
+    @Published var sensitiveFileWarning: String?
+
+    // 슬립워크
+    @Published var sleepWorkTask: String?
+    @Published var sleepWorkTokenBudget: Int?
+    @Published var sleepWorkStartTokens: Int = 0
+    @Published var sleepWorkCompleted: Bool = false
+    @Published var sleepWorkExceeded: Bool = false  // 2x budget exceeded
     @Published var lastPromptText: String = ""
     @Published var completedPromptCount: Int = 0
     @Published var parallelTasks: [ParallelTaskRecord] = []
@@ -591,8 +676,9 @@ class TerminalTab: ObservableObject, Identifiable {
     // ── Raw Terminal Mode (PTY) ──
     @Published var rawOutput: String = ""
     @Published var rawScrollTrigger: Int = 0
-    var isRawMode: Bool = false
+    @Published var isRawMode: Bool = false
     private var rawMasterFD: Int32 = -1
+    let vt100 = VT100Terminal(rows: 50, cols: 120)
 
     var initialPrompt: String?
     var characterId: String?  // CharacterRegistry 연동
@@ -764,6 +850,12 @@ class TerminalTab: ObservableObject, Identifiable {
                 timestamp: saved.lastActivityTime ?? saved.startTime
             )
         }
+
+        // 대화 내역 복원 (최근 100개 블록)
+        if let chatHistory = saved.chatHistory, !chatHistory.isEmpty {
+            let restoredBlocks = chatHistory.map { $0.toBlock() }
+            blocks.append(contentsOf: restoredBlocks)
+        }
     }
 
     func appendRestorationNotice(from saved: SavedSession, recoveryBundleURL: URL?) {
@@ -807,7 +899,16 @@ class TerminalTab: ObservableObject, Identifiable {
     // MARK: - Start
 
     func start() {
-        isRunning = true; isClaude = true; startTime = Date()
+        isRunning = true; startTime = Date()
+
+        // Raw terminal mode: PTY 기반 일반 쉘 터미널 (Claude 설치 불필요)
+        if AppSettings.shared.rawTerminalMode {
+            isClaude = false
+            startRawTerminal()
+            return
+        }
+        isClaude = true
+
         let checker = ClaudeInstallChecker.shared; checker.check()
         if !checker.isInstalled {
             appendBlock(.error(message: "Claude Code 미설치"), content: "npm install -g @anthropic-ai/claude-code")
@@ -815,12 +916,6 @@ class TerminalTab: ObservableObject, Identifiable {
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .workmanClaudeNotInstalled, object: nil)
             }
-            return
-        }
-
-        // Raw terminal mode: PTY 기반 인터랙티브 실행
-        if AppSettings.shared.rawTerminalMode {
-            startRawTerminal()
             return
         }
 
@@ -838,138 +933,17 @@ class TerminalTab: ObservableObject, Identifiable {
 
     // MARK: - Raw Terminal (PTY)
 
+    /// Raw terminal mode: SwiftTerm이 PTY를 관리하므로 상태만 설정
     private func startRawTerminal() {
         isRawMode = true
         isProcessing = true
         claudeActivity = .running
-
-        let master = posix_openpt(O_RDWR | O_NOCTTY)
-        guard master >= 0 else {
-            appendBlock(.error(message: "PTY 생성 실패"), content: "posix_openpt failed")
-            return
-        }
-        guard grantpt(master) == 0, unlockpt(master) == 0,
-              let slaveNamePtr = ptsname(master) else {
-            close(master)
-            appendBlock(.error(message: "PTY 설정 실패"), content: "grantpt/unlockpt failed")
-            return
-        }
-        let slaveName = String(cString: slaveNamePtr)
-        let slave = open(slaveName, O_RDWR)
-        guard slave >= 0 else {
-            close(master)
-            appendBlock(.error(message: "PTY slave 열기 실패"))
-            return
-        }
-
-        // 터미널 크기 설정
-        var ws = winsize(ws_row: 50, ws_col: 120, ws_xpixel: 0, ws_ypixel: 0)
-        _ = ioctl(master, TIOCSWINSZ, &ws)
-
-        rawMasterFD = master
-
-        let path = FileManager.default.fileExists(atPath: projectPath) ? projectPath : NSHomeDirectory()
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-f", "-c", "claude"]
-        proc.currentDirectoryURL = URL(fileURLWithPath: path)
-        proc.standardInput = FileHandle(fileDescriptor: slave, closeOnDealloc: false)
-        proc.standardOutput = FileHandle(fileDescriptor: slave, closeOnDealloc: false)
-        proc.standardError = FileHandle(fileDescriptor: slave, closeOnDealloc: false)
-
-        var env = ProcessInfo.processInfo.environment
-        env["PATH"] = Self.buildFullPATH()
-        env["TERM"] = "xterm-256color"
-        env["LANG"] = "en_US.UTF-8"
-        proc.environment = env
-
-        currentProcess = proc
-
-        // master FD에서 읽기 (백그라운드)
-        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
-            let bufferSize = 8192
-            let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-            defer { buffer.deallocate() }
-
-            while true {
-                let bytesRead = Darwin.read(master, buffer, bufferSize)
-                if bytesRead <= 0 { break }
-                let data = Data(bytes: buffer, count: bytesRead)
-                if let text = String(data: data, encoding: .utf8) {
-                    DispatchQueue.main.async {
-                        self?.appendRawChunk(text)
-                    }
-                }
-            }
-
-            DispatchQueue.main.async {
-                self?.isProcessing = false
-                self?.claudeActivity = .idle
-            }
-        }
-
-        do {
-            try proc.run()
-            close(slave) // parent에서 slave 닫기
-        } catch {
-            close(slave)
-            close(master)
-            rawMasterFD = -1
-            appendBlock(.error(message: "Claude 실행 실패"), content: error.localizedDescription)
-        }
+        // PTY 생성/프로세스 실행은 SwiftTermContainer에서 처리
     }
 
-    func writeRawInput(_ text: String) {
-        guard rawMasterFD >= 0, let data = text.data(using: .utf8) else { return }
-        data.withUnsafeBytes { ptr in
-            guard let base = ptr.baseAddress else { return }
-            _ = Darwin.write(rawMasterFD, base, ptr.count)
-        }
-    }
-
-    func sendRawSignal(_ signal: UInt8) {
-        guard rawMasterFD >= 0 else { return }
-        var byte = signal
-        Darwin.write(rawMasterFD, &byte, 1)
-    }
-
-    /// ANSI 코드를 보존하면서 \r 줄 덮어쓰기 처리
-    private func appendRawChunk(_ text: String) {
-        let chars = Array(text)
-        var i = 0
-        while i < chars.count {
-            let c = chars[i]
-            if c == "\r" {
-                if i + 1 < chars.count && chars[i + 1] == "\n" {
-                    rawOutput.append("\n")
-                    i += 2
-                } else {
-                    // \r 단독: 현재 줄 시작으로 이동 (덮어쓰기)
-                    if let lastNL = rawOutput.lastIndex(of: "\n") {
-                        rawOutput = String(rawOutput[...lastNL])
-                    } else {
-                        rawOutput = ""
-                    }
-                    i += 1
-                }
-            } else {
-                rawOutput.append(c)
-                i += 1
-            }
-        }
-
-        // 메모리 보호: 200KB 초과 시 줄 단위로 앞부분 제거
-        if rawOutput.count > 200_000 {
-            let cutTarget = rawOutput.count - 150_000
-            if let cutIdx = rawOutput.index(rawOutput.startIndex, offsetBy: cutTarget, limitedBy: rawOutput.endIndex),
-               let nlIdx = rawOutput[cutIdx...].firstIndex(of: "\n") {
-                rawOutput = String(rawOutput[rawOutput.index(after: nlIdx)...])
-            }
-        }
-
-        rawScrollTrigger += 1
-    }
+    func writeRawInput(_ text: String) {}
+    func sendRawSignal(_ signal: UInt8) {}
+    func updatePTYWindowSize(cols: UInt16, rows: UInt16) {}
 
     // MARK: - Send Prompt (stream-json 이벤트 스트림)
 
@@ -993,6 +967,12 @@ class TerminalTab: ObservableObject, Identifiable {
         }
 
         guard !isProcessing else { return }
+
+        // 이전 프로세스가 남아있으면 안전하게 정리
+        if let prev = currentProcess, prev.isRunning {
+            prev.terminate()
+            currentProcess = nil
+        }
 
         if let reason = TokenTracker.shared.startBlockReason(isAutomation: isAutomationTab) {
             appendBlock(.status(message: "토큰 보호 모드"), content: reason)
@@ -1120,18 +1100,27 @@ class TerminalTab: ObservableObject, Identifiable {
             proc.environment = env
             proc.standardOutput = outPipe
             proc.standardError = errPipe
-            self.currentProcess = proc
+
+            // 프로세스 참조를 메인 스레드에서 안전하게 설정
+            DispatchQueue.main.sync {
+                self.currentProcess = proc
+            }
+
+            // 프로세스 ID를 캡처하여 이후 검증용으로 사용
+            let procId = ObjectIdentifier(proc)
 
             // stderr 캡처 (에러 진단용)
             errPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
                 let data = handle.availableData
                 guard !data.isEmpty,
                       let rawText = String(data: data, encoding: .utf8) else { return }
-                DispatchQueue.main.async {
-                    let text = self?.sanitizeTerminalText(rawText) ?? rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    // JSON 스트림이 아닌 진짜 에러만 표시
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self,
+                          self.currentProcess.map({ ObjectIdentifier($0) == procId }) ?? false
+                    else { return }
+                    let text = self.sanitizeTerminalText(rawText)
                     if !text.isEmpty && !text.hasPrefix("{") && !text.contains("node:") {
-                        self?.appendBlock(.error(message: "stderr"), content: text)
+                        self.appendBlock(.error(message: "stderr"), content: text)
                     }
                 }
             }
@@ -1145,6 +1134,12 @@ class TerminalTab: ObservableObject, Identifiable {
                 bufferQueue.sync {
                     jsonBuffer += chunk
 
+                    // 버퍼가 1MB를 초과하면 개행 없는 비정상 스트림 — 버퍼 초기화
+                    if jsonBuffer.utf8.count > 1_048_576 {
+                        jsonBuffer = ""
+                        return
+                    }
+
                     while let nl = jsonBuffer.range(of: "\n") {
                         let line = String(jsonBuffer[jsonBuffer.startIndex..<nl.lowerBound])
                         jsonBuffer = String(jsonBuffer[nl.upperBound...])
@@ -1153,7 +1148,10 @@ class TerminalTab: ObservableObject, Identifiable {
                               let json = try? JSONSerialization.jsonObject(with: ld) as? [String: Any] else { continue }
 
                         DispatchQueue.main.async { [weak self] in
-                            self?.handleStreamEvent(json)
+                            guard let self = self,
+                                  self.currentProcess.map({ ObjectIdentifier($0) == procId }) ?? false
+                            else { return }
+                            self.handleStreamEvent(json)
                         }
                     }
                 }
@@ -1161,7 +1159,17 @@ class TerminalTab: ObservableObject, Identifiable {
 
             do {
                 try proc.run()
+
+                // Watchdog: 30분 타임아웃 — CLI가 무한 hang 방지
+                let watchdog = DispatchWorkItem { [weak proc] in
+                    guard let p = proc, p.isRunning else { return }
+                    print("[WorkMan] ⚠️ Process watchdog: 30분 타임아웃 도달, 강제 종료")
+                    p.terminate()
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 1800, execute: watchdog)
+
                 proc.waitUntilExit()
+                watchdog.cancel()
             } catch {
                 DispatchQueue.main.async {
                     self.appendBlock(.error(message: error.localizedDescription))
@@ -1173,6 +1181,10 @@ class TerminalTab: ObservableObject, Identifiable {
 
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
+                // 이 프로세스가 현재 프로세스인지 확인 (다른 프로세스가 이미 대체했을 수 있음)
+                let isStillCurrentProcess = self.currentProcess.map { ObjectIdentifier($0) == procId } ?? true
+                guard isStillCurrentProcess else { return }
+
                 self.currentProcess = nil
                 // result 이벤트에서 이미 isProcessing=false 했지만,
                 // 프로세스가 비정상 종료한 경우만 여기서 처리
@@ -1191,6 +1203,9 @@ class TerminalTab: ObservableObject, Identifiable {
     // MARK: - Stream Event Handler (핵심 파서)
 
     private func handleStreamEvent(_ json: [String: Any]) {
+        guard isRunning else { return }
+        // 비정상 데이터로 인한 크래시 방지
+        guard !json.isEmpty else { return }
         let type = json["type"] as? String ?? ""
 
         switch type {
@@ -1248,24 +1263,47 @@ class TerminalTab: ObservableObject, Identifiable {
                         claudeActivity = .running
                         commandCount += 1
                         let cmd = toolInput["command"] as? String ?? ""
+                        // 보안: 위험 명령 감지
+                        if let match = DangerousCommandDetector.shared.check(command: cmd) {
+                            dangerousCommandWarning = "⚠️ \(match.pattern.severity.rawValue): \(match.pattern.description)\n→ \(match.matchedText)"
+                            AuditLog.shared.log(.dangerousCommand, tabId: id, projectName: projectName, detail: cmd, isDangerous: true)
+                        }
+                        // 감사 로그
+                        AuditLog.shared.log(.bashCommand, tabId: id, projectName: projectName, detail: cmd)
                         let desc = toolInput["description"] as? String
                         let header = desc != nil ? "\(cmd)  // \(desc!)" : cmd
                         appendBlock(.toolUse(name: "Bash", input: cmd), content: header)
                     case "Read":
                         claudeActivity = .reading
                         let file = toolInput["file_path"] as? String ?? ""
+                        // 보안: 민감 파일 감지
+                        if let match = SensitiveFileShield.shared.check(filePath: file, action: "Read") {
+                            sensitiveFileWarning = "🔒 민감 파일 접근: \(match.patternMatched)\n→ \(file)"
+                            AuditLog.shared.log(.sensitiveFileAccess, tabId: id, projectName: projectName, detail: "Read: \(file)", isDangerous: true)
+                        }
+                        AuditLog.shared.log(.fileRead, tabId: id, projectName: projectName, detail: file)
                         appendBlock(.toolUse(name: "Read", input: file), content: (file as NSString).lastPathComponent)
                         readCommandCount += 1
                         AchievementManager.shared.recordFileRead(sessionReadCount: readCommandCount)
                     case "Write":
                         claudeActivity = .writing
                         let file = toolInput["file_path"] as? String ?? ""
+                        if let match = SensitiveFileShield.shared.check(filePath: file, action: "Write") {
+                            sensitiveFileWarning = "🔒 민감 파일 쓰기: \(match.patternMatched)\n→ \(file)"
+                            AuditLog.shared.log(.sensitiveFileAccess, tabId: id, projectName: projectName, detail: "Write: \(file)", isDangerous: true)
+                        }
+                        AuditLog.shared.log(.fileWrite, tabId: id, projectName: projectName, detail: file)
                         recordFileChange(path: file, action: "Write")
                         appendBlock(.fileChange(path: file, action: "Write"), content: (file as NSString).lastPathComponent)
                         AchievementManager.shared.recordFileEdit()
                     case "Edit":
                         claudeActivity = .writing
                         let file = toolInput["file_path"] as? String ?? ""
+                        if let match = SensitiveFileShield.shared.check(filePath: file, action: "Edit") {
+                            sensitiveFileWarning = "🔒 민감 파일 수정: \(match.patternMatched)\n→ \(file)"
+                            AuditLog.shared.log(.sensitiveFileAccess, tabId: id, projectName: projectName, detail: "Edit: \(file)", isDangerous: true)
+                        }
+                        AuditLog.shared.log(.fileEdit, tabId: id, projectName: projectName, detail: file)
                         recordFileChange(path: file, action: "Edit")
                         appendBlock(.fileChange(path: file, action: "Edit"), content: (file as NSString).lastPathComponent)
                         AchievementManager.shared.recordFileEdit()
@@ -1273,10 +1311,12 @@ class TerminalTab: ObservableObject, Identifiable {
                         claudeActivity = .searching
                         let pattern = toolInput["pattern"] as? String ?? ""
                         appendBlock(.toolUse(name: "Grep", input: pattern), content: pattern)
+                        AchievementManager.shared.unlock("first_grep")
                     case "Glob":
                         claudeActivity = .searching
                         let pattern = toolInput["pattern"] as? String ?? ""
                         appendBlock(.toolUse(name: "Glob", input: pattern), content: pattern)
+                        AchievementManager.shared.unlock("first_glob")
                     case "Task":
                         claudeActivity = .thinking
                         let taskLabel = registerParallelTask(toolUseId: toolUseId, input: toolInput)
@@ -1335,6 +1375,13 @@ class TerminalTab: ObservableObject, Identifiable {
 
             appendBlock(.completion(cost: cost, duration: duration),
                         content: "완료")
+
+            // 슬립워크 완료 체크
+            if sleepWorkTask != nil {
+                sleepWorkCompleted = true
+                sleepWorkTask = nil
+                AuditLog.shared.log(.sleepWorkEnd, tabId: id, projectName: projectName, detail: "슬립워크 완료")
+            }
 
             // 즉시 완료 상태로 전환 (프로세스 종료 기다리지 않음)
             isProcessing = false
@@ -1502,8 +1549,9 @@ class TerminalTab: ObservableObject, Identifiable {
             : "이번 한 번만 전체 권한으로 재시도합니다."
 
         lastPermissionFingerprint = fingerprint
+        let approvalCommand = command
         pendingApproval = PendingApproval(
-            command: command,
+            command: approvalCommand,
             reason: "\(approvalReasonPrefix(for: denial.toolName)) 권한이 필요합니다. 승인하면 \(retrySummary)",
             onApprove: { [weak self] in
                 self?.pendingPermissionDenial = nil
@@ -1515,6 +1563,9 @@ class TerminalTab: ObservableObject, Identifiable {
                 self?.appendBlock(.status(message: "권한 요청이 거부되었습니다"))
             }
         )
+        // 세션 알림: 승인 필요
+        let tabName = workerName.isEmpty ? projectName : workerName
+        SessionNotificationManager.shared.postApprovalNeeded(tabName: tabName, tabId: id, toolName: denial.toolName)
     }
 
     private func retryPermissionMode(for toolName: String) -> PermissionMode {
@@ -1678,8 +1729,23 @@ class TerminalTab: ObservableObject, Identifiable {
 
     // MARK: - Block Management
 
+    private func shouldMergeBlock(existing: StreamBlock.BlockType, new: StreamBlock.BlockType) -> Bool {
+        switch (existing, new) {
+        case (.toolOutput, .toolOutput), (.toolError, .toolError):
+            return true
+        default:
+            return false
+        }
+    }
+
     @discardableResult
     func appendBlock(_ type: StreamBlock.BlockType, content: String = "") -> StreamBlock {
+        if let lastBlock = blocks.last,
+           !lastBlock.isComplete,
+           shouldMergeBlock(existing: lastBlock.blockType, new: type) {
+            lastBlock.content += "\n" + content
+            return lastBlock
+        }
         let block = StreamBlock(type: type, content: content)
         blocks.append(block)
         trimBlocksIfNeeded()
@@ -1700,6 +1766,16 @@ class TerminalTab: ObservableObject, Identifiable {
         isProcessing = false; claudeActivity = .idle
         finalizeParallelTasks(as: .failed)
         appendBlock(.status(message: "취소됨"))
+    }
+
+    func startSleepWork(task: String, tokenBudget: Int?) {
+        sleepWorkTask = task
+        sleepWorkTokenBudget = tokenBudget
+        sleepWorkStartTokens = tokensUsed
+        sleepWorkCompleted = false
+        sleepWorkExceeded = false
+        AuditLog.shared.log(.sleepWorkStart, tabId: id, projectName: projectName, detail: "예산: \(tokenBudget.map { "\($0) tokens" } ?? "무제한")")
+        sendPrompt(task)
     }
 
     func forceStop() {
@@ -1914,6 +1990,30 @@ class TerminalTab: ObservableObject, Identifiable {
     }
 
     private func enforceTokenBudgetIfNeeded() {
+        // 슬립워크 예산 체크
+        if let budget = sleepWorkTokenBudget, sleepWorkTask != nil {
+            let used = tokensUsed - sleepWorkStartTokens
+            if used >= budget * 2 {
+                sleepWorkExceeded = true
+                sleepWorkTask = nil
+                budgetStopIssued = true
+                currentProcess?.terminate()
+                currentProcess = nil
+                isProcessing = false
+                claudeActivity = .idle
+                AuditLog.shared.log(.sleepWorkEnd, tabId: id, projectName: projectName, detail: "예산 2배 초과로 중단: \(used)/\(budget) tokens")
+                appendBlock(.status(message: "슬립워크 중단"), content: "토큰 예산의 2배를 초과했습니다. 다음에 이어서 작업할지 확인해주세요.")
+                return
+            }
+        }
+
+        // 비용 경고 체크 (80% 도달)
+        if let warning = TokenTracker.shared.costWarningNeeded(tabCost: totalCost) {
+            if dangerousCommandWarning == nil {  // 다른 경고가 없을 때만
+                sensitiveFileWarning = warning  // 임시로 sensitiveFileWarning 재활용
+            }
+        }
+
         guard isProcessing, !budgetStopIssued else { return }
         guard let reason = TokenTracker.shared.runningStopReason(
             isAutomation: isAutomationTab,
@@ -2029,6 +2129,53 @@ class TerminalTab: ObservableObject, Identifiable {
 }
 
 extension TerminalTab {
+    var statusPresentation: TabStatusPresentation {
+        if startError != nil || claudeActivity == .error {
+            return TabStatusPresentation(category: .attention, label: "오류", symbol: "exclamationmark.triangle.fill", tint: Theme.red, sortPriority: 0)
+        }
+        if isCompleted {
+            return TabStatusPresentation(category: .completed, label: "완료", symbol: "checkmark.circle.fill", tint: Theme.green, sortPriority: 3)
+        }
+        if isProcessing {
+            switch claudeActivity {
+            case .thinking:
+                return TabStatusPresentation(category: .processing, label: "생각 중", symbol: "brain.head.profile", tint: Theme.purple, sortPriority: 1)
+            case .reading:
+                return TabStatusPresentation(category: .processing, label: "읽는 중", symbol: "book.fill", tint: Theme.accent, sortPriority: 1)
+            case .writing:
+                return TabStatusPresentation(category: .processing, label: "작성 중", symbol: "square.and.pencil", tint: Theme.green, sortPriority: 1)
+            case .searching:
+                return TabStatusPresentation(category: .processing, label: "검색 중", symbol: "magnifyingglass", tint: Theme.cyan, sortPriority: 1)
+            case .running:
+                return TabStatusPresentation(category: .processing, label: "실행 중", symbol: "terminal.fill", tint: Theme.yellow, sortPriority: 1)
+            case .done:
+                return TabStatusPresentation(category: .completed, label: "완료", symbol: "checkmark.circle.fill", tint: Theme.green, sortPriority: 3)
+            case .error:
+                return TabStatusPresentation(category: .attention, label: "오류", symbol: "exclamationmark.triangle.fill", tint: Theme.red, sortPriority: 0)
+            case .idle:
+                return TabStatusPresentation(category: .active, label: "활성", symbol: "bolt.circle.fill", tint: Theme.green.opacity(0.85), sortPriority: 2)
+            }
+        }
+        if isRunning {
+            return TabStatusPresentation(category: .active, label: "대기", symbol: "pause.circle.fill", tint: Theme.green.opacity(0.75), sortPriority: 2)
+        }
+        return TabStatusPresentation(category: .idle, label: "유휴", symbol: "moon.zzz.fill", tint: Theme.textDim, sortPriority: 4)
+    }
+
+    var sidebarSearchTokens: String {
+        [
+            projectName,
+            projectPath,
+            workerName,
+            branch ?? "",
+            statusPresentation.label,
+            claudeActivity.rawValue,
+            gitInfo.branch
+        ]
+        .joined(separator: " ")
+        .lowercased()
+    }
+
     var assignedCharacter: WorkerCharacter? {
         CharacterRegistry.shared.character(with: characterId)
     }

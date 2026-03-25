@@ -255,7 +255,7 @@ struct ZDrawable {
 
 enum OfficeConstants {
     static let tileSize: CGFloat = 16
-    static let walkSpeed: CGFloat = 48           // px/sec
+    static let walkSpeed: CGFloat = 56           // px/sec
     static let walkFrameDuration: Double = 0.15  // 초당 프레임 전환
     static let typeFrameDuration: Double = 0.3
     static let wanderPauseMin: Double = 2.0
@@ -278,6 +278,6 @@ enum OfficeConstants {
     static let socialEventCooldownMax: Double = 3.2
     static let socialScanInterval: Double = 0.75
     static let recentBreakTargetLimit: Int = 3
-    static let fps: Double = 8.0
+    static let fps: Double = 24.0
     static let charSittingOffset: CGFloat = 3    // 앉을 때 Y 오프셋
 }

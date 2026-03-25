@@ -13,10 +13,24 @@ struct OfficeSceneView: View {
     @State private var selectedFurnitureId: String?
     @State private var draggingAnchorId: String?
     @State private var dragFurnitureOffset = TileCoord(col: 0, row: 0)
+    @State private var currentFPS: Double = OfficeConstants.fps
 
     private let map: OfficeMap
+    /// Base timer fires at max FPS; advance() internally throttles based on currentFPS
     let timer = Timer.publish(every: 1.0 / OfficeConstants.fps, on: .main, in: .common).autoconnect()
     let chromeTimer = Timer.publish(every: 5.0, on: .main, in: .common).autoconnect()
+    let fpsCheckTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
+
+    private static func computeAdaptiveFPS() -> Double {
+        let tabs = SessionManager.shared.userVisibleTabs
+        if tabs.contains(where: { $0.isProcessing }) {
+            return OfficeConstants.fps // 24
+        } else if tabs.contains(where: { $0.claudeActivity != .idle }) {
+            return 12
+        } else {
+            return 6
+        }
+    }
 
     init(store: OfficeSceneStore = .shared) {
         self._store = ObservedObject(wrappedValue: store)
@@ -147,7 +161,13 @@ struct OfficeSceneView: View {
             }
         }
         .onReceive(timer) { _ in
-            store.advance(with: manager.userVisibleTabs, activeTabId: manager.activeTab?.id, focusMode: isFocusMode)
+            store.advance(with: manager.userVisibleTabs, activeTabId: manager.activeTab?.id, focusMode: isFocusMode, fps: currentFPS)
+        }
+        .onReceive(fpsCheckTimer) { _ in
+            let newFPS = Self.computeAdaptiveFPS()
+            if newFPS != currentFPS {
+                currentFPS = newFPS
+            }
         }
         .onReceive(chromeTimer) { _ in
             Task { @MainActor in
@@ -173,7 +193,8 @@ struct OfficeSceneView: View {
     // MARK: - Overlay Panels
 
     private func selectionPanel(tab: TerminalTab) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let status = tab.statusPresentation
+        return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
                 Circle()
                     .fill(tab.workerColor)
@@ -193,14 +214,28 @@ struct OfficeSceneView: View {
 
                 HStack(spacing: 6) {
                     selectionBadge(tab.workerJob.displayName, tint: roleTint(for: tab.workerJob))
-                    if let badge = tab.officeLatestToolBadge {
-                        selectionBadge(badge.label, tint: badge.tint)
-                    }
+                    AppStatusBadge(title: status.label, symbol: status.symbol, tint: status.tint)
                 }
             }
 
-            HStack(spacing: 12) {
-                infoStat(title: "상태", value: tab.officeSelectionSubtitle, tint: tab.officeActivityTint)
+            HStack(spacing: 6) {
+                if let badge = tab.officeLatestToolBadge {
+                    selectionBadge(badge.label, tint: badge.tint)
+                }
+                if tab.pendingApproval != nil && tab.officeLatestToolBadge == nil {
+                    selectionBadge("승인 필요", tint: Theme.yellow)
+                }
+            }
+
+            if tab.officeSelectionSubtitle != status.label {
+                Text(tab.officeSelectionSubtitle)
+                    .font(Theme.mono(8))
+                    .foregroundColor(tab.officeActivityTint)
+                    .lineLimit(2)
+            }
+
+            HStack(spacing: 8) {
+                infoStat(title: "활동", value: status.label, tint: status.tint)
                 infoStat(title: "토큰", value: tab.officeCompactTokenText, tint: Theme.accent)
                 infoStat(title: "파일", value: "\(tab.fileChanges.count)", tint: Theme.green)
             }
@@ -243,17 +278,15 @@ struct OfficeSceneView: View {
                     .lineLimit(2)
             }
         }
-        .padding(12)
         .frame(width: 250, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Theme.bgCard.opacity(0.92))
-        )
+        .appPanelStyle(padding: 12, radius: 14, fill: Theme.bgCard.opacity(0.92), strokeOpacity: 0.20, shadow: true)
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 14)
                 .stroke(tab.workerColor.opacity(0.26), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(settings.isDarkMode ? 0.22 : 0.10), radius: 12, y: 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(tab.workerName) 작업 정보")
+        .accessibilityValue("\(status.label), 토큰 \(tab.officeCompactTokenText), 파일 \(tab.fileChanges.count)개")
     }
 
     private func selectionBadge(_ label: String, tint: Color) -> some View {
@@ -360,6 +393,13 @@ struct OfficeSceneView: View {
                 .foregroundColor(tint)
                 .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Theme.bgSurface.opacity(0.85))
+        )
     }
 
     private func followIndicator(name: String) -> some View {

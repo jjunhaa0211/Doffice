@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // ═══════════════════════════════════════════════════════
 // MARK: - App Settings (전역 설정)
@@ -107,6 +108,27 @@ class AppSettings: ObservableObject {
 
     // ── 편집 모드 ──
     @Published var isEditMode: Bool = false
+
+    // ── 보안 설정 ──
+    @AppStorage("dailyCostLimit") var dailyCostLimit: Double = 0 {  // 0 = 무제한
+        didSet { objectWillChange.send() }
+    }
+    @AppStorage("perSessionCostLimit") var perSessionCostLimit: Double = 0 {
+        didSet { objectWillChange.send() }
+    }
+    @AppStorage("costWarningAt80") var costWarningAt80: Bool = true {
+        didSet { objectWillChange.send() }
+    }
+
+    // ── 온보딩 ──
+    @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding: Bool = false {
+        didSet { objectWillChange.send() }
+    }
+
+    // ── 세션 잠금 ──
+    @AppStorage("lockPIN") var lockPIN: String = ""
+    @AppStorage("autoLockMinutes") var autoLockMinutes: Int = 0  // 0 = 비활성
+    @Published var isLocked: Bool = false
 
     var colorScheme: ColorScheme { isDarkMode ? .dark : .light }
 
@@ -512,7 +534,8 @@ QA 결과:
 변경 파일:
 {{changed_files}}
 
-보고서 기본 구조:
+보고서 기본 구조 (첫 줄의 주석은 반드시 포함하세요):
+<!-- WorkMan:Reporter -->
 # 작업 보고서
 ## 요구사항
 ## 구현 결과
@@ -798,6 +821,36 @@ enum BackgroundTheme: String, CaseIterable, Identifiable {
         }
     }
 
+    var requiredLevel: Int? {
+        switch self {
+        case .auto, .sunny, .clearSky, .sunset, .moonlit, .rain: return nil  // 기본
+        case .goldenHour, .dusk: return 3
+        case .starryNight, .fog: return 5
+        case .snow, .cherryBlossom: return 8
+        case .aurora: return 12
+        case .milkyWay: return 15
+        case .storm: return 10
+        case .autumn, .forest: return 7
+        case .neonCity: return 20
+        case .ocean: return 10
+        case .desert: return 18
+        case .volcano: return 25
+        }
+    }
+
+    var isUnlocked: Bool {
+        if UserDefaults.standard.bool(forKey: "allContentUnlocked") { return true }
+        guard let level = requiredLevel else { return true }
+        return AchievementManager.shared.currentLevel.level >= level
+    }
+
+    var lockReason: String {
+        guard let level = requiredLevel else { return "" }
+        let currentLevel = AchievementManager.shared.currentLevel.level
+        if currentLevel < level { return "레벨 \(level) 필요" }
+        return ""
+    }
+
 }
 
 // ═══════════════════════════════════════════════════════
@@ -813,29 +866,59 @@ struct FurnitureItem: Identifiable {
     let width: CGFloat
     let height: CGFloat
     let isWallItem: Bool       // constrained to upper wall zone
+    let requiredLevel: Int?          // nil = 기본 해금
+    let requiredAchievement: String? // nil = 레벨만 체크
+
+    var isUnlocked: Bool {
+        // 시크릿키로 전체 해금된 경우
+        if UserDefaults.standard.bool(forKey: "allContentUnlocked") { return true }
+        if let level = requiredLevel {
+            let currentLevel = AchievementManager.shared.currentLevel.level
+            if currentLevel < level { return false }
+        }
+        if let achievement = requiredAchievement {
+            if !(AchievementManager.shared.achievements.first(where: { $0.id == achievement })?.unlocked ?? false) {
+                return false
+            }
+        }
+        return true
+    }
+
+    var lockReason: String {
+        if let level = requiredLevel {
+            let currentLevel = AchievementManager.shared.currentLevel.level
+            if currentLevel < level { return "레벨 \(level) 필요 (현재 Lv.\(currentLevel))" }
+        }
+        if let achievement = requiredAchievement {
+            if let ach = AchievementManager.shared.achievements.first(where: { $0.id == achievement }), !ach.unlocked {
+                return "업적 '\(ach.name)' 필요"
+            }
+        }
+        return ""
+    }
 
     static let all: [FurnitureItem] = [
         // 기본 가구
-        FurnitureItem(id: "sofa", name: "소파", icon: "sofa.fill", defaultNormX: 0.0, defaultNormY: 0.7, width: 49, height: 30, isWallItem: false),
-        FurnitureItem(id: "sideTable", name: "사이드테이블", icon: "table.furniture.fill", defaultNormX: 0.45, defaultNormY: 0.75, width: 18, height: 14, isWallItem: false),
-        FurnitureItem(id: "coffeeMachine", name: "커피머신", icon: "cup.and.saucer.fill", defaultNormX: 0.45, defaultNormY: 0.5, width: 16, height: 28, isWallItem: false),
-        FurnitureItem(id: "plant", name: "화분", icon: "leaf.fill", defaultNormX: 0.7, defaultNormY: 0.65, width: 14, height: 28, isWallItem: false),
-        FurnitureItem(id: "picture", name: "액자", icon: "photo.artframe", defaultNormX: 0.55, defaultNormY: 0.1, width: 20, height: 16, isWallItem: true),
-        FurnitureItem(id: "neonSign", name: "네온간판", icon: "lightbulb.fill", defaultNormX: 0.1, defaultNormY: 0.25, width: 64, height: 16, isWallItem: true),
-        FurnitureItem(id: "rug", name: "러그", icon: "rectangle.fill", defaultNormX: 0.0, defaultNormY: 0.95, width: 100, height: 14, isWallItem: false),
+        FurnitureItem(id: "sofa", name: "소파", icon: "sofa.fill", defaultNormX: 0.0, defaultNormY: 0.7, width: 49, height: 30, isWallItem: false, requiredLevel: nil, requiredAchievement: nil),
+        FurnitureItem(id: "sideTable", name: "사이드테이블", icon: "table.furniture.fill", defaultNormX: 0.45, defaultNormY: 0.75, width: 18, height: 14, isWallItem: false, requiredLevel: nil, requiredAchievement: nil),
+        FurnitureItem(id: "coffeeMachine", name: "커피머신", icon: "cup.and.saucer.fill", defaultNormX: 0.45, defaultNormY: 0.5, width: 16, height: 28, isWallItem: false, requiredLevel: nil, requiredAchievement: nil),
+        FurnitureItem(id: "plant", name: "화분", icon: "leaf.fill", defaultNormX: 0.7, defaultNormY: 0.65, width: 14, height: 28, isWallItem: false, requiredLevel: nil, requiredAchievement: nil),
+        FurnitureItem(id: "picture", name: "액자", icon: "photo.artframe", defaultNormX: 0.55, defaultNormY: 0.1, width: 20, height: 16, isWallItem: true, requiredLevel: nil, requiredAchievement: nil),
+        FurnitureItem(id: "neonSign", name: "네온간판", icon: "lightbulb.fill", defaultNormX: 0.1, defaultNormY: 0.25, width: 64, height: 16, isWallItem: true, requiredLevel: nil, requiredAchievement: nil),
+        FurnitureItem(id: "rug", name: "러그", icon: "rectangle.fill", defaultNormX: 0.0, defaultNormY: 0.95, width: 100, height: 14, isWallItem: false, requiredLevel: nil, requiredAchievement: nil),
         // 추가 악세서리
-        FurnitureItem(id: "bookshelf", name: "책장", icon: "books.vertical.fill", defaultNormX: 0.8, defaultNormY: 0.4, width: 20, height: 36, isWallItem: false),
-        FurnitureItem(id: "aquarium", name: "어항", icon: "fish.fill", defaultNormX: 0.6, defaultNormY: 0.7, width: 22, height: 18, isWallItem: false),
-        FurnitureItem(id: "arcade", name: "오락기", icon: "gamecontroller.fill", defaultNormX: 0.85, defaultNormY: 0.55, width: 16, height: 30, isWallItem: false),
-        FurnitureItem(id: "whiteboard", name: "화이트보드", icon: "rectangle.and.pencil.and.ellipsis", defaultNormX: 0.35, defaultNormY: 0.08, width: 30, height: 22, isWallItem: true),
-        FurnitureItem(id: "lamp", name: "스탠드 조명", icon: "lamp.floor.fill", defaultNormX: 0.9, defaultNormY: 0.6, width: 10, height: 30, isWallItem: false),
-        FurnitureItem(id: "cat", name: "고양이", icon: "cat.fill", defaultNormX: 0.3, defaultNormY: 0.85, width: 12, height: 10, isWallItem: false),
-        FurnitureItem(id: "tv", name: "TV", icon: "tv.fill", defaultNormX: 0.7, defaultNormY: 0.15, width: 28, height: 18, isWallItem: true),
-        FurnitureItem(id: "fan", name: "선풍기", icon: "fan.fill", defaultNormX: 0.5, defaultNormY: 0.65, width: 12, height: 22, isWallItem: false),
-        FurnitureItem(id: "calendar", name: "달력", icon: "calendar", defaultNormX: 0.8, defaultNormY: 0.12, width: 14, height: 14, isWallItem: true),
-        FurnitureItem(id: "poster", name: "포스터", icon: "doc.richtext.fill", defaultNormX: 0.45, defaultNormY: 0.08, width: 16, height: 20, isWallItem: true),
-        FurnitureItem(id: "trashcan", name: "휴지통", icon: "trash.fill", defaultNormX: 0.95, defaultNormY: 0.85, width: 10, height: 12, isWallItem: false),
-        FurnitureItem(id: "cushion", name: "쿠션", icon: "circle.fill", defaultNormX: 0.15, defaultNormY: 0.88, width: 12, height: 8, isWallItem: false),
+        FurnitureItem(id: "bookshelf", name: "책장", icon: "books.vertical.fill", defaultNormX: 0.8, defaultNormY: 0.4, width: 20, height: 36, isWallItem: false, requiredLevel: 5, requiredAchievement: nil),
+        FurnitureItem(id: "aquarium", name: "어항", icon: "fish.fill", defaultNormX: 0.6, defaultNormY: 0.7, width: 22, height: 18, isWallItem: false, requiredLevel: 8, requiredAchievement: nil),
+        FurnitureItem(id: "arcade", name: "오락기", icon: "gamecontroller.fill", defaultNormX: 0.85, defaultNormY: 0.55, width: 16, height: 30, isWallItem: false, requiredLevel: 10, requiredAchievement: "complete_50"),
+        FurnitureItem(id: "whiteboard", name: "화이트보드", icon: "rectangle.and.pencil.and.ellipsis", defaultNormX: 0.35, defaultNormY: 0.08, width: 30, height: 22, isWallItem: true, requiredLevel: 7, requiredAchievement: nil),
+        FurnitureItem(id: "lamp", name: "스탠드 조명", icon: "lamp.floor.fill", defaultNormX: 0.9, defaultNormY: 0.6, width: 10, height: 30, isWallItem: false, requiredLevel: 3, requiredAchievement: nil),
+        FurnitureItem(id: "cat", name: "고양이", icon: "cat.fill", defaultNormX: 0.3, defaultNormY: 0.85, width: 12, height: 10, isWallItem: false, requiredLevel: 15, requiredAchievement: "night_owl_10"),
+        FurnitureItem(id: "tv", name: "TV", icon: "tv.fill", defaultNormX: 0.7, defaultNormY: 0.15, width: 28, height: 18, isWallItem: true, requiredLevel: 12, requiredAchievement: nil),
+        FurnitureItem(id: "fan", name: "선풍기", icon: "fan.fill", defaultNormX: 0.5, defaultNormY: 0.65, width: 12, height: 22, isWallItem: false, requiredLevel: 6, requiredAchievement: nil),
+        FurnitureItem(id: "calendar", name: "달력", icon: "calendar", defaultNormX: 0.8, defaultNormY: 0.12, width: 14, height: 14, isWallItem: true, requiredLevel: 4, requiredAchievement: nil),
+        FurnitureItem(id: "poster", name: "포스터", icon: "doc.richtext.fill", defaultNormX: 0.45, defaultNormY: 0.08, width: 16, height: 20, isWallItem: true, requiredLevel: 9, requiredAchievement: nil),
+        FurnitureItem(id: "trashcan", name: "휴지통", icon: "trash.fill", defaultNormX: 0.95, defaultNormY: 0.85, width: 10, height: 12, isWallItem: false, requiredLevel: 2, requiredAchievement: nil),
+        FurnitureItem(id: "cushion", name: "쿠션", icon: "circle.fill", defaultNormX: 0.15, defaultNormY: 0.88, width: 12, height: 8, isWallItem: false, requiredLevel: nil, requiredAchievement: nil),
     ]
 }
 
@@ -878,28 +961,38 @@ struct CoffeeSupportTier: Identifiable, Hashable {
 // ═══════════════════════════════════════════════════════
 
 enum Theme {
-    private static var dark: Bool { AppSettings.shared.isDarkMode }
+    private static var _cachedDark: Bool = false
+    private static var _cacheValid: Bool = false
+
+    private static var dark: Bool {
+        if !_cacheValid {
+            _cachedDark = AppSettings.shared.isDarkMode
+            _cacheValid = true
+            DispatchQueue.main.async { _cacheValid = false }
+        }
+        return _cachedDark
+    }
     private static var scale: CGFloat { CGFloat(AppSettings.shared.fontSizeScale) }
     /// UI 크롬(툴바, 사이드바, 필터 등)용 완화된 스케일 — 콘텐츠보다 덜 커짐
     private static var chromeScale: CGFloat { 1 + (scale - 1) * 0.5 }
 
     // Backgrounds
-    static var bg: Color { dark ? Color(hex: "0b0d12") : Color(hex: "f2f3f5") }
+    static var bg: Color { dark ? Color(hex: "0b0d12") : Color(hex: "f6f7f9") }
     static var bgCard: Color { dark ? Color(hex: "12151c") : Color(hex: "ffffff") }
-    static var bgSurface: Color { dark ? Color(hex: "181c26") : Color(hex: "ecedf0") }
-    static var bgTerminal: Color { dark ? Color(hex: "0b0d12") : Color(hex: "fafbfc") }
-    static var bgInput: Color { dark ? Color(hex: "131720") : Color(hex: "f5f6f8") }
-    static var bgHover: Color { dark ? Color(hex: "1a1f2e") : Color(hex: "e4e5ea") }
-    static var bgSelected: Color { dark ? Color(hex: "182038") : Color(hex: "dae6f5") }
+    static var bgSurface: Color { dark ? Color(hex: "181c26") : Color(hex: "f1f3f6") }
+    static var bgTerminal: Color { dark ? Color(hex: "0b0d12") : Color(hex: "fbfcfd") }
+    static var bgInput: Color { dark ? Color(hex: "131720") : Color(hex: "f7f8fa") }
+    static var bgHover: Color { dark ? Color(hex: "1a1f2e") : Color(hex: "eaedf2") }
+    static var bgSelected: Color { dark ? Color(hex: "182038") : Color(hex: "e8eef8") }
 
     // Borders
-    static var border: Color { dark ? Color(hex: "242a36") : Color(hex: "cdd0d8") }
+    static var border: Color { dark ? Color(hex: "242a36") : Color(hex: "d7dce5") }
     static var borderActive: Color { Color(hex: "4a90d9") }
 
     // Text
     static var textPrimary: Color { dark ? Color(hex: "e6eaf2") : Color(hex: "161624") }
-    static var textSecondary: Color { dark ? Color(hex: "8690a4") : Color(hex: "4a5060") }
-    static var textDim: Color { dark ? Color(hex: "485068") : Color(hex: "8a8ea0") }
+    static var textSecondary: Color { dark ? Color(hex: "8690a4") : Color(hex: "566074") }
+    static var textDim: Color { dark ? Color(hex: "485068") : Color(hex: "9199aa") }
     static var textTerminal: Color { dark ? Color(hex: "cdd6e6") : Color(hex: "222838") }
 
     // Button text on colored backgrounds
@@ -969,6 +1062,183 @@ enum Theme {
     }
 }
 
+enum AppChromeTone: Equatable {
+    case neutral
+    case accent
+    case green
+    case red
+    case yellow
+    case purple
+    case cyan
+    case orange
+
+    var color: Color {
+        switch self {
+        case .neutral: return Theme.textSecondary
+        case .accent: return Theme.accent
+        case .green: return Theme.green
+        case .red: return Theme.red
+        case .yellow: return Theme.yellow
+        case .purple: return Theme.purple
+        case .cyan: return Theme.cyan
+        case .orange: return Theme.orange
+        }
+    }
+}
+
+private struct AppPanelModifier: ViewModifier {
+    let padding: CGFloat
+    let radius: CGFloat
+    let fill: Color
+    let strokeOpacity: Double
+    let shadow: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .background(
+                RoundedRectangle(cornerRadius: radius)
+                    .fill(fill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: radius)
+                    .stroke(Theme.border.opacity(strokeOpacity), lineWidth: 1)
+            )
+            .shadow(
+                color: shadow ? Color.black.opacity(AppSettings.shared.isDarkMode ? 0.14 : 0.04) : .clear,
+                radius: shadow ? 10 : 0,
+                y: shadow ? 4 : 0
+            )
+    }
+}
+
+private struct AppFieldModifier: ViewModifier {
+    let emphasized: Bool
+    let radius: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: radius)
+                    .fill(Theme.bgInput)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: radius)
+                    .stroke((emphasized ? Theme.accent : Theme.border).opacity(emphasized ? 0.36 : 0.32), lineWidth: 1)
+            )
+    }
+}
+
+private struct AppButtonSurfaceModifier: ViewModifier {
+    let tone: AppChromeTone
+    let prominent: Bool
+    let compact: Bool
+
+    func body(content: Content) -> some View {
+        let tint = tone.color
+
+        content
+            .foregroundColor(prominent ? Theme.textOnAccent : (tone == .neutral ? Theme.textPrimary : tint))
+            .padding(.horizontal, compact ? 10 : 14)
+            .padding(.vertical, compact ? 7 : 10)
+            .background(
+                RoundedRectangle(cornerRadius: compact ? 9 : 12)
+                    .fill(prominent ? tint : (tone == .neutral ? Theme.bgSurface : tint.opacity(0.08)))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: compact ? 9 : 12)
+                    .stroke(prominent ? tint.opacity(0.16) : (tone == .neutral ? Theme.border.opacity(0.28) : tint.opacity(0.18)), lineWidth: 1)
+            )
+    }
+}
+
+extension View {
+    func appPanelStyle(
+        padding: CGFloat = 16,
+        radius: CGFloat = 16,
+        fill: Color = Theme.bgCard,
+        strokeOpacity: Double = 0.26,
+        shadow: Bool = true
+    ) -> some View {
+        modifier(AppPanelModifier(padding: padding, radius: radius, fill: fill, strokeOpacity: strokeOpacity, shadow: shadow))
+    }
+
+    func appFieldStyle(emphasized: Bool = false, radius: CGFloat = 10) -> some View {
+        modifier(AppFieldModifier(emphasized: emphasized, radius: radius))
+    }
+
+    func appButtonSurface(
+        tone: AppChromeTone = .neutral,
+        prominent: Bool = false,
+        compact: Bool = false
+    ) -> some View {
+        modifier(AppButtonSurfaceModifier(tone: tone, prominent: prominent, compact: compact))
+    }
+}
+
+struct AppStatusBadge: View {
+    let title: String
+    let symbol: String
+    let tint: Color
+    var compact: Bool = true
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.system(size: compact ? Theme.chromeIconSize(8) : Theme.iconSize(9), weight: .bold))
+            Text(title)
+                .font(compact ? Theme.chrome(8, weight: .bold) : Theme.mono(8, weight: .bold))
+                .lineLimit(1)
+        }
+        .foregroundColor(tint)
+        .padding(.horizontal, compact ? 7 : 8)
+        .padding(.vertical, compact ? 4 : 5)
+        .background(
+            Capsule()
+                .fill(tint.opacity(0.10))
+        )
+        .overlay(
+            Capsule()
+                .stroke(tint.opacity(0.18), lineWidth: 1)
+        )
+    }
+}
+
+struct AppEmptyStateView: View {
+    let title: String
+    let message: String
+    let symbol: String
+    var tint: Color = Theme.textDim
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: Theme.iconSize(18), weight: .medium))
+                .foregroundColor(tint.opacity(0.85))
+            Text(title)
+                .font(Theme.mono(10, weight: .bold))
+                .foregroundColor(Theme.textPrimary)
+            Text(message)
+                .font(Theme.mono(8))
+                .foregroundColor(Theme.textDim)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 18)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Theme.bgSurface.opacity(0.65))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Theme.border.opacity(0.22), lineWidth: 1)
+        )
+    }
+}
+
 // ═══════════════════════════════════════════════════════
 // MARK: - Settings View
 // ═══════════════════════════════════════════════════════
@@ -1022,6 +1292,7 @@ struct SettingsView: View {
                 settingsTabButton("데이터", icon: "externaldrive.fill", tab: 4)
                 settingsTabButton("양식", icon: "doc.text.fill", tab: 5)
                 settingsTabButton("후원하기", icon: "cup.and.saucer.fill", tab: 6)
+                settingsTabButton("보안", icon: "lock.shield.fill", tab: 7)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
@@ -1039,6 +1310,7 @@ struct SettingsView: View {
                     case 4: dataTab
                     case 5: templateTab
                     case 6: supportTab
+                    case 7: securityTab
                     default: generalTab
                     }
                 }
@@ -1096,8 +1368,12 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(selected ? Theme.accent.opacity(0.1) : .clear)
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(selected ? Theme.accent.opacity(0.08) : Theme.bgSurface.opacity(0.45))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(selected ? Theme.accent.opacity(0.18) : Theme.border.opacity(0.18), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -1118,27 +1394,25 @@ struct SettingsView: View {
                 }
             }
 
-            settingsSection(title: "시크릿 키", subtitle: "캐릭터 잠금 해제") {
+            settingsSection(title: "시크릿 키", subtitle: "전체 콘텐츠 잠금 해제") {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
                         SecureField("시크릿 키 입력", text: $secretKeyInput)
                             .textFieldStyle(.plain)
                             .font(Theme.mono(11))
                             .foregroundColor(Theme.textPrimary)
-                            .padding(.horizontal, 10).padding(.vertical, 8)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.45), lineWidth: 1))
+                            .appFieldStyle()
                             .onSubmit { applySecretKey() }
 
                         Button(action: { applySecretKey() }) {
-                            Text("적용").font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.textOnAccent)
-                                .padding(.horizontal, 14).padding(.vertical, 8)
-                                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accent))
+                            Text("적용")
+                                .font(Theme.mono(10, weight: .bold))
+                                .appButtonSurface(tone: .accent, prominent: true, compact: true)
                         }.buttonStyle(.plain)
                     }
 
                     if secretKeyResult == .success {
-                        statusHint(icon: "checkmark.circle.fill", text: "잠금 캐릭터가 해제되었습니다. 고용은 캐릭터 화면에서 직접 진행해주세요.", tint: Theme.green)
+                        statusHint(icon: "checkmark.circle.fill", text: "전체 콘텐츠가 해제되었습니다. 고용은 캐릭터 화면에서 직접 진행해주세요.", tint: Theme.green)
                     } else if secretKeyResult == .wrong {
                         statusHint(icon: "xmark.circle.fill", text: "올바르지 않은 키입니다.", tint: Theme.red)
                     }
@@ -1197,10 +1471,7 @@ struct SettingsView: View {
                                 Image(systemName: "chevron.left.forwardslash.chevron.right").font(.system(size: Theme.iconSize(10), weight: .bold))
                                 Text("GitHub 소스").font(Theme.mono(9, weight: .bold))
                             }
-                            .foregroundColor(Theme.accent)
-                            .padding(.horizontal, 12).padding(.vertical, 7)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accent.opacity(0.1)))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.accent.opacity(0.3), lineWidth: 1))
+                            .appButtonSurface(tone: .accent, compact: true)
                         }.buttonStyle(.plain)
 
                         Button(action: {
@@ -1210,10 +1481,7 @@ struct SettingsView: View {
                                 Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: Theme.iconSize(10), weight: .bold))
                                 Text("자동 업데이트").font(Theme.mono(9, weight: .bold))
                             }
-                            .foregroundColor(Theme.green)
-                            .padding(.horizontal, 12).padding(.vertical, 7)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.green.opacity(0.1)))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.green.opacity(0.3), lineWidth: 1))
+                            .appButtonSurface(tone: .green, compact: true)
                         }.buttonStyle(.plain)
 
                         Spacer()
@@ -1582,6 +1850,132 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - 보안 탭
+
+    private var securityTab: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // 세션 잠금
+            settingsSection(title: "세션 잠금", subtitle: settings.lockPIN.isEmpty ? "미설정" : "설정됨") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("잠금 PIN").font(Theme.mono(10, weight: .medium)).foregroundColor(Theme.textPrimary)
+                        Spacer()
+                        SecureField("4자리 PIN", text: $settings.lockPIN)
+                            .font(Theme.monoSmall)
+                            .textFieldStyle(.plain)
+                            .frame(width: 100)
+                            .padding(6)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.border, lineWidth: 0.5))
+                    }
+                    HStack {
+                        Text("자동 잠금").font(Theme.mono(10, weight: .medium)).foregroundColor(Theme.textPrimary)
+                        Spacer()
+                        Picker("", selection: $settings.autoLockMinutes) {
+                            Text("사용 안 함").tag(0)
+                            Text("1분").tag(1)
+                            Text("3분").tag(3)
+                            Text("5분").tag(5)
+                            Text("10분").tag(10)
+                            Text("30분").tag(30)
+                        }
+                        .frame(width: 120)
+                    }
+                }
+            }
+
+            // 비용 제한
+            settingsSection(title: "비용 제한", subtitle: settings.dailyCostLimit > 0 ? "$\(String(format: "%.0f", settings.dailyCostLimit))/일" : "무제한") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("일일 비용 제한 ($)").font(Theme.mono(10, weight: .medium)).foregroundColor(Theme.textPrimary)
+                        Spacer()
+                        TextField("0 = 무제한", value: $settings.dailyCostLimit, format: .number)
+                            .font(Theme.monoSmall)
+                            .textFieldStyle(.plain)
+                            .frame(width: 80)
+                            .padding(6)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.border, lineWidth: 0.5))
+                    }
+                    HStack {
+                        Text("세션별 비용 제한 ($)").font(Theme.mono(10, weight: .medium)).foregroundColor(Theme.textPrimary)
+                        Spacer()
+                        TextField("0 = 무제한", value: $settings.perSessionCostLimit, format: .number)
+                            .font(Theme.monoSmall)
+                            .textFieldStyle(.plain)
+                            .frame(width: 80)
+                            .padding(6)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.border, lineWidth: 0.5))
+                    }
+                    Toggle("80% 도달 시 경고", isOn: $settings.costWarningAt80)
+                        .font(Theme.mono(10, weight: .medium))
+                }
+            }
+
+            // 위험 명령 감지
+            settingsSection(title: "위험 명령 감지", subtitle: DangerousCommandDetector.shared.enabled ? "활성" : "비활성") {
+                Toggle("위험한 명령 실행 시 경고 표시", isOn: Binding(
+                    get: { DangerousCommandDetector.shared.enabled },
+                    set: { DangerousCommandDetector.shared.enabled = $0 }
+                ))
+                .font(Theme.mono(10, weight: .medium))
+            }
+
+            // 민감 파일 보호
+            settingsSection(title: "민감 파일 보호", subtitle: SensitiveFileShield.shared.enabled ? "활성" : "비활성") {
+                Toggle("민감 파일 접근 시 경고 표시", isOn: Binding(
+                    get: { SensitiveFileShield.shared.enabled },
+                    set: { SensitiveFileShield.shared.enabled = $0 }
+                ))
+                .font(Theme.mono(10, weight: .medium))
+            }
+
+            // 감사 로그
+            settingsSection(title: "감사 로그", subtitle: "\(AuditLog.shared.entries.count)개 기록") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("감사 로그 기록", isOn: Binding(
+                        get: { AuditLog.shared.enabled },
+                        set: { AuditLog.shared.enabled = $0 }
+                    ))
+                    .font(Theme.mono(10, weight: .medium))
+
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            if let data = AuditLog.shared.exportJSON() {
+                                let panel = NSSavePanel()
+                                panel.nameFieldStringValue = "workman_audit_log.json"
+                                panel.allowedContentTypes = [.json]
+                                if panel.runModal() == .OK, let url = panel.url {
+                                    try? data.write(to: url)
+                                }
+                            }
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.down.doc").font(.system(size: 10))
+                                Text("로그 내보내기").font(Theme.mono(9, weight: .medium))
+                            }
+                            .foregroundColor(Theme.accent)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent.opacity(0.08)))
+                        }.buttonStyle(.plain)
+
+                        Button(action: { AuditLog.shared.clear() }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "trash").font(.system(size: 10))
+                                Text("로그 삭제").font(Theme.mono(9, weight: .medium))
+                            }
+                            .foregroundColor(Theme.red)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.red.opacity(0.08)))
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - 데이터 탭
 
     private var dataTab: some View {
@@ -1773,16 +2167,7 @@ struct SettingsView: View {
 
             content()
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Theme.bgCard.opacity(0.98))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Theme.border.opacity(0.35), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(settings.isDarkMode ? 0.16 : 0.05), radius: 10, y: 4)
+        .appPanelStyle(fill: Theme.bgCard.opacity(0.98), strokeOpacity: 0.24)
     }
 
     private func labeledField(
@@ -1792,26 +2177,16 @@ struct SettingsView: View {
         emphasized: Bool = false,
         onSubmit: @escaping () -> Void
     ) -> some View {
-        HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(Theme.mono(10, weight: .bold))
                 .foregroundColor(Theme.textDim)
-                .frame(width: 56, alignment: .leading)
 
             TextField(placeholder, text: text)
                 .textFieldStyle(.plain)
                 .font(Theme.mono(11, weight: emphasized ? .semibold : .regular))
                 .foregroundColor(Theme.textPrimary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Theme.bgSurface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke((emphasized ? Theme.accent : Theme.border).opacity(0.35), lineWidth: 1)
-                )
+                .appFieldStyle(emphasized: emphasized)
                 .onSubmit { onSubmit() }
                 .onChange(of: text.wrappedValue) { _, _ in onSubmit() }
         }
@@ -1912,29 +2287,37 @@ struct SettingsView: View {
 
     private func quickBackgroundButton(_ theme: BackgroundTheme) -> some View {
         let selected = currentTheme == theme
+        let locked = !theme.isUnlocked
         return Button(action: {
+            guard !locked else { return }
             withAnimation(.easeInOut(duration: 0.15)) {
                 settings.backgroundTheme = theme.rawValue
             }
         }) {
             HStack(spacing: 6) {
-                Image(systemName: theme.icon)
+                Image(systemName: locked ? "lock.fill" : theme.icon)
                     .font(.system(size: Theme.iconSize(10), weight: .bold))
                 Text(theme.displayName)
                     .font(Theme.mono(9, weight: selected ? .bold : .medium))
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                if locked {
+                    Text(theme.lockReason)
+                        .font(Theme.mono(7))
+                        .foregroundColor(Theme.textDim.opacity(0.6))
+                        .lineLimit(1)
+                }
             }
-            .foregroundColor(selected ? Theme.purple : Theme.textSecondary)
+            .foregroundColor(locked ? Theme.textDim.opacity(0.5) : (selected ? Theme.purple : Theme.textSecondary))
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(selected ? Theme.purple.opacity(0.12) : Theme.bgSurface)
+                    .fill(selected && !locked ? Theme.purple.opacity(0.12) : Theme.bgSurface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(selected ? Theme.purple.opacity(0.35) : Theme.border.opacity(0.3), lineWidth: 1)
+                    .stroke(locked ? Theme.border.opacity(0.15) : (selected ? Theme.purple.opacity(0.35) : Theme.border.opacity(0.3)), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -2189,6 +2572,7 @@ struct SettingsView: View {
         let key = Self.normalizeSecretKey(secretKeyInput)
         if key == Self.normalizedSecretKey {
             _ = CharacterRegistry.shared.unlockAllCharacters()
+            UserDefaults.standard.set(true, forKey: "allContentUnlocked")
             withAnimation(.easeInOut(duration: 0.3)) { secretKeyResult = .success }
             secretKeyInput = ""
         } else {
@@ -2596,12 +2980,13 @@ struct AccessoryView: View {
 
     private func furnitureCard(_ item: FurnitureItem) -> some View {
         let isOn = isFurnitureOn(item.id)
-        return Button(action: { withAnimation(.easeInOut(duration: 0.15)) { toggleFurniture(item.id) } }) {
+        let locked = !item.isUnlocked
+        return Button(action: { guard !locked else { return }; withAnimation(.easeInOut(duration: 0.15)) { toggleFurniture(item.id) } }) {
             VStack(spacing: 6) {
                 // 미리보기 영역
                 ZStack {
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(isOn ? Theme.purple.opacity(0.08) : Theme.bgSurface)
+                        .fill(locked ? Theme.bgSurface.opacity(0.5) : (isOn ? Theme.purple.opacity(0.08) : Theme.bgSurface))
                         .frame(height: 50)
 
                     // 픽셀 아트 미리보기 (Canvas)
@@ -2611,27 +2996,41 @@ struct AccessoryView: View {
                         drawFurniturePreview(context: context, item: item, at: CGPoint(x: cx, y: cy))
                     }
                     .frame(height: 50)
-                    .opacity(isOn ? 1.0 : 0.4)
+                    .opacity(locked ? 0.15 : (isOn ? 1.0 : 0.4))
+
+                    // 잠금 오버레이
+                    if locked {
+                        VStack(spacing: 2) {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: Theme.iconSize(14)))
+                                .foregroundColor(Theme.textDim)
+                            Text(item.lockReason)
+                                .font(Theme.mono(6, weight: .medium))
+                                .foregroundColor(Theme.textDim)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.center)
+                        }
+                    }
                 }
 
                 // 이름 + 체크
                 HStack(spacing: 3) {
-                    Image(systemName: item.icon)
+                    Image(systemName: locked ? "lock.fill" : item.icon)
                         .font(.system(size: Theme.iconSize(8)))
-                        .foregroundColor(isOn ? Theme.purple : Theme.textDim)
+                        .foregroundColor(locked ? Theme.textDim.opacity(0.5) : (isOn ? Theme.purple : Theme.textDim))
                     Text(item.name)
                         .font(Theme.mono(8, weight: isOn ? .bold : .medium))
-                        .foregroundColor(isOn ? Theme.textPrimary : Theme.textDim)
+                        .foregroundColor(locked ? Theme.textDim.opacity(0.5) : (isOn ? Theme.textPrimary : Theme.textDim))
                         .lineLimit(1)
                     Spacer(minLength: 0)
-                    Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    Image(systemName: locked ? "lock.fill" : (isOn ? "checkmark.circle.fill" : "circle"))
                         .font(.system(size: Theme.iconSize(9)))
-                        .foregroundColor(isOn ? Theme.green : Theme.textDim.opacity(0.4))
+                        .foregroundColor(locked ? Theme.textDim.opacity(0.3) : (isOn ? Theme.green : Theme.textDim.opacity(0.4)))
                 }
             }
             .padding(6)
             .background(RoundedRectangle(cornerRadius: 8)
-                .stroke(isOn ? Theme.purple.opacity(0.4) : Theme.border.opacity(0.2), lineWidth: isOn ? 1.5 : 0.5))
+                .stroke(locked ? Theme.border.opacity(0.1) : (isOn ? Theme.purple.opacity(0.4) : Theme.border.opacity(0.2)), lineWidth: isOn && !locked ? 1.5 : 0.5))
         }.buttonStyle(.plain)
     }
 
@@ -2702,7 +3101,8 @@ struct AccessoryView: View {
 
     private func bgThemeButton(_ theme: BackgroundTheme) -> some View {
         let selected = settings.backgroundTheme == theme.rawValue
-        return Button(action: { withAnimation(.easeInOut(duration: 0.15)) { settings.backgroundTheme = theme.rawValue } }) {
+        let locked = !theme.isUnlocked
+        return Button(action: { guard !locked else { return }; withAnimation(.easeInOut(duration: 0.15)) { settings.backgroundTheme = theme.rawValue } }) {
             VStack(spacing: 4) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 6)
@@ -2710,20 +3110,33 @@ struct AccessoryView: View {
                             colors: [Color(hex: theme.skyColors.top), Color(hex: theme.skyColors.bottom)],
                             startPoint: .top, endPoint: .bottom))
                         .frame(height: 28)
-                    Image(systemName: theme.icon)
-                        .font(.system(size: Theme.iconSize(10)))
-                        .foregroundColor(.white.opacity(0.9))
+                        .opacity(locked ? 0.3 : 1.0)
+                    if locked {
+                        VStack(spacing: 1) {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: Theme.iconSize(9)))
+                                .foregroundColor(.white.opacity(0.7))
+                            Text(theme.lockReason)
+                                .font(Theme.mono(5, weight: .medium))
+                                .foregroundColor(.white.opacity(0.6))
+                                .lineLimit(1)
+                        }
+                    } else {
+                        Image(systemName: theme.icon)
+                            .font(.system(size: Theme.iconSize(10)))
+                            .foregroundColor(.white.opacity(0.9))
+                    }
                 }
                 Text(theme.displayName)
                     .font(Theme.mono(7, weight: selected ? .bold : .medium))
-                    .foregroundColor(selected ? Theme.purple : Theme.textDim)
+                    .foregroundColor(locked ? Theme.textDim.opacity(0.5) : (selected ? Theme.purple : Theme.textDim))
                     .lineLimit(1)
             }
             .padding(4)
             .background(RoundedRectangle(cornerRadius: 8)
-                .fill(selected ? Theme.purple.opacity(0.1) : .clear)
+                .fill(selected && !locked ? Theme.purple.opacity(0.1) : .clear)
                 .overlay(RoundedRectangle(cornerRadius: 8)
-                    .stroke(selected ? Theme.purple.opacity(0.5) : Theme.border.opacity(0.2), lineWidth: selected ? 1.5 : 0.5)))
+                    .stroke(locked ? Theme.border.opacity(0.1) : (selected ? Theme.purple.opacity(0.5) : Theme.border.opacity(0.2)), lineWidth: selected && !locked ? 1.5 : 0.5)))
         }.buttonStyle(.plain)
     }
 }

@@ -88,6 +88,47 @@ struct SavedSession: Codable {
     let betaHeaders: String?
     let sessionId: String?
     let fileChanges: [SavedFileChange]?
+    let chatHistory: [SavedChatBlock]?
+    let tabOrder: Int?
+}
+
+struct SavedChatBlock: Codable {
+    let type: String        // "user", "thought", "completion", "tool", "text", "error", "status"
+    let content: String
+    let toolName: String?
+    let timestamp: Date
+
+    init(block: StreamBlock) {
+        switch block.blockType {
+        case .userPrompt: self.type = "user"
+        case .thought: self.type = "thought"
+        case .completion: self.type = "completion"
+        case .toolUse(let name, _): self.type = "tool"; self.toolName = name; self.content = block.content; self.timestamp = block.timestamp; return
+        case .text: self.type = "text"
+        case .error(let msg): self.type = "error"; self.toolName = nil; self.content = msg.isEmpty ? block.content : msg; self.timestamp = block.timestamp; return
+        case .status(let msg): self.type = "status"; self.toolName = nil; self.content = msg; self.timestamp = block.timestamp; return
+        default: self.type = "text"
+        }
+        self.toolName = nil
+        self.content = block.content
+        self.timestamp = block.timestamp
+    }
+
+    func toBlock() -> StreamBlock {
+        let blockType: StreamBlock.BlockType
+        switch type {
+        case "user": blockType = .userPrompt
+        case "thought": blockType = .thought
+        case "completion": blockType = .completion(cost: nil, duration: nil)
+        case "tool": blockType = .toolUse(name: toolName ?? "Tool", input: "")
+        case "error": blockType = .error(message: content)
+        case "status": blockType = .status(message: content)
+        default: blockType = .text
+        }
+        let block = StreamBlock(type: blockType, content: content)
+        block.isComplete = true
+        return block
+    }
 }
 
 struct SessionHistory: Codable {
@@ -130,7 +171,7 @@ class SessionStore {
     }
 
     func save(tabs: [TerminalTab], immediately: Bool = false) {
-        let saved = tabs.map { tab in
+        let saved = tabs.enumerated().map { (index, tab) in
             SavedSession(
                 tabId: tab.id,
                 projectName: tab.projectName,
@@ -186,7 +227,17 @@ class SessionStore {
                 settingsFileOrJSON: tab.settingsFileOrJSON,
                 betaHeaders: tab.betaHeaders,
                 sessionId: tab.persistedSessionId,
-                fileChanges: tab.fileChanges.map(SavedFileChange.init(record:))
+                fileChanges: tab.fileChanges.map(SavedFileChange.init(record:)),
+                chatHistory: tab.blocks.suffix(100).compactMap { block in
+                    switch block.blockType {
+                    case .userPrompt, .thought, .completion, .text, .error, .status:
+                        return SavedChatBlock(block: block)
+                    case .toolUse:
+                        return SavedChatBlock(block: block)
+                    default: return nil
+                    }
+                },
+                tabOrder: index
             )
         }
 
@@ -342,7 +393,9 @@ class SessionStore {
             settingsFileOrJSON: tab.settingsFileOrJSON,
             betaHeaders: tab.betaHeaders,
             sessionId: tab.persistedSessionId,
-            fileChanges: tab.fileChanges.map(SavedFileChange.init(record:))
+            fileChanges: tab.fileChanges.map(SavedFileChange.init(record:)),
+            chatHistory: nil,
+            tabOrder: nil
         )
         return writeRecoveryBundle(for: saved, reason: reason)
     }

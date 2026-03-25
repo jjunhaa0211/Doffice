@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // ═══════════════════════════════════════════════════════
 // MARK: - Terminal Area
@@ -7,7 +8,7 @@ import SwiftUI
 struct TerminalAreaView: View {
     @EnvironmentObject var manager: SessionManager
     @State private var viewMode: ViewMode = .grid
-    enum ViewMode { case grid, single }
+    enum ViewMode { case grid, single, git }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,6 +18,7 @@ struct TerminalAreaView: View {
             case .single:
                 if let tab = manager.activeTab { EventStreamView(tab: tab, compact: false) }
                 else { EmptySessionView() }
+            case .git: GitPanelView()
             }
         }
         .sheet(isPresented: $manager.showNewTabSheet) { NewTabSheet() }
@@ -26,11 +28,13 @@ struct TerminalAreaView: View {
         HStack(spacing: 0) {
             HStack(spacing: 2) {
                 modeBtn("square.grid.2x2", .grid); modeBtn("rectangle", .single)
+                Rectangle().fill(Theme.border).frame(width: 1, height: 14)
+                modeBtn("arrow.triangle.branch", .git)
             }.padding(.horizontal, 8)
             Rectangle().fill(Theme.border).frame(width: 1, height: 18)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 3) {
-                    if viewMode == .single { ForEach(manager.userVisibleTabs) { t in singleTabBtn(t) } }
+                    if viewMode == .single || viewMode == .git { ForEach(manager.userVisibleTabs) { t in singleTabBtn(t) } }
                 }.padding(.horizontal, 6)
             }
             Spacer(minLength: 0)
@@ -43,12 +47,12 @@ struct TerminalAreaView: View {
     }
 
     private func modeBtn(_ icon: String, _ mode: ViewMode) -> some View {
-        let label = mode == .grid ? "Grid" : "Single"
+        let label: String = { switch mode { case .grid: return "Grid"; case .single: return "Single"; case .git: return "Git" } }()
         let selected = viewMode == mode
         return Button(action: { withAnimation(.easeInOut(duration: 0.2)) { viewMode = mode } }) {
             HStack(spacing: 3) {
                 Image(systemName: icon).font(.system(size: Theme.iconSize(9)))
-                Text(label).font(Theme.mono(8, weight: selected ? .bold : .regular))
+                Text(label).font(Theme.chrome(8, weight: selected ? .bold : .regular))
             }
             .foregroundColor(selected ? Theme.accent : Theme.textDim).padding(.horizontal, 6).padding(.vertical, 4)
             .background(RoundedRectangle(cornerRadius: 4).fill(selected ? Theme.accent.opacity(0.12) : .clear))
@@ -56,12 +60,21 @@ struct TerminalAreaView: View {
     }
     private func singleTabBtn(_ t: TerminalTab) -> some View {
         let a = manager.activeTabId == t.id
+        let status = t.statusPresentation
+        let dotColor: Color = {
+            switch status.category {
+            case .processing: return status.tint
+            case .attention: return Theme.red
+            case .completed: return Theme.green
+            case .active, .idle: return t.workerColor
+            }
+        }()
         return Button(action: { manager.selectTab(t.id) }) {
             HStack(spacing: 4) {
-                Circle().fill(t.isProcessing ? Theme.yellow : t.workerColor).frame(width: 5, height: 5)
-                Text(t.projectName).font(Theme.monoSmall).foregroundColor(a ? Theme.textPrimary : Theme.textSecondary).lineLimit(1)
+                Circle().fill(dotColor).frame(width: 5, height: 5)
+                Text(t.projectName).font(Theme.chrome(10)).foregroundColor(a ? Theme.textPrimary : Theme.textSecondary).lineLimit(1)
                 if manager.userVisibleTabs.filter({ $0.projectPath == t.projectPath }).count > 1 {
-                    Text(t.workerName).font(Theme.monoTiny).foregroundColor(t.workerColor)
+                    Text(t.workerName).font(Theme.chrome(9)).foregroundColor(t.workerColor)
                 }
             }.padding(.horizontal, 8).padding(.vertical, 4)
             .background(RoundedRectangle(cornerRadius: 5).fill(a ? Theme.bgSelected : .clear))
@@ -89,6 +102,9 @@ struct EventStreamView: View {
     @State private var selectedCommandIndex: Int = 0
     @State private var planSelectionDraft: [String: String] = [:]
     @State private var planSelectionSignature: String = ""
+    @State private var sentPlanSignatures: Set<String> = []
+    @State private var scrollWorkItem: DispatchWorkItem?
+    @State private var showSleepWorkSetup = false
     let elapsedTimer = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
 
     // ═══════════════════════════════════════════
@@ -405,9 +421,13 @@ struct EventStreamView: View {
         },
     ]
 
-    private var isCommandMode: Bool { inputText.hasPrefix("/") }
+    /// /cmd 형태만 명령 모드 (경로 /path/to 제외)
+    private var isCommandMode: Bool {
+        guard inputText.hasPrefix("/") else { return false }
+        let after = String(inputText.dropFirst())
+        return !after.hasPrefix("/") && !after.contains("/")
+    }
 
-    /// 입력 중인 명령어와 아직 인자를 입력하지 않았을 때만 필터
     private var hasTypedArgs: Bool {
         guard isCommandMode else { return false }
         let afterSlash = String(inputText.dropFirst())
@@ -485,7 +505,10 @@ struct EventStreamView: View {
                     .onChange(of: tab.blocks.count) { _, newCount in
                         if autoScroll && newCount != lastBlockCount {
                             lastBlockCount = newCount
-                            scrollToEnd(proxy)
+                            scrollWorkItem?.cancel()
+                            let item = DispatchWorkItem { scrollToEnd(proxy) }
+                            scrollWorkItem = item
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: item)
                         }
                     }
                     .onChange(of: tab.isProcessing) { _, processing in
@@ -496,7 +519,12 @@ struct EventStreamView: View {
                     }
                     .onChange(of: tab.claudeActivity) { _, _ in
                         // 활동 상태 변경될 때마다 스크롤 (tool 전환 등)
-                        if autoScroll { scrollToEnd(proxy) }
+                        if autoScroll {
+                            scrollWorkItem?.cancel()
+                            let item = DispatchWorkItem { scrollToEnd(proxy) }
+                            scrollWorkItem = item
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: item)
+                        }
                     }
                     .onAppear {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { scrollToEnd(proxy) }
@@ -535,6 +563,52 @@ struct EventStreamView: View {
         .sheet(item: $tab.pendingApproval) { approval in
             ApprovalSheet(approval: approval)
         }
+        .sheet(isPresented: $showSleepWorkSetup) {
+            SleepWorkSetupSheet(tab: tab)
+        }
+        // 보안 경고 오버레이
+        .overlay(alignment: .top) {
+            VStack(spacing: 6) {
+                if let warning = tab.dangerousCommandWarning {
+                    securityBanner(warning, color: Theme.red, icon: "exclamationmark.octagon.fill") {
+                        tab.dangerousCommandWarning = nil
+                    }
+                }
+                if let warning = tab.sensitiveFileWarning {
+                    securityBanner(warning, color: Theme.orange, icon: "lock.shield.fill") {
+                        tab.sensitiveFileWarning = nil
+                    }
+                }
+            }
+            .padding(.horizontal, 16).padding(.top, 8)
+            .animation(.easeInOut(duration: 0.2), value: tab.dangerousCommandWarning)
+            .animation(.easeInOut(duration: 0.2), value: tab.sensitiveFileWarning)
+        }
+    }
+
+    private func securityBanner(_ message: String, color: Color, icon: String, onDismiss: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: Theme.iconSize(12), weight: .bold))
+                .foregroundColor(color)
+            Text(message)
+                .font(Theme.mono(9, weight: .medium))
+                .foregroundColor(color)
+                .lineLimit(3)
+            Spacer()
+            Button(action: onDismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: Theme.iconSize(10)))
+                    .foregroundColor(color.opacity(0.5))
+            }.buttonStyle(.plain)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(color.opacity(0.08))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(color.opacity(0.3), lineWidth: 1))
+        )
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     // ═══════════════════════════════════════════
@@ -546,39 +620,39 @@ struct EventStreamView: View {
             // Worker + Activity
             HStack(spacing: 4) {
                 Circle().fill(tab.workerColor).frame(width: 6, height: 6)
-                Text(tab.workerName).font(Theme.mono(9, weight: .semibold)).foregroundColor(tab.workerColor)
-                Text(activityLabel).font(Theme.mono(9)).foregroundColor(activityLabelColor)
+                Text(tab.workerName).font(Theme.chrome(9, weight: .semibold)).foregroundColor(tab.workerColor)
+                Text(activityLabel).font(Theme.chrome(9)).foregroundColor(activityLabelColor)
             }
 
             Rectangle().fill(Theme.border).frame(width: 1, height: 12)
 
             // Elapsed time
             HStack(spacing: 0) {
-                Text(formatElapsed(elapsedSeconds)).font(Theme.mono(9)).foregroundColor(Theme.textSecondary)
+                Text(formatElapsed(elapsedSeconds)).font(Theme.chrome(9)).foregroundColor(Theme.textSecondary)
             }
 
             // File count
             if !tab.fileChanges.isEmpty {
                 Rectangle().fill(Theme.border).frame(width: 1, height: 12)
                 HStack(spacing: 3) {
-                    Image(systemName: "doc.fill").font(Theme.mono(8)).foregroundColor(Theme.green)
-                    Text("\(Set(tab.fileChanges.map(\.fileName)).count) files").font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.green)
+                    Image(systemName: "doc.fill").font(Theme.chrome(8)).foregroundColor(Theme.green)
+                    Text("\(Set(tab.fileChanges.map(\.fileName)).count) files").font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.green)
                 }
             }
 
             // Error count
             if tab.errorCount > 0 {
                 HStack(spacing: 3) {
-                    Image(systemName: "exclamationmark.triangle.fill").font(Theme.mono(7)).foregroundColor(Theme.red)
-                    Text("\(tab.errorCount) errors").font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.red)
+                    Image(systemName: "exclamationmark.triangle.fill").font(Theme.chrome(7)).foregroundColor(Theme.red)
+                    Text("\(tab.errorCount) errors").font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.red)
                 }
             }
 
             // Commands
             if tab.commandCount > 0 {
                 HStack(spacing: 3) {
-                    Image(systemName: "terminal").font(Theme.mono(7)).foregroundColor(Theme.textDim)
-                    Text("\(tab.commandCount) cmds").font(Theme.mono(9)).foregroundColor(Theme.textSecondary)
+                    Image(systemName: "terminal").font(Theme.chrome(7)).foregroundColor(Theme.textDim)
+                    Text("\(tab.commandCount) cmds").font(Theme.chrome(9)).foregroundColor(Theme.textSecondary)
                 }
             }
 
@@ -588,8 +662,8 @@ struct EventStreamView: View {
             Button(action: { withAnimation(.easeInOut(duration: 0.15)) { showFilterBar.toggle() } }) {
                 HStack(spacing: 3) {
                     Image(systemName: "line.3.horizontal.decrease.circle\(showFilterBar ? ".fill" : "")")
-                        .font(Theme.mono(8))
-                    Text("필터").font(Theme.mono(8, weight: showFilterBar ? .bold : .regular))
+                        .font(Theme.chrome(8))
+                    Text("필터").font(Theme.chrome(8, weight: showFilterBar ? .bold : .regular))
                 }
                 .foregroundColor(showFilterBar || blockFilter.isActive ? Theme.accent : Theme.textDim)
                 .padding(.horizontal, 5).padding(.vertical, 2)
@@ -598,8 +672,8 @@ struct EventStreamView: View {
 
             Button(action: { withAnimation(.easeInOut(duration: 0.15)) { showFilePanel.toggle() } }) {
                 HStack(spacing: 3) {
-                    Image(systemName: "doc.text.magnifyingglass").font(Theme.mono(8))
-                    Text("파일").font(Theme.mono(8, weight: showFilePanel ? .bold : .regular))
+                    Image(systemName: "doc.text.magnifyingglass").font(Theme.chrome(8))
+                    Text("파일").font(Theme.chrome(8, weight: showFilePanel ? .bold : .regular))
                 }
                 .foregroundColor(showFilePanel ? Theme.accent : Theme.textDim)
                 .padding(.horizontal, 5).padding(.vertical, 2)
@@ -639,13 +713,13 @@ struct EventStreamView: View {
 
     private var filterBar: some View {
         HStack(spacing: 4) {
-            Text("Filter").font(Theme.mono(8, weight: .bold)).foregroundColor(Theme.textDim)
+            Text("Filter").font(Theme.chrome(8, weight: .bold)).foregroundColor(Theme.textDim)
             ForEach(["Bash", "Read", "Write", "Edit", "Grep", "Glob"], id: \.self) { tool in
                 filterChip(tool, color: toolColor(tool))
             }
             Rectangle().fill(Theme.border).frame(width: 1, height: 12)
             Button(action: { blockFilter.onlyErrors.toggle() }) {
-                Text("Errors").font(Theme.mono(8, weight: blockFilter.onlyErrors ? .bold : .regular))
+                Text("Errors").font(Theme.chrome(8, weight: blockFilter.onlyErrors ? .bold : .regular))
                     .foregroundColor(blockFilter.onlyErrors ? Theme.red : Theme.textDim)
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(blockFilter.onlyErrors ? Theme.red.opacity(0.1) : .clear).cornerRadius(3)
@@ -653,14 +727,14 @@ struct EventStreamView: View {
             Spacer()
             if blockFilter.isActive {
                 Button(action: { blockFilter = BlockFilter() }) {
-                    Text("Clear").font(Theme.mono(8)).foregroundColor(Theme.accent)
+                    Text("Clear").font(Theme.chrome(8)).foregroundColor(Theme.accent)
                 }.buttonStyle(.plain)
             }
             // Search
             HStack(spacing: 3) {
-                Image(systemName: "magnifyingglass").font(Theme.mono(8)).foregroundColor(Theme.textDim)
+                Image(systemName: "magnifyingglass").font(Theme.chrome(8)).foregroundColor(Theme.textDim)
                 TextField("검색...", text: $blockFilter.searchText)
-                    .textFieldStyle(.plain).font(Theme.mono(9)).frame(width: 80)
+                    .textFieldStyle(.plain).font(Theme.chrome(9)).frame(width: 80)
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 4)
@@ -674,11 +748,12 @@ struct EventStreamView: View {
             if active { blockFilter.toolTypes.remove(tool) }
             else { blockFilter.toolTypes.insert(tool) }
         }) {
-            Text(tool).font(Theme.mono(8, weight: active ? .bold : .regular))
+            Text(tool).font(Theme.chrome(8, weight: active ? .bold : .regular))
                 .foregroundColor(active ? color : Theme.textDim)
                 .padding(.horizontal, 5).padding(.vertical, 2)
                 .background(active ? color.opacity(0.1) : .clear).cornerRadius(3)
         }.buttonStyle(.plain)
+        .accessibilityLabel("\(tool) 필터")
     }
 
     private func toolColor(_ name: String) -> Color {
@@ -696,11 +771,11 @@ struct EventStreamView: View {
     private var fileChangePanel: some View {
         VStack(spacing: 0) {
             HStack {
-                Image(systemName: "doc.text").font(Theme.mono(9)).foregroundColor(Theme.accent)
+                Image(systemName: "doc.text").font(Theme.chrome(9)).foregroundColor(Theme.accent)
                 Text("FILES").font(Theme.pixel).foregroundColor(Theme.textDim).tracking(1.5)
                 Spacer()
                 Text("\(Set(tab.fileChanges.map(\.fileName)).count)")
-                    .font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.accent)
+                    .font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.accent)
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(Theme.bgSurface.opacity(0.5))
@@ -713,11 +788,11 @@ struct EventStreamView: View {
                         if let records = grouped[path], let latest = records.last {
                         HStack(spacing: 6) {
                             Image(systemName: latest.action == "Write" ? "doc.badge.plus" : "pencil.line")
-                                .font(Theme.mono(8)).foregroundColor(Theme.green)
+                                .font(Theme.chrome(8)).foregroundColor(Theme.green)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(latest.fileName).font(Theme.mono(9, weight: .medium)).foregroundColor(Theme.textPrimary).lineLimit(1)
+                                Text(latest.fileName).font(Theme.chrome(9, weight: .medium)).foregroundColor(Theme.textPrimary).lineLimit(1)
                                 Text("\(latest.action) x\(records.count)")
-                                    .font(Theme.mono(7)).foregroundColor(Theme.textDim)
+                                    .font(Theme.chrome(7)).foregroundColor(Theme.textDim)
                             }
                             Spacer()
                         }
@@ -726,7 +801,7 @@ struct EventStreamView: View {
                     }
 
                     if tab.fileChanges.isEmpty {
-                        Text("변경된 파일 없음").font(Theme.monoSmall).foregroundColor(Theme.textDim)
+                        Text("변경된 파일 없음").font(Theme.chrome(10)).foregroundColor(Theme.textDim)
                             .frame(maxWidth: .infinity).padding(.vertical, 20)
                     }
                 }
@@ -810,7 +885,7 @@ struct EventStreamView: View {
 
                 if tab.totalCost > 0 {
                     Text(String(format: "$%.4f", tab.totalCost))
-                        .font(Theme.mono(9, weight: .semibold)).foregroundColor(Theme.yellow)
+                        .font(Theme.chrome(9, weight: .semibold)).foregroundColor(Theme.yellow)
                         .padding(.horizontal, 6).padding(.vertical, 3)
                         .background(Theme.yellow.opacity(0.06)).cornerRadius(4)
                 }
@@ -826,12 +901,17 @@ struct EventStreamView: View {
                 Rectangle().fill(Theme.border).frame(height: 1)
             }
 
+            // 슬립워크 상태 바
+            if tab.sleepWorkTask != nil {
+                sleepWorkStatusBar
+            }
+
             // Input (auto-growing)
             HStack(alignment: .bottom, spacing: 8) {
                 HStack(spacing: 3) {
                     RoundedRectangle(cornerRadius: 1).fill(tab.workerColor).frame(width: 3, height: 16)
-                    Text(tab.projectName).font(Theme.monoSmall).foregroundColor(Theme.textDim)
-                    Text(">").font(Theme.mono(12, weight: .semibold)).foregroundColor(Theme.accent)
+                    Text(tab.projectName).font(Theme.chrome(10)).foregroundColor(Theme.textDim)
+                    Text(">").font(Theme.chrome(12, weight: .semibold)).foregroundColor(Theme.accent)
                 }.padding(.bottom, 4)
 
                 // Auto-growing TextEditor
@@ -854,6 +934,7 @@ struct EventStreamView: View {
                         .disabled(tab.isProcessing)
                         .scrollContentBackground(.hidden)
                         .padding(.horizontal, 0).padding(.vertical, 4)
+                        .accessibilityLabel("명령 입력")
                 }
                 .frame(minHeight: 32, maxHeight: 120)
                 .onKeyPress(.return, phases: .down) { event in
@@ -869,9 +950,18 @@ struct EventStreamView: View {
                 }
                 .onChange(of: inputText) { _, _ in selectedCommandIndex = 0 }
 
+                Button(action: { showSleepWorkSetup = true }) {
+                    Image(systemName: "moon.zzz.fill")
+                        .font(.system(size: Theme.iconSize(11)))
+                        .foregroundColor(Theme.purple)
+                }
+                .buttonStyle(.plain)
+                .help("슬립워크")
+                .padding(.bottom, 4)
+
                 if tab.isProcessing {
                     Button(action: { tab.cancelProcessing() }) {
-                        Label("Stop", systemImage: "stop.fill").font(Theme.mono(9, weight: .medium))
+                        Label("Stop", systemImage: "stop.fill").font(Theme.chrome(9, weight: .medium))
                             .foregroundColor(Theme.red).padding(.horizontal, 8).padding(.vertical, 4)
                             .background(Theme.red.opacity(0.1)).cornerRadius(5)
                     }.buttonStyle(.plain).padding(.bottom, 4)
@@ -933,36 +1023,66 @@ struct EventStreamView: View {
         }.padding(.horizontal, 8).padding(.vertical, 3).background(Theme.bgInput)
     }
 
+    private var sleepWorkStatusBar: some View {
+        let budget = tab.sleepWorkTokenBudget ?? 0
+        let used = tab.tokensUsed - tab.sleepWorkStartTokens
+        let ratio = budget > 0 ? Double(used) / Double(budget) : 0
+        let color: Color = ratio < 1.0 ? Theme.purple : (ratio < 2.0 ? Theme.yellow : Theme.red)
+
+        return HStack(spacing: 8) {
+            Image(systemName: "moon.zzz.fill").font(.system(size: Theme.iconSize(10))).foregroundColor(Theme.purple)
+            Text("슬립워크 진행 중").font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.purple)
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2).fill(Theme.border.opacity(0.15)).frame(height: 4)
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(color)
+                        .frame(width: min(geo.size.width, geo.size.width * CGFloat(min(ratio, 2.0) / 2.0)), height: 4)
+                }
+            }.frame(height: 4).frame(maxWidth: 120)
+
+            if budget > 0 {
+                Text("\(formatK(used)) / \(formatK(budget))")
+                    .font(Theme.chrome(9, weight: .bold)).foregroundColor(color)
+            }
+
+            Spacer()
+
+            Button(action: {
+                tab.sleepWorkTask = nil
+                tab.cancelProcessing()
+            }) {
+                Text("중단").font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.red)
+            }.buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .background(Theme.purple.opacity(0.06))
+    }
+
+    private func formatK(_ n: Int) -> String {
+        if n >= 1000000 { return String(format: "%.1fM", Double(n) / 1000000) }
+        if n >= 1000 { return String(format: "%.1fK", Double(n) / 1000) }
+        return "\(n)"
+    }
+
     private func submit() {
         let p = inputText.trimmingCharacters(in: .whitespaces); guard !p.isEmpty else { return }
+        guard !tab.isProcessing else { return }
 
-        // Slash command handling
-        if p.hasPrefix("/") {
-            let parts = String(p.dropFirst()).split(separator: " ", maxSplits: 1).map(String.init)
+        // Slash command handling — /cmd 형태만 (경로 /path/to/file 제외)
+        let afterSlash = String(p.dropFirst())
+        let looksLikeCommand = p.hasPrefix("/") && !afterSlash.hasPrefix("/") && !afterSlash.contains("/")
+        if looksLikeCommand {
+            let parts = afterSlash.split(separator: " ", maxSplits: 1).map(String.init)
             let cmdName = parts.first?.lowercased() ?? ""
             let args = parts.count > 1 ? parts[1].split(separator: " ").map(String.init) : []
 
-            // 정확히 매칭되는 명령어 먼저 찾기
-            var cmd = Self.allSlashCommands.first(where: { $0.name == cmdName })
-
-            // 정확한 매칭이 없으면 → 추천 목록에서 선택된 항목 사용
-            if cmd == nil {
-                let matches = matchingCommands
-                if !matches.isEmpty {
-                    let idx = min(selectedCommandIndex, matches.count - 1)
-                    cmd = matches[idx]
-                }
-            }
-
-            if let cmd = cmd {
+            // 정확히 매칭되는 명령어만 실행
+            if let cmd = Self.allSlashCommands.first(where: { $0.name == cmdName }) {
                 inputText = ""; selectedCommandIndex = 0
                 tab.appendBlock(.userPrompt, content: "/\(cmd.name)" + (args.isEmpty ? "" : " " + args.joined(separator: " ")))
                 cmd.action(tab, manager, args)
-                return
-            } else {
-                inputText = ""; selectedCommandIndex = 0
-                tab.appendBlock(.userPrompt, content: p)
-                tab.appendBlock(.status(message: "⚠️ 알 수 없는 명령어: /\(cmdName)\n/help 로 사용 가능한 명령어를 확인하세요"))
                 return
             }
         }
@@ -981,13 +1101,13 @@ struct EventStreamView: View {
         return VStack(alignment: .leading, spacing: 0) {
             Rectangle().fill(Theme.border).frame(height: 1)
             HStack(spacing: 4) {
-                Image(systemName: "command").font(Theme.mono(8)).foregroundColor(Theme.accent)
-                Text("명령어").font(Theme.mono(8, weight: .bold)).foregroundColor(Theme.accent)
+                Image(systemName: "command").font(Theme.chrome(8)).foregroundColor(Theme.accent)
+                Text("명령어").font(Theme.chrome(8, weight: .bold)).foregroundColor(Theme.accent)
                 if commands.count < Self.allSlashCommands.count {
-                    Text("\(commands.count)개 일치").font(Theme.mono(7)).foregroundColor(Theme.textDim)
+                    Text("\(commands.count)개 일치").font(Theme.chrome(7)).foregroundColor(Theme.textDim)
                 }
                 Spacer()
-                Text("↑↓ 선택  Tab 완성  Enter 실행  Esc 닫기").font(Theme.mono(7)).foregroundColor(Theme.textDim)
+                Text("↑↓ 선택  Tab 완성  Enter 실행  Esc 닫기").font(Theme.chrome(7)).foregroundColor(Theme.textDim)
             }
             .padding(.horizontal, 12).padding(.vertical, 4)
 
@@ -1080,7 +1200,9 @@ struct EventStreamView: View {
         .trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !responseText.isEmpty else { return nil }
-        return PlanSelectionRequest.parse(from: responseText)
+        guard let request = PlanSelectionRequest.parse(from: responseText) else { return nil }
+        guard !sentPlanSignatures.contains(request.signature) else { return nil }
+        return request
     }
 
     private func syncPlanSelectionState(with request: PlanSelectionRequest?) {
@@ -1212,6 +1334,7 @@ struct EventStreamView: View {
                     let response = request.responseText(from: planSelectionDraft)
                     guard !response.isEmpty else { return }
                     inputText = ""
+                    sentPlanSignatures.insert(request.signature)
                     tab.sendPrompt(response)
                     AchievementManager.shared.addXP(5)
                     AchievementManager.shared.incrementCommand()
@@ -1318,7 +1441,7 @@ struct EventStreamView: View {
     private func settingGroup<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
         HStack(spacing: 4) {
             Text(label)
-                .font(Theme.mono(8, weight: .medium))
+                .font(Theme.chrome(8, weight: .medium))
                 .foregroundColor(Theme.textDim)
                 .fixedSize()
             HStack(spacing: 2) {
@@ -1335,7 +1458,7 @@ struct EventStreamView: View {
     private func settingChip(_ label: String, isSelected: Bool, color: Color, action: @escaping () -> Void) -> some View {
         Button(action: { withAnimation(.easeInOut(duration: 0.12)) { action() } }) {
             Text(label)
-                .font(Theme.mono(9, weight: isSelected ? .bold : .regular))
+                .font(Theme.chrome(9, weight: isSelected ? .bold : .regular))
                 .foregroundColor(isSelected ? color : Theme.textDim)
                 .fixedSize()
                 .padding(.horizontal, 7).padding(.vertical, 3)
@@ -1402,7 +1525,7 @@ private struct PlanSelectionRequest {
         guard !normalizedText.isEmpty else { return nil }
 
         let lowered = normalizedText.lowercased()
-        let requestMarkers = ["선호", "선택", "알려주세요", "골라", "정해주세요", "말씀해주세요", "choose", "pick", "prefer"]
+        let requestMarkers = ["선호", "선택", "알려주세요", "골라", "정해주세요", "말씀해주세요", "어떤 것", "어떤 방식", "결정", "어떻게 할", "무엇을", "choose", "pick", "prefer", "which one", "which option", "select", "what would you", "would you like", "option"]
         guard requestMarkers.contains(where: { lowered.contains($0) }) else { return nil }
 
         let lines = normalizedText
@@ -1514,13 +1637,42 @@ private struct PlanSelectionRequest {
             .replacingOccurrences(of: "-", with: "", options: [], range: line.startIndex..<line.index(line.startIndex, offsetBy: min(1, line.count)))
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
+        guard trimmed.count >= 2 else { return nil }
+
+        // Circled numbers: ①, ②, ③ ...
+        let circledNumbers: [Character: String] = ["①": "1", "②": "2", "③": "3", "④": "4", "⑤": "5", "⑥": "6", "⑦": "7", "⑧": "8", "⑨": "9"]
+        if let first = trimmed.first, let num = circledNumbers[first] {
+            let label = String(trimmed.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !label.isEmpty else { return nil }
+            return Option(id: "plan-option-\(num)-\(label)", key: num, label: label)
+        }
+
+        // Parenthesized: (1), (2), (A), (B)
+        if trimmed.hasPrefix("("), let closeIdx = trimmed.firstIndex(of: ")") {
+            let inner = trimmed[trimmed.index(after: trimmed.startIndex)..<closeIdx]
+            guard inner.count >= 1, inner.count <= 2 else { return nil }
+            let key = String(inner).uppercased()
+            let label = String(trimmed[trimmed.index(after: closeIdx)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !label.isEmpty else { return nil }
+            return Option(id: "plan-option-\(key)-\(label)", key: key, label: label)
+        }
+
         guard trimmed.count >= 3 else { return nil }
         let characters = Array(trimmed)
         let marker = characters[0]
         let separator = characters[1]
-        guard marker.isLetter, separator == ")" || separator == "." || separator == ":" else { return nil }
 
-        let key = String(marker).uppercased()
+        // Single letter (A, B...), digit (1, 2...), or Korean marker (가, 나, 다...)
+        let koreanOrderMarkers: Set<Character> = ["가", "나", "다", "라", "마"]
+        let isValidMarker = marker.isLetter || marker.isNumber || koreanOrderMarkers.contains(marker)
+        guard isValidMarker, separator == ")" || separator == "." || separator == ":" else { return nil }
+
+        let key: String
+        if marker.isNumber || koreanOrderMarkers.contains(marker) {
+            key = String(marker)
+        } else {
+            key = String(marker).uppercased()
+        }
         let label = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !label.isEmpty else { return nil }
 
@@ -1654,42 +1806,25 @@ struct EventBlockView: View {
     }
 
     private func completionBlock(cost: Double?, duration: Int?) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // 완료 헤더
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle.fill").font(.system(size: Theme.iconSize(14))).foregroundColor(Theme.green)
-                Text("완료").font(Theme.mono(12, weight: .bold)).foregroundColor(Theme.green)
-                Spacer()
-                HStack(spacing: 8) {
-                    if let d = duration {
-                        HStack(spacing: 0) {
-                            Text("\(d/1000).\(d%1000/100)s").font(Theme.mono(9)).foregroundColor(Theme.textDim)
-                        }
-                    }
-                    if let c = cost, c > 0 {
-                        HStack(spacing: 3) {
-                            Image(systemName: "dollarsign.circle").font(.system(size: Theme.iconSize(8))).foregroundColor(Theme.yellow)
-                            Text(String(format: "$%.4f", c)).font(Theme.mono(9, weight: .semibold)).foregroundColor(Theme.yellow)
-                        }
-                    }
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill").font(.system(size: Theme.iconSize(10))).foregroundColor(Theme.green)
+                Text("완료").font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.green)
+                if let d = duration {
+                    Text("\(d/1000).\(d%1000/100)s").font(Theme.mono(8)).foregroundColor(Theme.textDim)
+                }
+                if let c = cost, c > 0 {
+                    Text(String(format: "$%.4f", c)).font(Theme.mono(8, weight: .semibold)).foregroundColor(Theme.yellow)
                 }
             }
 
-            // 결과 내용 (마크다운 렌더링)
             if !block.content.isEmpty && block.content != "완료" {
-                Rectangle().fill(Theme.green.opacity(0.15)).frame(height: 1)
                 MarkdownTextView(text: block.content, compact: compact)
-                    .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface.opacity(0.6)))
                     .textSelection(.enabled)
             }
         }
-        .padding(.vertical, 8).padding(.horizontal, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 8).fill(Theme.green.opacity(0.04))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.green.opacity(0.15), lineWidth: 0.5))
-        )
+        .padding(.vertical, 5).padding(.horizontal, 8)
     }
 
     private func errorBlock(_ msg: String) -> some View {
@@ -1726,7 +1861,7 @@ struct EventBlockView: View {
 struct ToolOutputBlockView: View {
     @ObservedObject var block: StreamBlock
     let compact: Bool
-    private let maxCollapsedLines = 8
+    private let maxCollapsedLines = 12
 
     @State private var isExpanded = false
 
@@ -1742,9 +1877,15 @@ struct ToolOutputBlockView: View {
         if isExpanded || !isTruncatable {
             return block.content
         }
-        let head = lines.prefix(4)
-        let tail = lines.suffix(3)
-        let hidden = lines.count - 7
+        if lines.count > 100 {
+            let head = lines.prefix(3)
+            let tail = lines.suffix(3)
+            let hidden = lines.count - 6
+            return (head + ["    ... \(hidden)줄 생략 ..."] + tail).joined(separator: "\n")
+        }
+        let head = lines.prefix(6)
+        let tail = lines.suffix(4)
+        let hidden = lines.count - 10
         return (head + ["    ... \(hidden)줄 생략 ..."] + tail).joined(separator: "\n")
     }
 
@@ -2031,8 +2172,8 @@ struct ProcessingIndicator: View {
     var body: some View {
         HStack(spacing: 6) {
             Circle().fill(workerColor).frame(width: 8, height: 8)
-            Text(workerName).font(Theme.mono(10, weight: .semibold)).foregroundColor(workerColor)
-            Text(statusText).font(Theme.monoSmall).foregroundColor(Theme.textDim)
+            Text(workerName).font(Theme.chrome(10, weight: .semibold)).foregroundColor(workerColor)
+            Text(statusText).font(Theme.chrome(10)).foregroundColor(Theme.textDim)
             HStack(spacing: 2) {
                 ForEach(0..<3, id: \.self) { i in
                     Circle().fill(Theme.textDim)
@@ -2120,11 +2261,11 @@ struct GridSinglePanel: View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
                 RoundedRectangle(cornerRadius: 1).fill(tab.workerColor).frame(width: 3, height: 12)
-                Text(tab.workerName).font(Theme.mono(9, weight: .bold)).foregroundColor(tab.workerColor)
-                Text(tab.projectName).font(Theme.mono(9)).foregroundColor(Theme.textSecondary).lineLimit(1)
+                Text(tab.workerName).font(Theme.chrome(9, weight: .bold)).foregroundColor(tab.workerColor)
+                Text(tab.projectName).font(Theme.chrome(9)).foregroundColor(Theme.textSecondary).lineLimit(1)
                 Spacer()
                 if tab.isProcessing { ProgressView().scaleEffect(0.35).frame(width: 8, height: 8) }
-                Text(tab.selectedModel.icon).font(Theme.monoTiny)
+                Text(tab.selectedModel.icon).font(Theme.chrome(9))
             }
             .padding(.horizontal, 6).padding(.vertical, 4)
             .background(isSelected ? Theme.bgSelected : Theme.bgCard)
@@ -2155,14 +2296,14 @@ struct GridGroupPanel: View {
                     // Header: project name + worker tabs
                     HStack(spacing: 4) {
                         RoundedRectangle(cornerRadius: 1).fill(activeTab.workerColor).frame(width: 3, height: 12)
-                        Text(group.projectName).font(Theme.mono(10, weight: .semibold)).foregroundColor(Theme.textPrimary).lineLimit(1)
+                        Text(group.projectName).font(Theme.chrome(10, weight: .semibold)).foregroundColor(Theme.textPrimary).lineLimit(1)
                         Spacer()
 
                         if group.tabs.count > 1 {
                             HStack(spacing: 2) {
                                 ForEach(Array(group.tabs.enumerated()), id: \.element.id) { i, tab in
                                     Button(action: { selectedWorkerIndex = i; manager.selectTab(tab.id) }) {
-                                        Text(tab.workerName).font(Theme.mono(7, weight: selectedWorkerIndex == i ? .bold : .regular))
+                                        Text(tab.workerName).font(Theme.chrome(7, weight: selectedWorkerIndex == i ? .bold : .regular))
                                             .foregroundColor(selectedWorkerIndex == i ? tab.workerColor : Theme.textDim)
                                             .padding(.horizontal, 4).padding(.vertical, 2)
                                             .background(selectedWorkerIndex == i ? tab.workerColor.opacity(0.1) : .clear)
@@ -2173,7 +2314,7 @@ struct GridGroupPanel: View {
                         }
 
                         if activeTab.isProcessing { ProgressView().scaleEffect(0.35).frame(width: 8, height: 8) }
-                        Text(activeTab.selectedModel.icon).font(Theme.monoTiny)
+                        Text(activeTab.selectedModel.icon).font(Theme.chrome(9))
                     }
 
                     .padding(.horizontal, 6).padding(.vertical, 4)
@@ -2233,12 +2374,19 @@ struct ApprovalSheet: View {
 
 struct EmptySessionView: View {
     var body: some View {
-        VStack(spacing: 8) {
+        VStack {
             Spacer()
-            Image(systemName: "hammer.fill").font(.system(size: Theme.iconSize(28))).foregroundColor(Theme.textDim.opacity(0.3))
-            Text("Cmd+T to start").font(Theme.mono(10)).foregroundColor(Theme.textDim)
+            AppEmptyStateView(
+                title: "세션이 아직 없습니다",
+                message: "Cmd+T 또는 새 세션 시작 버튼으로 바로 작업을 시작할 수 있습니다.",
+                symbol: "plus.circle.fill",
+                tint: Theme.accent
+            )
+            .padding(.horizontal, 24)
             Spacer()
-        }.frame(maxWidth: .infinity).background(Theme.bgTerminal)
+        }
+        .frame(maxWidth: .infinity)
+        .background(Theme.bgTerminal)
     }
 }
 
@@ -2246,8 +2394,232 @@ struct EmptySessionView: View {
 // MARK: - New Tab Sheet (멀티 터미널 지원)
 // ═══════════════════════════════════════════════════════
 
+struct NewSessionProjectRecord: Codable, Identifiable, Hashable {
+    let path: String
+    var name: String
+    var lastUsedAt: Date
+    var isFavorite: Bool
+
+    var id: String { path }
+}
+
+struct NewSessionDraftSnapshot: Codable {
+    var selectedModel: String
+    var effortLevel: String
+    var permissionMode: String
+    var terminalCount: Int
+    var systemPrompt: String
+    var maxBudget: String
+    var allowedTools: String
+    var disallowedTools: String
+    var additionalDirs: [String]
+    var continueSession: Bool
+    var useWorktree: Bool
+}
+
+private enum NewSessionPreset: String, CaseIterable, Identifiable {
+    case balanced
+    case planFirst
+    case safeReview
+    case parallelBuild
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .balanced: return "기본 작업"
+        case .planFirst: return "플랜 우선"
+        case .safeReview: return "안전 검토"
+        case .parallelBuild: return "병렬 구현"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .balanced: return "일반 개발 시작"
+        case .planFirst: return "계획만 먼저 정리"
+        case .safeReview: return "보수적 권한으로 검토"
+        case .parallelBuild: return "여러 터미널로 분배"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .balanced: return Theme.accent
+        case .planFirst: return Theme.purple
+        case .safeReview: return Theme.orange
+        case .parallelBuild: return Theme.cyan
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .balanced: return "hammer.fill"
+        case .planFirst: return "list.bullet.clipboard.fill"
+        case .safeReview: return "shield.fill"
+        case .parallelBuild: return "square.grid.3x1.folder.badge.plus"
+        }
+    }
+}
+
+final class NewSessionPreferencesStore: ObservableObject {
+    static let shared = NewSessionPreferencesStore()
+
+    @Published private(set) var favoriteProjects: [NewSessionProjectRecord] = []
+    @Published private(set) var recentProjects: [NewSessionProjectRecord] = []
+    @Published private(set) var lastDraft: NewSessionDraftSnapshot?
+
+    private let favoritesKey = "workman.new-session.favorite-projects"
+    private let recentsKey = "workman.new-session.recent-projects"
+    private let lastDraftKey = "workman.new-session.last-draft"
+
+    private init() {
+        load()
+    }
+
+    func isFavorite(path: String) -> Bool {
+        favoriteProjects.contains(where: { $0.path == path })
+    }
+
+    func toggleFavorite(projectName: String, projectPath: String) {
+        guard !projectPath.isEmpty else { return }
+
+        if let index = favoriteProjects.firstIndex(where: { $0.path == projectPath }) {
+            favoriteProjects.remove(at: index)
+        } else {
+            favoriteProjects.insert(
+                NewSessionProjectRecord(path: projectPath, name: projectName.isEmpty ? (projectPath as NSString).lastPathComponent : projectName, lastUsedAt: Date(), isFavorite: true),
+                at: 0
+            )
+        }
+        favoriteProjects = dedupeProjects(favoriteProjects).prefixArray(8)
+        saveFavorites()
+    }
+
+    func suggestedProjects(currentTabs: [TerminalTab], savedSessions: [SavedSession]) -> [NewSessionProjectRecord] {
+        var merged: [String: NewSessionProjectRecord] = [:]
+
+        for favorite in favoriteProjects {
+            merged[favorite.path] = favorite
+        }
+
+        for recent in recentProjects {
+            mergeProject(into: &merged, project: recent)
+        }
+
+        for tab in currentTabs {
+            let record = NewSessionProjectRecord(
+                path: tab.projectPath,
+                name: tab.projectName,
+                lastUsedAt: tab.lastActivityTime,
+                isFavorite: isFavorite(path: tab.projectPath)
+            )
+            mergeProject(into: &merged, project: record)
+        }
+
+        for session in savedSessions {
+            let record = NewSessionProjectRecord(
+                path: session.projectPath,
+                name: session.projectName,
+                lastUsedAt: session.lastActivityTime ?? session.startTime,
+                isFavorite: isFavorite(path: session.projectPath)
+            )
+            mergeProject(into: &merged, project: record)
+        }
+
+        return merged.values.sorted { lhs, rhs in
+            if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite && !rhs.isFavorite }
+            if lhs.lastUsedAt != rhs.lastUsedAt { return lhs.lastUsedAt > rhs.lastUsedAt }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    func rememberLaunch(projectName: String, projectPath: String, draft: NewSessionDraftSnapshot) {
+        guard !projectPath.isEmpty else { return }
+
+        let record = NewSessionProjectRecord(
+            path: projectPath,
+            name: projectName,
+            lastUsedAt: Date(),
+            isFavorite: isFavorite(path: projectPath)
+        )
+        recentProjects.removeAll(where: { $0.path == projectPath })
+        recentProjects.insert(record, at: 0)
+        recentProjects = dedupeProjects(recentProjects).prefixArray(10)
+        lastDraft = draft
+        saveRecents()
+        saveLastDraft()
+    }
+
+    private func mergeProject(into merged: inout [String: NewSessionProjectRecord], project: NewSessionProjectRecord) {
+        if let existing = merged[project.path] {
+            let preferredName = existing.name.count >= project.name.count ? existing.name : project.name
+            merged[project.path] = NewSessionProjectRecord(
+                path: project.path,
+                name: preferredName,
+                lastUsedAt: max(existing.lastUsedAt, project.lastUsedAt),
+                isFavorite: existing.isFavorite || project.isFavorite
+            )
+        } else {
+            merged[project.path] = project
+        }
+    }
+
+    private func dedupeProjects(_ projects: [NewSessionProjectRecord]) -> [NewSessionProjectRecord] {
+        var seen = Set<String>()
+        return projects.filter { project in
+            seen.insert(project.path).inserted
+        }
+    }
+
+    private func load() {
+        let decoder = JSONDecoder()
+        if let data = UserDefaults.standard.data(forKey: favoritesKey),
+           let decoded = try? decoder.decode([NewSessionProjectRecord].self, from: data) {
+            favoriteProjects = decoded
+        }
+        if let data = UserDefaults.standard.data(forKey: recentsKey),
+           let decoded = try? decoder.decode([NewSessionProjectRecord].self, from: data) {
+            recentProjects = decoded
+        }
+        if let data = UserDefaults.standard.data(forKey: lastDraftKey),
+           let decoded = try? decoder.decode(NewSessionDraftSnapshot.self, from: data) {
+            lastDraft = decoded
+        }
+    }
+
+    private func saveFavorites() {
+        let encoder = JSONEncoder()
+        if let data = try? encoder.encode(favoriteProjects) {
+            UserDefaults.standard.set(data, forKey: favoritesKey)
+        }
+    }
+
+    private func saveRecents() {
+        let encoder = JSONEncoder()
+        if let data = try? encoder.encode(recentProjects) {
+            UserDefaults.standard.set(data, forKey: recentsKey)
+        }
+    }
+
+    private func saveLastDraft() {
+        let encoder = JSONEncoder()
+        if let draft = lastDraft, let data = try? encoder.encode(draft) {
+            UserDefaults.standard.set(data, forKey: lastDraftKey)
+        }
+    }
+}
+
+private extension Array {
+    func prefixArray(_ maxCount: Int) -> [Element] {
+        Array(prefix(maxCount))
+    }
+}
+
 struct NewTabSheet: View {
     @EnvironmentObject var manager: SessionManager; @Environment(\.dismiss) var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ObservedObject private var preferences = NewSessionPreferencesStore.shared
     @State private var projectName = ""
     @State private var projectPath = ""
     @State private var terminalCount = 1
@@ -2255,6 +2627,9 @@ struct NewTabSheet: View {
 
     // 폴더 신뢰 확인
     @State private var trustConfirmed = false
+    @State private var showTrustPrompt = false
+    @State private var didBootstrap = false
+    @State private var pathError: String?
 
     // 고급 옵션
     @State private var showAdvanced = false
@@ -2267,14 +2642,41 @@ struct NewTabSheet: View {
     @State private var additionalDirs: [String] = []
     @State private var continueSession = false
     @State private var useWorktree = false
+    @State private var showSavePreset = false
+    @State private var activePresetId: String?
     @State private var selectedModel: ClaudeModel = .sonnet
     @State private var effortLevel: EffortLevel = .medium
 
+    private var suggestedProjects: [NewSessionProjectRecord] {
+        preferences.suggestedProjects(currentTabs: manager.userVisibleTabs, savedSessions: SessionStore.shared.load())
+    }
+
+    private var favoriteProjects: [NewSessionProjectRecord] {
+        suggestedProjects.filter(\.isFavorite).prefixArray(4)
+    }
+
+    private var recentProjects: [NewSessionProjectRecord] {
+        suggestedProjects.filter { !$0.isFavorite }.prefixArray(6)
+    }
+
+    private var isCurrentProjectFavorite: Bool {
+        preferences.isFavorite(path: projectPath)
+    }
+
+    private var sheetAnimation: Animation {
+        reduceMotion ? .linear(duration: 0.01) : .easeInOut(duration: 0.18)
+    }
+
     var body: some View {
-        if !trustConfirmed && !projectPath.isEmpty {
-            trustPromptView
-        } else {
-            sessionConfigView
+        Group {
+            if showTrustPrompt {
+                trustPromptView
+            } else {
+                sessionConfigView
+            }
+        }
+        .onAppear {
+            bootstrapFromLastDraftIfNeeded()
         }
     }
 
@@ -2328,7 +2730,14 @@ struct NewTabSheet: View {
 
             // 선택 버튼
             VStack(spacing: 6) {
-                Button(action: { withAnimation(.easeInOut(duration: 0.2)) { trustConfirmed = true } }) {
+                Button(action: {
+                    withAnimation(sheetAnimation) {
+                        trustConfirmed = true
+                        showTrustPrompt = false
+                    }
+                    createSessions()
+                    dismiss()
+                }) {
                     HStack(spacing: 8) {
                         Text("❯").font(Theme.mono(12, weight: .bold)).foregroundColor(Theme.green)
                         Text("네, 이 폴더를 신뢰합니다")
@@ -2339,12 +2748,20 @@ struct NewTabSheet: View {
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Theme.green.opacity(0.08))
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.green.opacity(0.3), lineWidth: 1)))
-                }.buttonStyle(.plain).keyboardShortcut(.return)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.return)
+                .accessibilityLabel("이 폴더를 신뢰하고 세션 시작")
+                .accessibilityHint("프로젝트 폴더를 신뢰 목록으로 보고 새 세션을 생성합니다")
 
-                Button(action: { dismiss() }) {
+                Button(action: {
+                    withAnimation(sheetAnimation) {
+                        showTrustPrompt = false
+                    }
+                }) {
                     HStack(spacing: 8) {
                         Text(" ").font(Theme.mono(12, weight: .bold))
-                        Text("아니오, 나가기")
+                        Text("아니오, 돌아가기")
                             .font(Theme.mono(11)).foregroundColor(Theme.textSecondary)
                         Spacer()
                         Image(systemName: "xmark.circle").font(.system(size: Theme.iconSize(12))).foregroundColor(Theme.textDim)
@@ -2352,7 +2769,10 @@ struct NewTabSheet: View {
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.3), lineWidth: 1)))
-                }.buttonStyle(.plain).keyboardShortcut(.escape)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.escape)
+                .accessibilityLabel("폴더 신뢰 확인 닫기")
             }.padding(.horizontal, 24).padding(.bottom, 20)
         }
         .frame(width: max(440, 440 * AppSettings.shared.fontSizeScale), height: max(340, 340 * AppSettings.shared.fontSizeScale))
@@ -2364,188 +2784,382 @@ struct NewTabSheet: View {
     private var sessionConfigView: some View {
         VStack(spacing: 0) {
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: 16) {
-                    // Header
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus.circle.fill").font(.system(size: Theme.iconSize(14))).foregroundColor(Theme.accent)
-                        Text("New Session").font(Theme.mono(13, weight: .semibold)).foregroundColor(Theme.textPrimary)
-                    }
-
-                    // Project info
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("PROJECT PATH").font(Theme.pixel).foregroundColor(Theme.textDim).tracking(1.5)
-                        HStack {
-                            TextField("/path/to/project", text: $projectPath).textFieldStyle(.roundedBorder).font(Theme.monoSmall)
-                            Button("Browse") {
-                                let p = NSOpenPanel(); p.canChooseFiles = false; p.canChooseDirectories = true
-                                if p.runModal() == .OK, let u = p.url {
-                                    projectPath = u.path
-                                    if projectName.isEmpty { projectName = u.lastPathComponent }
-                                }
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("PROJECT NAME").font(Theme.pixel).foregroundColor(Theme.textDim).tracking(1.5)
-                        TextField("e.g. my-project", text: $projectName).textFieldStyle(.roundedBorder).font(Theme.monoSmall)
-                    }
-
-                    // Model & Effort
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("MODEL").font(Theme.pixel).foregroundColor(Theme.textDim).tracking(1.5)
-                            HStack(spacing: 3) {
-                                ForEach(ClaudeModel.allCases) { m in
-                                    Button(action: { selectedModel = m }) {
-                                        Text("\(m.icon) \(m.displayName)")
-                                            .font(Theme.mono(9, weight: selectedModel == m ? .bold : .regular))
-                                            .foregroundColor(selectedModel == m ? Theme.textPrimary : Theme.textDim)
-                                            .padding(.horizontal, 8).padding(.vertical, 5)
-                                            .background(RoundedRectangle(cornerRadius: 5)
-                                                .fill(selectedModel == m ? Theme.accent.opacity(0.12) : Theme.bgSurface)
-                                                .overlay(RoundedRectangle(cornerRadius: 5)
-                                                    .stroke(selectedModel == m ? Theme.accent.opacity(0.4) : Theme.border.opacity(0.3), lineWidth: 1)))
-                                    }.buttonStyle(.plain)
-                                }
-                            }
-                        }
-
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("EFFORT").font(Theme.pixel).foregroundColor(Theme.textDim).tracking(1.5)
-                            HStack(spacing: 3) {
-                                ForEach(EffortLevel.allCases) { l in
-                                    Button(action: { effortLevel = l }) {
-                                        Text("\(l.icon)")
-                                            .font(.system(size: Theme.iconSize(10)))
-                                            .padding(.horizontal, 6).padding(.vertical, 5)
-                                            .background(RoundedRectangle(cornerRadius: 5)
-                                                .fill(effortLevel == l ? Theme.accent.opacity(0.12) : Theme.bgSurface)
-                                                .overlay(RoundedRectangle(cornerRadius: 5)
-                                                    .stroke(effortLevel == l ? Theme.accent.opacity(0.4) : Theme.border.opacity(0.3), lineWidth: 1)))
-                                    }.buttonStyle(.plain).help(l.rawValue.capitalized)
-                                }
-                            }
-                        }
-                    }
-
-                    // Permission mode
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("PERMISSION").font(Theme.pixel).foregroundColor(Theme.textDim).tracking(1.5)
-                        HStack(spacing: 3) {
-                            ForEach(PermissionMode.allCases) { m in
-                                Button(action: { permissionMode = m }) {
-                                    Text("\(m.icon) \(m.displayName)")
-                                        .font(Theme.mono(9, weight: permissionMode == m ? .bold : .regular))
-                                        .foregroundColor(permissionMode == m ? Theme.textPrimary : Theme.textDim)
-                                        .padding(.horizontal, 7).padding(.vertical, 5)
-                                        .background(RoundedRectangle(cornerRadius: 5)
-                                            .fill(permissionMode == m ? Theme.purple.opacity(0.1) : Theme.bgSurface)
-                                            .overlay(RoundedRectangle(cornerRadius: 5)
-                                                .stroke(permissionMode == m ? Theme.purple.opacity(0.4) : Theme.border.opacity(0.3), lineWidth: 1)))
-                                }.buttonStyle(.plain).help(m.desc)
-                            }
-                        }
-                    }
-
-                    // Terminal count
+                VStack(spacing: 18) {
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("TERMINALS").font(Theme.pixel).foregroundColor(Theme.textDim).tracking(1.5)
-                            Spacer()
-                            Text("\(terminalCount)개").font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.accent)
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: Theme.iconSize(16), weight: .bold))
+                                .foregroundColor(Theme.accent)
+                            Text("New Session")
+                                .font(Theme.mono(14, weight: .bold))
+                                .foregroundColor(Theme.textPrimary)
                         }
-                        HStack(spacing: 4) {
-                            ForEach([1, 2, 3, 4, 5], id: \.self) { n in
-                                Button(action: { withAnimation(.easeInOut(duration: 0.15)) { setTerminalCount(n) } }) {
-                                    VStack(spacing: 2) {
-                                        HStack(spacing: 1) {
-                                            ForEach(0..<n, id: \.self) { i in
-                                                let colorIdx = (manager.userVisibleTabCount + i) % Theme.workerColors.count
-                                                RoundedRectangle(cornerRadius: 1).fill(Theme.workerColors[colorIdx])
-                                                    .frame(width: n <= 3 ? 10 : 6, height: 14)
+                        Text("프로젝트 경로를 선택하고 실행 규칙만 정하면 바로 시작할 수 있습니다.")
+                            .font(Theme.mono(9))
+                            .foregroundColor(Theme.textDim)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .appPanelStyle(fill: Theme.bgCard.opacity(0.98), strokeOpacity: 0.22)
+
+                    configSection(title: "빠른 시작", subtitle: "최근 프로젝트와 마지막 설정을 바로 불러올 수 있습니다.") {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack(spacing: 8) {
+                                Button(action: { applyLastDraftIfAvailable() }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "clock.arrow.circlepath")
+                                        Text("마지막 설정 불러오기")
+                                    }
+                                    .font(Theme.mono(9, weight: .bold))
+                                    .appButtonSurface(tone: .neutral, compact: true)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(preferences.lastDraft == nil)
+                                .accessibilityLabel("마지막 세션 설정 불러오기")
+
+                                if !projectPath.isEmpty {
+                                    Button(action: {
+                                        preferences.toggleFavorite(projectName: resolvedProjectName, projectPath: projectPath)
+                                    }) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: isCurrentProjectFavorite ? "star.fill" : "star")
+                                            Text(isCurrentProjectFavorite ? "즐겨찾기됨" : "즐겨찾기")
+                                        }
+                                        .font(Theme.mono(9, weight: .bold))
+                                        .appButtonSurface(tone: .yellow, compact: true)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(isCurrentProjectFavorite ? "현재 프로젝트 즐겨찾기 해제" : "현재 프로젝트 즐겨찾기")
+                                }
+                            }
+
+                            optionGroup(title: "추천 프리셋") {
+                                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                                    ForEach(NewSessionPreset.allCases) { preset in
+                                        selectionChip(
+                                            title: preset.title,
+                                            subtitle: preset.subtitle,
+                                            symbol: preset.symbol,
+                                            tint: preset.tint,
+                                            selected: activePresetId == preset.id
+                                        ) {
+                                            withAnimation(.easeInOut(duration: 0.15)) {
+                                                activePresetId = preset.id
+                                            }
+                                            applyPreset(preset)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 사용자 저장 프리셋
+                            if !CustomPresetStore.shared.presets.isEmpty {
+                                optionGroup(title: "내 프리셋") {
+                                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                                        ForEach(CustomPresetStore.shared.presets) { preset in
+                                            selectionChip(
+                                                title: preset.name,
+                                                subtitle: "터미널 \(preset.draft.terminalCount) · \(preset.draft.selectedModel)",
+                                                symbol: preset.icon,
+                                                tint: preset.tintColor,
+                                                selected: activePresetId == "custom-\(preset.id)"
+                                            ) {
+                                                withAnimation(.easeInOut(duration: 0.15)) {
+                                                    activePresetId = "custom-\(preset.id)"
+                                                }
+                                                applyDraft(preset.draft)
+                                            }
+                                            .contextMenu {
+                                                Button(role: .destructive) {
+                                                    CustomPresetStore.shared.delete(preset)
+                                                } label: {
+                                                    Label("삭제", systemImage: "trash")
+                                                }
                                             }
                                         }
-                                        Text("\(n)").font(Theme.mono(9, weight: terminalCount == n ? .bold : .regular))
-                                            .foregroundColor(terminalCount == n ? Theme.accent : Theme.textDim)
-                                    }
-                                    .padding(.horizontal, 8).padding(.vertical, 6)
-                                    .background(RoundedRectangle(cornerRadius: 6)
-                                        .fill(terminalCount == n ? Theme.accent.opacity(0.1) : Theme.bgSurface)
-                                        .overlay(RoundedRectangle(cornerRadius: 6)
-                                            .stroke(terminalCount == n ? Theme.accent.opacity(0.4) : Theme.border.opacity(0.5), lineWidth: 1)))
-                                }.buttonStyle(.plain)
-                            }
-                        }
-
-                        if terminalCount > 1 {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("각 터미널에 보낼 작업 (선택)").font(Theme.mono(9)).foregroundColor(Theme.textDim)
-                                ForEach(tasks.indices, id: \.self) { i in
-                                    HStack(spacing: 6) {
-                                        let colorIdx = (manager.userVisibleTabCount + i) % Theme.workerColors.count
-                                        Circle().fill(Theme.workerColors[colorIdx]).frame(width: 8, height: 8)
-                                        Text("#\(i + 1)").font(Theme.mono(8, weight: .bold))
-                                            .foregroundColor(Theme.textDim).frame(width: 18)
-                                        TextField("작업 내용 (비워두면 빈 터미널)", text: $tasks[i])
-                                            .textFieldStyle(.roundedBorder).font(Theme.mono(10))
                                     }
                                 }
-                            }.padding(.top, 4)
+                            }
+
+                            if !favoriteProjects.isEmpty {
+                                optionGroup(title: "즐겨찾기 프로젝트") {
+                                    projectSuggestionScroller(projects: favoriteProjects)
+                                }
+                            }
+
+                            if !recentProjects.isEmpty {
+                                optionGroup(title: "최근 프로젝트") {
+                                    projectSuggestionScroller(projects: recentProjects)
+                                }
+                            }
                         }
                     }
 
-                    // ── 고급 옵션 토글 ──
-                    Button(action: { withAnimation(.easeInOut(duration: 0.2)) { showAdvanced.toggle() } }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: showAdvanced ? "chevron.down" : "chevron.right")
-                                .font(Theme.scaled(8, weight: .bold)).foregroundColor(Theme.textDim)
-                            Text("고급 옵션").font(Theme.mono(10, weight: .medium)).foregroundColor(Theme.textSecondary)
-                            Spacer()
-                            if hasAdvancedOptions {
-                                Text("설정됨").font(Theme.mono(8, weight: .bold)).foregroundColor(Theme.green)
-                                    .padding(.horizontal, 5).padding(.vertical, 2)
-                                    .background(Theme.green.opacity(0.1)).cornerRadius(3)
+                    configSection(title: "프로젝트", subtitle: "경로만 입력해도 세션을 만들 수 있습니다.") {
+                        VStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                sectionLabel("프로젝트 경로")
+                                HStack(spacing: 8) {
+                                    TextField("/path/to/project", text: $projectPath)
+                                        .textFieldStyle(.plain)
+                                        .font(Theme.monoSmall)
+                                        .appFieldStyle(emphasized: true)
+                                        .accessibilityLabel("프로젝트 경로")
+                                        .accessibilityHint("작업할 폴더 경로를 입력합니다")
+
+                                    Button("Browse") {
+                                        let p = NSOpenPanel(); p.canChooseFiles = false; p.canChooseDirectories = true
+                                        if p.runModal() == .OK, let u = p.url {
+                                            projectPath = u.path
+                                            if projectName.isEmpty { projectName = u.lastPathComponent }
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .font(Theme.mono(9, weight: .bold))
+                                    .appButtonSurface(tone: .neutral, compact: true)
+                                    .accessibilityLabel("프로젝트 폴더 찾기")
+                                }
+                                .onChange(of: projectPath) { _ in
+                                    pathError = nil
+                                }
+                                if let error = pathError {
+                                    Text(error)
+                                        .font(Theme.mono(8))
+                                        .foregroundColor(Theme.red)
+                                }
+                            }
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                sectionLabel("프로젝트 이름")
+                                TextField("e.g. my-project", text: $projectName)
+                                    .textFieldStyle(.plain)
+                                    .font(Theme.monoSmall)
+                                    .appFieldStyle()
+                                    .accessibilityLabel("프로젝트 이름")
                             }
                         }
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface.opacity(0.5))
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.border.opacity(0.3), lineWidth: 0.5)))
-                    }.buttonStyle(.plain)
+                    }
+
+                    configSection(title: "실행 설정", subtitle: "모델, 추론 강도, 권한 모드를 같은 규칙으로 정리했습니다.") {
+                        VStack(alignment: .leading, spacing: 14) {
+                            optionGroup(title: "모델") {
+                                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                                    ForEach(ClaudeModel.allCases) { model in
+                                        selectionChip(
+                                            title: model.displayName,
+                                            subtitle: model == .sonnet ? "기본 추천" : nil,
+                                            symbol: "circle.fill",
+                                            tint: modelTint(model),
+                                            selected: selectedModel == model
+                                        ) {
+                                            selectedModel = model
+                                        }
+                                    }
+                                }
+                            }
+
+                            optionGroup(title: "Effort") {
+                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                                    ForEach(EffortLevel.allCases) { level in
+                                        selectionChip(
+                                            title: effortTitle(level),
+                                            subtitle: nil,
+                                            symbol: effortSymbol(level),
+                                            tint: effortTint(level),
+                                            selected: effortLevel == level
+                                        ) {
+                                            effortLevel = level
+                                        }
+                                    }
+                                }
+                            }
+
+                            optionGroup(title: "권한") {
+                                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                                    ForEach(PermissionMode.allCases) { mode in
+                                        selectionChip(
+                                            title: mode.displayName,
+                                            subtitle: mode.desc,
+                                            symbol: permissionSymbol(mode),
+                                            tint: permissionTint(mode),
+                                            selected: permissionMode == mode
+                                        ) {
+                                            permissionMode = mode
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    configSection(title: "터미널", subtitle: "작업을 나눌 때만 여러 개를 선택하면 됩니다.") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                sectionLabel("터미널 수")
+                                Spacer()
+                                Text("\(terminalCount)개")
+                                    .font(Theme.mono(9, weight: .bold))
+                                    .foregroundColor(Theme.accent)
+                            }
+
+                            HStack(spacing: 8) {
+                                ForEach([1, 2, 3, 4, 5], id: \.self) { n in
+                                    Button(action: {
+                                        withAnimation(sheetAnimation) {
+                                            setTerminalCount(n)
+                                        }
+                                    }) {
+                                        VStack(spacing: 4) {
+                                            HStack(spacing: 2) {
+                                                ForEach(0..<n, id: \.self) { i in
+                                                    let colorIdx = (manager.userVisibleTabCount + i) % Theme.workerColors.count
+                                                    RoundedRectangle(cornerRadius: 2)
+                                                        .fill(Theme.workerColors[colorIdx])
+                                                        .frame(width: n <= 3 ? 10 : 7, height: 12)
+                                                }
+                                            }
+                                            Text("\(n)")
+                                                .font(Theme.mono(9, weight: terminalCount == n ? .bold : .medium))
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .fill(terminalCount == n ? Theme.accent.opacity(0.08) : Theme.bgSurface)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .stroke(terminalCount == n ? Theme.accent.opacity(0.24) : Theme.border.opacity(0.22), lineWidth: 1)
+                                        )
+                                        .foregroundColor(terminalCount == n ? Theme.accent : Theme.textSecondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("터미널 \(n)개")
+                                    .accessibilityValue(terminalCount == n ? "선택됨" : "선택 안 됨")
+                                }
+                            }
+
+                            if terminalCount > 1 {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("각 터미널에 보낼 작업")
+                                        .font(Theme.mono(9, weight: .medium))
+                                        .foregroundColor(Theme.textDim)
+                                    ForEach(tasks.indices, id: \.self) { i in
+                                        HStack(spacing: 8) {
+                                            let colorIdx = (manager.userVisibleTabCount + i) % Theme.workerColors.count
+                                            Circle().fill(Theme.workerColors[colorIdx]).frame(width: 8, height: 8)
+                                            Text("#\(i + 1)")
+                                                .font(Theme.mono(8, weight: .bold))
+                                                .foregroundColor(Theme.textDim)
+                                                .frame(width: 18)
+                                            TextField("작업 내용 (비워두면 빈 터미널)", text: $tasks[i])
+                                                .textFieldStyle(.plain)
+                                                .font(Theme.mono(10))
+                                                .appFieldStyle()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Button(action: {
+                        withAnimation(sheetAnimation) {
+                            showAdvanced.toggle()
+                        }
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: showAdvanced ? "chevron.down" : "chevron.right")
+                                .font(.system(size: Theme.iconSize(9), weight: .bold))
+                                .foregroundColor(Theme.textDim)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("고급 옵션")
+                                    .font(Theme.mono(10, weight: .bold))
+                                    .foregroundColor(Theme.textPrimary)
+                                Text("예산, 워크트리, 도구 제한 같은 세부 옵션")
+                                    .font(Theme.mono(8))
+                                    .foregroundColor(Theme.textDim)
+                            }
+                            Spacer()
+                            if hasAdvancedOptions {
+                                Text("설정됨")
+                                    .font(Theme.mono(8, weight: .bold))
+                                    .foregroundColor(Theme.green)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Capsule().fill(Theme.green.opacity(0.10)))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .appPanelStyle(padding: 14, radius: 14, fill: Theme.bgCard.opacity(0.96), strokeOpacity: 0.18, shadow: false)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(showAdvanced ? "고급 옵션 접기" : "고급 옵션 펼치기")
 
                     if showAdvanced {
                         advancedOptionsView
                     }
-                }.padding(24)
+                }
+                .padding(20)
             }
 
-            // Buttons
             HStack {
-                Button("Cancel") { dismiss() }.keyboardShortcut(.escape)
+                Button(action: { dismiss() }) {
+                    Text("Cancel")
+                        .font(Theme.mono(10, weight: .bold))
+                        .appButtonSurface(tone: .neutral)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.escape)
+                .accessibilityLabel("새 세션 생성 취소")
+
+                Button(action: { showSavePreset = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "square.and.arrow.down").font(.system(size: Theme.iconSize(9)))
+                        Text("프리셋 저장")
+                            .font(Theme.mono(9, weight: .bold))
+                    }
+                    .appButtonSurface(tone: .neutral, compact: true)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("현재 설정을 프리셋으로 저장")
+
                 Spacer()
                 Button(action: {
+                    if !projectPath.isEmpty {
+                        var isDir: ObjCBool = false
+                        if !FileManager.default.fileExists(atPath: projectPath, isDirectory: &isDir) || !isDir.boolValue {
+                            pathError = "경로가 존재하지 않거나 디렉토리가 아닙니다"
+                            return
+                        }
+                        pathError = nil
+                    }
                     if !projectPath.isEmpty && !trustConfirmed {
-                        trustConfirmed = false // trigger trust prompt
+                        withAnimation(sheetAnimation) {
+                            showTrustPrompt = true
+                        }
                     } else {
                         createSessions(); dismiss()
                     }
                 }) {
                     HStack(spacing: 4) {
-                        Image(systemName: "play.fill").font(.system(size: Theme.iconSize(9)))
+                        Image(systemName: "play.fill").font(.system(size: Theme.iconSize(9), weight: .bold))
                         Text(terminalCount > 1 ? "Create \(terminalCount)개" : "Create")
-                            .font(Theme.mono(11, weight: .medium))
+                            .font(Theme.mono(10, weight: .bold))
                     }
-                    .foregroundColor(Theme.textOnAccent).padding(.horizontal, 16).padding(.vertical, 6)
-                    .background(Theme.accent).cornerRadius(6)
+                    .appButtonSurface(tone: .accent, prominent: true)
                 }
                 .buttonStyle(.plain).keyboardShortcut(.return)
                 .disabled(projectPath.isEmpty && projectName.isEmpty)
+                .accessibilityLabel(terminalCount > 1 ? "세션 \(terminalCount)개 생성" : "세션 생성")
             }.padding(.horizontal, 24).padding(.vertical, 12)
-            .background(Theme.bgCard)
+            .background(Theme.bg)
             .overlay(Rectangle().fill(Theme.border).frame(height: 1), alignment: .top)
         }
-        .frame(width: max(500, 500 * AppSettings.shared.fontSizeScale), height: max(580, 580 * AppSettings.shared.fontSizeScale))
-        .background(Theme.bgCard)
+        .frame(width: max(560, 560 * AppSettings.shared.fontSizeScale), height: max(660, 660 * AppSettings.shared.fontSizeScale))
+        .background(Theme.bg)
+        .sheet(isPresented: $showSavePreset) {
+            SavePresetSheet(draft: currentDraftSnapshot())
+        }
     }
 
     // MARK: - 고급 옵션
@@ -2564,7 +3178,10 @@ struct NewTabSheet: View {
                     Text("시스템 프롬프트").font(Theme.mono(9, weight: .medium)).foregroundColor(Theme.textSecondary)
                 }
                 TextField("추가 지시사항 (--append-system-prompt)", text: $systemPrompt, axis: .vertical)
-                    .textFieldStyle(.roundedBorder).font(Theme.mono(10)).lineLimit(2...4)
+                    .textFieldStyle(.plain)
+                    .font(Theme.mono(10))
+                    .lineLimit(2...4)
+                    .appFieldStyle()
             }
 
             // 예산 제한
@@ -2575,7 +3192,10 @@ struct NewTabSheet: View {
                         Text("예산 한도 (USD)").font(Theme.mono(9, weight: .medium)).foregroundColor(Theme.textSecondary)
                     }
                     TextField("0 = 무제한", text: $maxBudget)
-                        .textFieldStyle(.roundedBorder).font(Theme.mono(10)).frame(width: 100)
+                        .textFieldStyle(.plain)
+                        .font(Theme.mono(10))
+                        .frame(width: 100)
+                        .appFieldStyle()
                 }
                 Spacer()
 
@@ -2607,7 +3227,9 @@ struct NewTabSheet: View {
                     Text("(쉼표 구분)").font(Theme.mono(8)).foregroundColor(Theme.textDim)
                 }
                 TextField("예: Bash,Read,Edit,Write", text: $allowedTools)
-                    .textFieldStyle(.roundedBorder).font(Theme.mono(10))
+                    .textFieldStyle(.plain)
+                    .font(Theme.mono(10))
+                    .appFieldStyle()
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -2617,7 +3239,9 @@ struct NewTabSheet: View {
                     Text("(쉼표 구분)").font(Theme.mono(8)).foregroundColor(Theme.textDim)
                 }
                 TextField("예: Bash(rm:*)", text: $disallowedTools)
-                    .textFieldStyle(.roundedBorder).font(Theme.mono(10))
+                    .textFieldStyle(.plain)
+                    .font(Theme.mono(10))
+                    .appFieldStyle()
             }
 
             // 추가 디렉토리
@@ -2628,20 +3252,27 @@ struct NewTabSheet: View {
                 }
                 HStack(spacing: 4) {
                     TextField("경로 추가", text: $additionalDir)
-                        .textFieldStyle(.roundedBorder).font(Theme.mono(10))
+                        .textFieldStyle(.plain)
+                        .font(Theme.mono(10))
+                        .appFieldStyle()
                     Button(action: {
                         let p = NSOpenPanel(); p.canChooseFiles = false; p.canChooseDirectories = true
                         if p.runModal() == .OK, let u = p.url { additionalDir = u.path }
                     }) {
                         Image(systemName: "folder").font(.system(size: Theme.iconSize(10))).foregroundColor(Theme.accent)
-                    }.buttonStyle(.plain)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("추가 디렉토리 선택")
                     Button(action: {
                         if !additionalDir.isEmpty {
                             additionalDirs.append(additionalDir); additionalDir = ""
                         }
                     }) {
                         Image(systemName: "plus.circle.fill").font(.system(size: Theme.iconSize(12))).foregroundColor(Theme.green)
-                    }.buttonStyle(.plain).disabled(additionalDir.isEmpty)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(additionalDir.isEmpty)
+                    .accessibilityLabel("추가 디렉토리 목록에 추가")
                 }
                 if !additionalDirs.isEmpty {
                     ForEach(additionalDirs.indices, id: \.self) { i in
@@ -2657,9 +3288,290 @@ struct NewTabSheet: View {
                 }
             }
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bgSurface.opacity(0.5))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border.opacity(0.3), lineWidth: 0.5)))
+        .appPanelStyle(padding: 16, radius: 14, fill: Theme.bgCard.opacity(0.96), strokeOpacity: 0.18, shadow: false)
+    }
+
+    private func configSection<Content: View>(
+        title: String,
+        subtitle: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(Theme.mono(11, weight: .bold))
+                    .foregroundColor(Theme.textPrimary)
+                Text(subtitle)
+                    .font(Theme.mono(8))
+                    .foregroundColor(Theme.textDim)
+            }
+
+            content()
+        }
+        .appPanelStyle(fill: Theme.bgCard.opacity(0.98), strokeOpacity: 0.22)
+    }
+
+    private func optionGroup<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel(title)
+            content()
+        }
+    }
+
+    private func sectionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(Theme.mono(9, weight: .bold))
+            .foregroundColor(Theme.textDim)
+    }
+
+    private func selectionChip(
+        title: String,
+        subtitle: String?,
+        symbol: String,
+        tint: Color,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: symbol)
+                    .font(.system(size: Theme.iconSize(10), weight: .semibold))
+                    .foregroundColor(tint)
+                    .frame(width: 18)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(Theme.mono(9, weight: .bold))
+                        .foregroundColor(selected ? Theme.textPrimary : Theme.textSecondary)
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(Theme.mono(7))
+                            .foregroundColor(Theme.textDim)
+                            .lineLimit(2)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: Theme.iconSize(10), weight: .bold))
+                        .foregroundColor(tint)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(selected ? tint.opacity(0.10) : Theme.bgSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(selected ? tint.opacity(0.24) : Theme.border.opacity(0.22), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(subtitle.map { "\(title), \($0)" } ?? title)
+        .accessibilityValue(selected ? "선택됨" : "선택 안 됨")
+        .accessibilityHint("이 설정을 선택합니다")
+    }
+
+    private func modelTint(_ model: ClaudeModel) -> Color {
+        switch model {
+        case .opus: return Theme.purple
+        case .sonnet: return Theme.accent
+        case .haiku: return Theme.green
+        }
+    }
+
+    private func effortTitle(_ level: EffortLevel) -> String {
+        switch level {
+        case .low: return "낮음"
+        case .medium: return "보통"
+        case .high: return "높음"
+        case .max: return "최대"
+        }
+    }
+
+    private func effortSymbol(_ level: EffortLevel) -> String {
+        switch level {
+        case .low: return "tortoise.fill"
+        case .medium: return "figure.walk"
+        case .high: return "figure.run"
+        case .max: return "flame.fill"
+        }
+    }
+
+    private func effortTint(_ level: EffortLevel) -> Color {
+        switch level {
+        case .low: return Theme.green
+        case .medium: return Theme.accent
+        case .high: return Theme.orange
+        case .max: return Theme.red
+        }
+    }
+
+    private func permissionSymbol(_ mode: PermissionMode) -> String {
+        switch mode {
+        case .acceptEdits: return "square.and.pencil"
+        case .bypassPermissions: return "bolt.fill"
+        case .auto: return "gearshape.2.fill"
+        case .defaultMode: return "shield.fill"
+        case .plan: return "list.bullet.clipboard.fill"
+        }
+    }
+
+    private func permissionTint(_ mode: PermissionMode) -> Color {
+        switch mode {
+        case .acceptEdits: return Theme.orange
+        case .bypassPermissions: return Theme.yellow
+        case .auto: return Theme.cyan
+        case .defaultMode: return Theme.textSecondary
+        case .plan: return Theme.purple
+        }
+    }
+
+    private var resolvedProjectName: String {
+        let trimmed = projectName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        if !projectPath.isEmpty { return (projectPath as NSString).lastPathComponent }
+        return ""
+    }
+
+    private func projectSuggestionScroller(projects: [NewSessionProjectRecord]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(projects) { project in
+                    Button(action: { applyProjectSuggestion(project) }) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Image(systemName: project.isFavorite ? "star.fill" : "folder.fill")
+                                    .font(.system(size: Theme.iconSize(9), weight: .semibold))
+                                    .foregroundColor(project.isFavorite ? Theme.yellow : Theme.accent)
+                                Text(project.name)
+                                    .font(Theme.mono(9, weight: .bold))
+                                    .foregroundColor(Theme.textPrimary)
+                                    .lineLimit(1)
+                            }
+                            Text(project.path)
+                                .font(Theme.mono(7))
+                                .foregroundColor(Theme.textDim)
+                                .lineLimit(1)
+                            Text(project.lastUsedAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(Theme.mono(7, weight: .medium))
+                                .foregroundColor(Theme.textDim)
+                        }
+                        .frame(width: 180, alignment: .leading)
+                        .padding(10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Theme.bgSurface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Theme.border.opacity(0.22), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(project.name) 프로젝트")
+                    .accessibilityValue(project.isFavorite ? "즐겨찾기" : "최근 사용")
+                    .accessibilityHint("이 프로젝트 정보를 입력 칸에 채웁니다")
+                }
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    private func applyProjectSuggestion(_ project: NewSessionProjectRecord) {
+        projectName = project.name
+        projectPath = project.path
+    }
+
+    private func applyPreset(_ preset: NewSessionPreset) {
+        switch preset {
+        case .balanced:
+            selectedModel = .sonnet
+            effortLevel = .medium
+            permissionMode = .bypassPermissions
+            setTerminalCount(1)
+            continueSession = false
+            useWorktree = false
+        case .planFirst:
+            selectedModel = .sonnet
+            effortLevel = .medium
+            permissionMode = .plan
+            setTerminalCount(1)
+            continueSession = false
+            useWorktree = false
+        case .safeReview:
+            selectedModel = .sonnet
+            effortLevel = .high
+            permissionMode = .defaultMode
+            setTerminalCount(1)
+            continueSession = true
+            useWorktree = false
+        case .parallelBuild:
+            selectedModel = .sonnet
+            effortLevel = .high
+            permissionMode = .bypassPermissions
+            setTerminalCount(3)
+            continueSession = false
+            useWorktree = true
+        }
+    }
+
+    private func applyCustomPreset(_ preset: CustomSessionPreset) {
+        applyDraft(preset.draft)
+    }
+
+    private func currentDraftSnapshot() -> NewSessionDraftSnapshot {
+        NewSessionDraftSnapshot(
+            selectedModel: selectedModel.rawValue,
+            effortLevel: effortLevel.rawValue,
+            permissionMode: permissionMode.rawValue,
+            terminalCount: terminalCount,
+            systemPrompt: systemPrompt,
+            maxBudget: maxBudget,
+            allowedTools: allowedTools,
+            disallowedTools: disallowedTools,
+            additionalDirs: additionalDirs,
+            continueSession: continueSession,
+            useWorktree: useWorktree
+        )
+    }
+
+    private func applyDraft(_ draft: NewSessionDraftSnapshot) {
+        if let model = ClaudeModel(rawValue: draft.selectedModel) {
+            selectedModel = model
+        }
+        if let level = EffortLevel(rawValue: draft.effortLevel) {
+            effortLevel = level
+        }
+        if let mode = PermissionMode(rawValue: draft.permissionMode) {
+            permissionMode = mode
+        }
+        setTerminalCount(max(1, min(5, draft.terminalCount)))
+        systemPrompt = draft.systemPrompt
+        maxBudget = draft.maxBudget
+        allowedTools = draft.allowedTools
+        disallowedTools = draft.disallowedTools
+        additionalDirs = draft.additionalDirs
+        continueSession = draft.continueSession
+        useWorktree = draft.useWorktree
+    }
+
+    private func applyLastDraftIfAvailable() {
+        guard let draft = preferences.lastDraft else { return }
+        applyDraft(draft)
+    }
+
+    private func bootstrapFromLastDraftIfNeeded() {
+        guard !didBootstrap else { return }
+        didBootstrap = true
+        if let draft = preferences.lastDraft {
+            applyDraft(draft)
+        }
     }
 
     private func setTerminalCount(_ n: Int) {
@@ -2681,6 +3593,12 @@ struct NewTabSheet: View {
         if launchCount < terminalCount {
             manager.notifyManualLaunchCapacity(requested: terminalCount)
         }
+
+        preferences.rememberLaunch(
+            projectName: name,
+            projectPath: path,
+            draft: currentDraftSnapshot()
+        )
 
         for i in 0..<launchCount {
             let prompt = i < tasks.count ? tasks[i].trimmingCharacters(in: .whitespaces) : ""
@@ -2707,299 +3625,89 @@ struct NewTabSheet: View {
 }
 
 // ═══════════════════════════════════════════════════════
-// MARK: - CLITerminalView (NSView 기반 진짜 터미널)
+// MARK: - CLITerminalView (SwiftTerm — 별도 파일 SwiftTermBridge.swift)
 // ═══════════════════════════════════════════════════════
 
-struct CLITerminalView: NSViewRepresentable {
+// ═══════════════════════════════════════════════════════
+// MARK: - Sleep Work Setup Sheet
+// ═══════════════════════════════════════════════════════
+
+struct SleepWorkSetupSheet: View {
     @ObservedObject var tab: TerminalTab
-    var fontSize: CGFloat
+    @Environment(\.dismiss) var dismiss
+    @State private var task = ""
+    @State private var budgetText = ""
 
-    func makeNSView(context: Context) -> CLITerminalHostView {
-        CLITerminalHostView(tab: tab, fontSize: fontSize)
-    }
-
-    func updateNSView(_ nsView: CLITerminalHostView, context: Context) {
-        nsView.refreshOutput()
-    }
-}
-
-/// NSTextView 서브클래스: 키보드 입력을 PTY로 전달
-class CLITerminalTextView: NSTextView {
-    weak var termTab: TerminalTab?
-
-    override var acceptsFirstResponder: Bool { true }
-    override func becomeFirstResponder() -> Bool { true }
-
-    override func keyDown(with event: NSEvent) {
-        guard let tab = termTab else { return }
-        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-
-        // Cmd+C → 텍스트 복사 (기본 동작)
-        if mods == .command && event.charactersIgnoringModifiers == "c" {
-            if selectedRange().length > 0 { super.keyDown(with: event); return }
-            // 선택 없으면 Ctrl+C로 처리
-            tab.sendRawSignal(3); return
-        }
-        // Cmd+V → 클립보드 붙여넣기 → PTY로 전송
-        if mods == .command && event.charactersIgnoringModifiers == "v" {
-            if let text = NSPasteboard.general.string(forType: .string) { tab.writeRawInput(text) }
-            return
-        }
-        // Cmd+A → 전체 선택 (기본 동작)
-        if mods == .command && event.charactersIgnoringModifiers == "a" {
-            super.keyDown(with: event); return
-        }
-
-        // Ctrl+키 → 제어 문자
-        if mods.contains(.control), let chars = event.charactersIgnoringModifiers?.lowercased(), let c = chars.first,
-           let ascii = c.asciiValue, ascii >= 0x61 && ascii <= 0x7A {
-            tab.sendRawSignal(UInt8(ascii - 0x60)); return
-        }
-
-        // 특수 키
-        switch event.keyCode {
-        case 36:  tab.writeRawInput("\r")           // Return
-        case 51:  tab.writeRawInput("\u{7f}")       // Backspace
-        case 53:  tab.writeRawInput("\u{1b}")       // Escape
-        case 48:  tab.writeRawInput("\t")           // Tab
-        case 123: tab.writeRawInput("\u{1b}[D")     // Left
-        case 124: tab.writeRawInput("\u{1b}[C")     // Right
-        case 125: tab.writeRawInput("\u{1b}[B")     // Down
-        case 126: tab.writeRawInput("\u{1b}[A")     // Up
-        case 115: tab.writeRawInput("\u{1b}[H")     // Home
-        case 119: tab.writeRawInput("\u{1b}[F")     // End
-        case 116: tab.writeRawInput("\u{1b}[5~")    // Page Up
-        case 121: tab.writeRawInput("\u{1b}[6~")    // Page Down
-        case 117: tab.writeRawInput("\u{1b}[3~")    // Delete
-        default:
-            if let chars = event.characters, !chars.isEmpty {
-                tab.writeRawInput(chars)
-            }
-        }
-    }
-
-    // 기본 텍스트 삽입 비활성화 (keyDown에서 직접 처리)
-    override func insertText(_ string: Any, replacementRange: NSRange) {}
-    override func insertNewline(_ sender: Any?) {}
-    override func insertTab(_ sender: Any?) {}
-    override func deleteBackward(_ sender: Any?) {}
-
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if mods == .command {
-            switch event.charactersIgnoringModifiers {
-            case "c": if selectedRange().length > 0 { return super.performKeyEquivalent(with: event) }
-                      termTab?.sendRawSignal(3); return true
-            case "v": if let text = NSPasteboard.general.string(forType: .string) { termTab?.writeRawInput(text) }; return true
-            case "a": return super.performKeyEquivalent(with: event)
-            default: break
-            }
-        }
-        return false
-    }
-}
-
-/// 터미널 호스트 뷰: NSScrollView + CLITerminalTextView
-class CLITerminalHostView: NSView {
-    let scrollView: NSScrollView
-    let textView: CLITerminalTextView
-    weak var tab: TerminalTab?
-    var fontSize: CGFloat
-    private var lastRenderedLength = 0
-
-    private static let termBg = NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1)
-
-    init(tab: TerminalTab, fontSize: CGFloat) {
-        self.tab = tab
-        self.fontSize = fontSize
-        self.scrollView = NSScrollView()
-        self.textView = CLITerminalTextView()
-        super.init(frame: .zero)
-        setupViews()
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    private func setupViews() {
-        let bg = Self.termBg
-        textView.termTab = tab
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.backgroundColor = bg
-        textView.insertionPointColor = NSColor(red: 0.3, green: 0.9, blue: 0.4, alpha: 1)
-        textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        textView.textColor = NSColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1)
-        textView.isRichText = true
-        textView.textContainerInset = NSSize(width: 8, height: 8)
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticTextReplacementEnabled = false
-        textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.isAutomaticTextCompletionEnabled = false
-        textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.lineFragmentPadding = 4
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-
-        scrollView.documentView = textView
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.backgroundColor = bg
-        scrollView.drawsBackground = true
-        scrollView.scrollerStyle = .overlay
-        scrollView.autoresizingMask = [.width, .height]
-
-        addSubview(scrollView)
-
-        // 자동 포커스
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.window?.makeFirstResponder(self?.textView)
-        }
-    }
-
-    override func layout() {
-        super.layout()
-        scrollView.frame = bounds
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        super.mouseDown(with: event)
-        window?.makeFirstResponder(textView)
-    }
-
-    func refreshOutput() {
-        guard let tab = tab else { return }
-        let output = tab.rawOutput
-        guard output.count != lastRenderedLength else { return }
-        lastRenderedLength = output.count
-
-        let attributed = CLIAnsiParser.parse(output, fontSize: fontSize)
-        textView.textStorage?.setAttributedString(attributed)
-
-        // 자동 스크롤
-        DispatchQueue.main.async { [weak self] in
-            guard let tv = self?.textView else { return }
-            tv.scrollToEndOfDocument(nil)
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════════
-// MARK: - ANSI 컬러 파서
-// ═══════════════════════════════════════════════════════
-
-enum CLIAnsiParser {
-    static let defaultFg = NSColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1)
-
-    static let colorMap: [Int: NSColor] = [
-        30: NSColor(red: 0.2,  green: 0.2,  blue: 0.2,  alpha: 1),
-        31: NSColor(red: 0.9,  green: 0.3,  blue: 0.3,  alpha: 1),
-        32: NSColor(red: 0.3,  green: 0.85, blue: 0.4,  alpha: 1),
-        33: NSColor(red: 0.9,  green: 0.8,  blue: 0.3,  alpha: 1),
-        34: NSColor(red: 0.4,  green: 0.5,  blue: 0.9,  alpha: 1),
-        35: NSColor(red: 0.8,  green: 0.4,  blue: 0.8,  alpha: 1),
-        36: NSColor(red: 0.3,  green: 0.8,  blue: 0.85, alpha: 1),
-        37: NSColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1),
-        90: NSColor(red: 0.5,  green: 0.5,  blue: 0.5,  alpha: 1),
-        91: NSColor(red: 1.0,  green: 0.4,  blue: 0.4,  alpha: 1),
-        92: NSColor(red: 0.4,  green: 1.0,  blue: 0.5,  alpha: 1),
-        93: NSColor(red: 1.0,  green: 0.9,  blue: 0.4,  alpha: 1),
-        94: NSColor(red: 0.5,  green: 0.6,  blue: 1.0,  alpha: 1),
-        95: NSColor(red: 0.9,  green: 0.5,  blue: 0.9,  alpha: 1),
-        96: NSColor(red: 0.4,  green: 0.9,  blue: 1.0,  alpha: 1),
-        97: NSColor.white,
-    ]
-
-    static func parse(_ text: String, fontSize: CGFloat) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        let defaultFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        let boldFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .bold)
-
-        var fg = defaultFg
-        var bold = false
-        var dim = false
-        var buffer = ""
-
-        func flush() {
-            guard !buffer.isEmpty else { return }
-            let font = bold ? boldFont : defaultFont
-            var color = fg
-            if dim { color = color.withAlphaComponent(0.6) }
-            result.append(NSAttributedString(string: buffer, attributes: [
-                .font: font, .foregroundColor: color,
-            ]))
-            buffer = ""
-        }
-
-        var i = text.startIndex
-        while i < text.endIndex {
-            let c = text[i]
-
-            guard c == "\u{1B}" else {
-                buffer.append(c)
-                i = text.index(after: i)
-                continue
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Image(systemName: "moon.zzz.fill").font(.system(size: 20)).foregroundColor(Theme.purple)
+                Text("슬립워크").font(Theme.mono(14, weight: .bold)).foregroundColor(Theme.textPrimary)
+                Spacer()
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 16)).foregroundColor(Theme.textDim)
+                }.buttonStyle(.plain)
             }
 
-            flush()
-            let next = text.index(after: i)
-            guard next < text.endIndex else { i = next; break }
+            Text("작업을 맡기고 자리를 비워보세요. 설정한 토큰 예산 내에서 자동으로 진행합니다.")
+                .font(Theme.mono(10))
+                .foregroundColor(Theme.textSecondary)
 
-            switch text[next] {
-            case "[":
-                // CSI sequence
-                var j = text.index(after: next)
-                var params = ""
-                while j < text.endIndex {
-                    let jc = text[j]
-                    if jc >= "@" && jc <= "~" {
-                        if jc == "m" { // SGR — 색상/스타일
-                            let codes = params.split(separator: ";").compactMap { Int($0) }
-                            for code in codes.isEmpty ? [0] : codes {
-                                switch code {
-                                case 0:  fg = defaultFg; bold = false; dim = false
-                                case 1:  bold = true
-                                case 2:  dim = true
-                                case 22: bold = false; dim = false
-                                case 39: fg = defaultFg
-                                default: if let c = colorMap[code] { fg = c }
-                                }
-                            }
-                        }
-                        // 다른 CSI 명령은 무시 (커서 이동 등)
-                        i = text.index(after: j); break
+            VStack(alignment: .leading, spacing: 6) {
+                Text("작업 내용").font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.textDim)
+                TextEditor(text: $task)
+                    .font(Theme.monoNormal)
+                    .frame(minHeight: 80)
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border, lineWidth: 1))
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("토큰 예산 (예: 10k, 50k, 100k)").font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.textDim)
+                TextField("10k", text: $budgetText)
+                    .font(Theme.monoNormal)
+                    .textFieldStyle(.plain)
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border, lineWidth: 1))
+                Text("비워두면 무제한. 예산의 2배 초과 시 자동 중단됩니다.")
+                    .font(Theme.mono(8)).foregroundColor(Theme.textDim)
+            }
+
+            HStack {
+                Spacer()
+                Button(action: {
+                    let budget = parseBudget(budgetText)
+                    tab.startSleepWork(task: task, tokenBudget: budget)
+                    dismiss()
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "moon.zzz.fill").font(.system(size: 12))
+                        Text("슬립워크 시작").font(Theme.mono(11, weight: .bold))
                     }
-                    params.append(jc)
-                    j = text.index(after: j)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.purple))
                 }
-                if j >= text.endIndex { i = j; break }
-
-            case "]":
-                // OSC sequence — BEL 또는 ST까지 스킵
-                var j = text.index(after: next)
-                while j < text.endIndex {
-                    if text[j] == "\u{07}" { j = text.index(after: j); break }
-                    if text[j] == "\u{1B}" {
-                        let jn = text.index(after: j)
-                        if jn < text.endIndex && text[jn] == "\\" { j = text.index(after: jn); break }
-                    }
-                    j = text.index(after: j)
-                }
-                i = j
-
-            default:
-                // 기타 2바이트 ESC 시퀀스 스킵
-                i = text.index(after: next)
+                .buttonStyle(.plain)
+                .disabled(task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
+        .padding(20)
+        .frame(width: 420)
+        .background(Theme.bgCard)
+    }
 
-        flush()
-
-        // BEL 등 제어 문자 최종 정리
-        let cleaned = NSMutableAttributedString(attributedString: result)
-        let fullRange = NSRange(location: 0, length: cleaned.length)
-        cleaned.mutableString.replaceOccurrences(of: "\u{07}", with: "", range: fullRange)
-        return cleaned
+    private func parseBudget(_ text: String) -> Int? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.hasSuffix("m") {
+            if let n = Double(trimmed.dropLast()) { return Int(n * 1_000_000) }
+        }
+        if trimmed.hasSuffix("k") {
+            if let n = Double(trimmed.dropLast()) { return Int(n * 1000) }
+        }
+        return Int(trimmed)
     }
 }

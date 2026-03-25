@@ -14,8 +14,15 @@ struct OfficeSpriteRenderer {
     let selectedTabId: String?
     let selectedFurnitureId: String?
     var chromeScreenshots: [String: CGImage] = [:]  // tabId → chrome screenshot
+
+    // Sprite cache: keyed by color combination string → CharacterSpriteSet
+    private static var spriteCache: [String: CharacterSpriteSet] = [:]
     private let windowColumns: Set<Int> = [3, 4, 5, 9, 10, 11, 15, 16, 17, 21, 22, 23, 31, 32, 33, 37, 38, 39]
     private var palette: OfficeScenePalette { OfficeScenePalette(theme: theme, dark: dark) }
+
+    // Static background cache: avoids redrawing ~8000 floor/wall draw calls every frame
+    private static var cachedBackgroundImage: CGImage?
+    private static var cachedBackgroundKey: String = ""
     static func usesStaticBackgroundCache(for type: FurnitureType) -> Bool {
         let cachedTypes: Set<FurnitureType> = [.rug, .bookshelf, .whiteboard, .pictureFrame, .clock]
         return cachedTypes.contains(type)
@@ -29,15 +36,74 @@ struct OfficeSpriteRenderer {
     }
 
     func renderStaticBackground(context: GraphicsContext, scale: CGFloat, offsetX: CGFloat, offsetY: CGFloat) {
+        let cacheKey = "\(theme.rawValue)-\(dark)-\(map.cols)-\(map.rows)"
+
+        if cacheKey == Self.cachedBackgroundKey, let cached = Self.cachedBackgroundImage {
+            var ctx = context
+            ctx.translateBy(x: offsetX, y: offsetY)
+            ctx.scaleBy(x: scale, y: scale)
+            ctx.draw(
+                Image(decorative: cached, scale: 1),
+                in: CGRect(x: 0, y: 0,
+                           width: CGFloat(map.cols) * 16,
+                           height: CGFloat(map.rows) * 16)
+            )
+            return
+        }
+
+        // Cache miss — draw normally into the live context
         var ctx = context
         ctx.translateBy(x: offsetX, y: offsetY)
         ctx.scaleBy(x: scale, y: scale)
-
         drawBackdrop(ctx)
         drawFloorTiles(ctx)
         drawWindowLight(ctx)
         drawWalls(ctx)
         drawCachedStaticFurniture(ctx)
+
+        // Generate cached CGImage for subsequent frames
+        Task { @MainActor in
+            Self.generateBackgroundCache(map: map, dark: dark, theme: theme, cacheKey: cacheKey)
+        }
+    }
+
+    /// Renders the static background into an offscreen CGImage via ImageRenderer.
+    @MainActor private static func generateBackgroundCache(map: OfficeMap, dark: Bool, theme: BackgroundTheme, cacheKey: String) {
+        let size = CGSize(
+            width: CGFloat(map.cols) * 16,
+            height: CGFloat(map.rows) * 16
+        )
+        let snapshotView = Canvas { context, _ in
+            let renderer = OfficeSpriteRenderer(
+                map: map,
+                characters: [:],
+                tabs: [],
+                frame: 0,
+                dark: dark,
+                theme: theme,
+                selectedTabId: nil,
+                selectedFurnitureId: nil
+            )
+            renderer.drawBackdrop(context)
+            renderer.drawFloorTiles(context)
+            renderer.drawWindowLight(context)
+            renderer.drawWalls(context)
+            renderer.drawCachedStaticFurniture(context)
+        }
+        .frame(width: size.width, height: size.height)
+
+        let imageRenderer = ImageRenderer(content: snapshotView)
+        imageRenderer.scale = 1
+        if let cgImage = imageRenderer.cgImage {
+            cachedBackgroundImage = cgImage
+            cachedBackgroundKey = cacheKey
+        }
+    }
+
+    /// Invalidates the static background cache (call when theme or layout changes).
+    static func invalidateBackgroundCache() {
+        cachedBackgroundImage = nil
+        cachedBackgroundKey = ""
     }
 
     func renderDynamicLayers(context: GraphicsContext, scale: CGFloat, offsetX: CGFloat, offsetY: CGFloat) {
@@ -320,7 +386,7 @@ struct OfficeSpriteRenderer {
         ctx.fill(Path(CGRect(x: x + 3, y: y + 3.5, width: ts - 6, height: ts - 8)),
                  with: .color(Color(hex: skyHex)))
         ctx.fill(Path(CGRect(x: x + 3, y: y + 3.5, width: ts - 6, height: 1.6)),
-                 with: .color(Color(hex: theme.skyColors.top).opacity(0.75)))
+                 with: .color(Color(hex: theme.skyColors.top).opacity(0.9)))
         ctx.fill(Path(CGRect(x: x + ts / 2 - 0.4, y: y + 3.5, width: 0.8, height: ts - 8)),
                  with: .color(Color(hex: frameHex).opacity(0.7)))
         ctx.fill(Path(CGRect(x: x + 3, y: y + ts / 2, width: ts - 6, height: 0.7)),
@@ -477,11 +543,11 @@ struct OfficeSpriteRenderer {
                 // Top bevel highlight (painted crown)
                 let wallHi = palette.wallHighlight
                 ctx.fill(Path(CGRect(x: x, y: y, width: ts, height: 2.5)),
-                         with: .color(Color(hex: wallHi).opacity(0.55)))
+                         with: .color(Color(hex: wallHi).opacity(0.7)))
                 // Very top bright line
                 let wallBright = palette.wallBright
                 ctx.fill(Path(CGRect(x: x, y: y, width: ts, height: 1)),
-                         with: .color(Color(hex: wallBright).opacity(0.4)))
+                         with: .color(Color(hex: wallBright).opacity(0.6)))
 
                 // Bottom trim and baseboard
                 let wallLo = palette.wallShadow
@@ -501,18 +567,7 @@ struct OfficeSpriteRenderer {
                 ctx.fill(Path(CGRect(x: x + ts - 1, y: y, width: 1, height: ts)),
                          with: .color(Color(hex: wallLo).opacity(0.25)))
 
-                // Wallpaper/plaster texture
-                let seed = (r * 7 + c * 13) & 0xFF
-                if seed % 3 == 0 {
-                    let brickHex = palette.wallShadow
-                    ctx.fill(Path(CGRect(x: x + 2, y: y + 5, width: ts - 4, height: 0.4)),
-                             with: .color(Color(hex: brickHex).opacity(0.2)))
-                }
-                if seed % 3 == 1 {
-                    let brickHex = palette.wallShadow
-                    ctx.fill(Path(CGRect(x: x + 4, y: y + 10, width: ts - 8, height: 0.4)),
-                             with: .color(Color(hex: brickHex).opacity(0.2)))
-                }
+                // Wallpaper subtle texture (reduced for clarity)
                 if hasWindow {
                     drawWallWindow(ctx, x: x, y: y, ts: ts)
                 }
@@ -589,6 +644,7 @@ struct OfficeSpriteRenderer {
 
     private func drawZSortedScene(_ ctx: GraphicsContext) {
         var drawables: [ZDrawable] = []
+        drawables.reserveCapacity(map.furniture.count + characters.count)
 
         // Furniture
         for f in map.furniture {
@@ -1479,7 +1535,17 @@ struct OfficeSpriteRenderer {
         let skinHex = rosterCharacter.map { normalizedHex($0.skinTone) } ?? "FFD5B8"
         let pantsHex = rosterCharacter.map { normalizedHex($0.pantsColor) } ?? (abs(hashVal) % 2 == 0 ? "3A4050" : "4A3558")
 
-        let sprites = SpriteCatalog.buildCharacterSprites(skin: skinHex, hair: hairHex, shirt: shirtHex, pants: pantsHex)
+        let cacheKey = "\(skinHex)|\(hairHex)|\(shirtHex)|\(pantsHex)"
+        let sprites: CharacterSpriteSet
+        if let cached = Self.spriteCache[cacheKey] {
+            sprites = cached
+        } else {
+            // 캐시 크기 제한 (최대 50개 — 초과 시 전체 클리어)
+            if Self.spriteCache.count > 50 { Self.spriteCache.removeAll() }
+            let built = SpriteCatalog.buildCharacterSprites(skin: skinHex, hair: hairHex, shirt: shirtHex, pants: pantsHex)
+            Self.spriteCache[cacheKey] = built
+            sprites = built
+        }
 
         let sprite: SpriteData
         switch state {
@@ -1583,10 +1649,10 @@ struct OfficeSpriteRenderer {
                 let hex = sprite[y][x]
                 guard !hex.isEmpty else { continue }
                 ctx.fill(Path(CGRect(
-                    x: drawX + CGFloat(x) + rowShiftX,
-                    y: drawY + CGFloat(y) + rowShiftY,
-                    width: 1,
-                    height: 1
+                    x: snappedPixel(drawX + CGFloat(x) + rowShiftX),
+                    y: snappedPixel(drawY + CGFloat(y) + rowShiftY),
+                    width: 1.15,
+                    height: 1.15
                 )),
                          with: .color(Color(hex: hex)))
             }
@@ -2037,24 +2103,78 @@ struct OfficeSpriteRenderer {
 
         func socialBubble(for char: OfficeCharacter) -> (text: String, color: Color)? {
             guard let mode = char.socialMode, char.socialTimer > 0 else { return nil }
+            let phase = (frame / 10) % 4  // 4 phases for more variety
+            let role = char.socialRole
 
-            let pulse = max(0, (frame / 10) % 3)
+            let texts: [String]
+            let color: Color
+
             switch mode {
             case .greeting:
-                let primary = char.socialRole == 0 ? ["yo", "hi", "yo"] : ["hi", "yo", "ok"]
-                return (primary[pulse % primary.count], Theme.orange)
+                color = Color(hex: "5AF078")
+                texts = role == 0
+                    ? ["(ᵔᴥᵔ)", "ヾ(＾∇＾)", "(◕‿◕)", "\\(^o^)/"]
+                    : ["(＾▽＾)", "(｡◕‿◕｡)", "٩(◕‿◕)۶", "(づ｡◕‿‿◕｡)づ"]
             case .chatting:
-                let primary = char.socialRole == 0 ? ["ha", "mm", "ha"] : ["ok", "ha", "++"]
-                return (primary[pulse % primary.count], Theme.green)
+                color = Color(hex: "78C8F0")
+                texts = role == 0
+                    ? ["(¬‿¬)", "ᕕ(ᐛ)ᕗ", "(•̀ᴗ•́)و", "( ˘▽˘)っ♨"]
+                    : ["(≧◡≦)", "ʕ•ᴥ•ʔ", "(ノ◕ヮ◕)ノ*:・゚✧", "٩(♡ε♡)۶"]
             case .brainstorming:
-                let primary = char.socialRole == 0 ? ["hm", "?", "!"] : ["ok", "!", "hm"]
-                return (primary[pulse % primary.count], Theme.purple)
+                color = Color(hex: "C88AF0")
+                texts = role == 0
+                    ? ["(°ロ°)☝", "φ(._.)メモメモ", "(⌐■_■)", "ᕦ(ò_óˇ)ᕤ"]
+                    : ["(☞ﾟ∀ﾟ)☞", "( •_•)>⌐■-■", "ψ(._. )>", "(╯°□°)╯︵ ┻━┻"]
             case .coffee:
-                let primary = char.socialRole == 0 ? ["sip", "ah", "sip"] : ["++", "sip", "ok"]
-                return (primary[pulse % primary.count], Theme.cyan)
+                color = Color(hex: "E8A850")
+                texts = role == 0
+                    ? ["☕(◕‿◕)", "(っ˘ω˘c)♨", "( ˘⌣˘)❤☕", "✧(˘⌣˘)☕"]
+                    : ["(⊃˘▽˘)⊃☕", "☕(⌐■_■)", "(´∀`)♨", "☕✧(◕‿◕✿)"]
             case .highFive:
-                let primary = char.socialRole == 0 ? ["o/", "^^", "yo"] : ["\\o", "^^", "ok"]
-                return (primary[pulse % primary.count], Theme.yellow)
+                color = Color(hex: "F0D850")
+                texts = role == 0
+                    ? ["(つ≧▽≦)つ", "ε=ε=(ノ≧∇≦)ノ", "(ﾉ◕ヮ◕)ﾉ*:・゚✧", "( •̀ω•́ )σ"]
+                    : ["⊂(◉‿◉)つ", "(ノ´ヮ`)ノ*: ・゚✧", "\\(★ω★)/", "(*≧▽≦)ノシ"]
+            }
+
+            let text = texts[phase % texts.count]
+            return (text, color)
+        }
+
+        func activityReaction(for char: OfficeCharacter) -> (text: String, color: Color)? {
+            // Only show occasionally (every ~3 seconds, visible for 1.5 seconds)
+            let cycle = frame % Int(OfficeConstants.fps * 6)
+            guard cycle < Int(OfficeConstants.fps * 1.5) else { return nil }
+
+            // Don't show during social interactions
+            guard char.socialMode == nil else { return nil }
+
+            switch char.state {
+            case .typing:
+                let reactions = ["⌨️ ᵗᵃᵏ", "✎ ᵗᵃᵏ", "⌨ᵈᵃᵈᵃ", "⚡⌨⚡"]
+                return (reactions[frame / 18 % reactions.count], Color(hex: "5AF078"))
+            case .reading:
+                let reactions = ["📖...", "🔍hmm", "👀...", "📄✓"]
+                return (reactions[frame / 18 % reactions.count], Color(hex: "78C8F0"))
+            case .searching:
+                let reactions = ["🔎...", "🧐?", "🗂️...", "📂✓"]
+                return (reactions[frame / 18 % reactions.count], Color(hex: "C88AF0"))
+            case .error:
+                let reactions = ["(╥_╥)", "╥﹏╥", "(ᗒᗣᗕ)՞", "( ꈨ◞ )"]
+                return (reactions[frame / 12 % reactions.count], Color(hex: "F06868"))
+            case .thinking:
+                let reactions = ["(·_·)", "🤔...", "φ(._.)", "(ᵕ≀ᵕ)"]
+                return (reactions[frame / 24 % reactions.count], Color(hex: "E8A850"))
+            case .celebrating:
+                let reactions = ["🎉✧", "\\(ᵔᵕᵔ)/", "٩(◕‿◕)۶", "★彡"]
+                return (reactions[frame / 12 % reactions.count], Color(hex: "F0D850"))
+            case .sittingIdle:
+                // Only idle characters sometimes show reactions (rarely)
+                guard (frame / 36 + char.tileCol * 7) % 20 == 0 else { return nil }
+                let reactions = ["(¬_¬)", "(-_-) zzZ", "(˘ω˘)", "( ˙꒳˙ )"]
+                return (reactions[(frame / 36 + char.tileCol) % reactions.count], Color(hex: "8690a4"))
+            default:
+                return nil
             }
         }
 
@@ -2196,7 +2316,7 @@ struct OfficeSpriteRenderer {
             let bubbleText: String?
             let iconColor: Color
             let isSelected = selectedTabId == char.tabId
-            let socialOverlay = socialBubble(for: char)
+            let socialOverlay = socialBubble(for: char) ?? activityReaction(for: char)
 
             if let socialOverlay {
                 bubbleText = socialOverlay.text
@@ -2232,15 +2352,15 @@ struct OfficeSpriteRenderer {
 
             if let text = bubbleText {
                 let bg = dark ? Color(hex: "1A2030") : Color.white
-                let bw: CGFloat = max(16, CGFloat(text.count)*5+8)
+                let bw: CGFloat = max(20, CGFloat(text.count)*6+10)
                 let bbx = bx - bw/2
                 var tail = Path()
-                tail.move(to: CGPoint(x: bx-2, y: by+11)); tail.addLine(to: CGPoint(x: bx, y: by+14)); tail.addLine(to: CGPoint(x: bx+2, y: by+11))
+                tail.move(to: CGPoint(x: bx-2, y: by+13)); tail.addLine(to: CGPoint(x: bx, y: by+16)); tail.addLine(to: CGPoint(x: bx+2, y: by+13))
                 ctx.fill(tail, with: .color(bg))
-                ctx.fill(Path(roundedRect: CGRect(x: bbx, y: by, width: bw, height: 11), cornerRadius: 3), with: .color(bg))
-                ctx.stroke(Path(roundedRect: CGRect(x: bbx, y: by, width: bw, height: 11), cornerRadius: 3), with: .color(iconColor.opacity(0.3)), lineWidth: 0.5)
+                ctx.fill(Path(roundedRect: CGRect(x: bbx, y: by, width: bw, height: 13), cornerRadius: 3), with: .color(bg))
+                ctx.stroke(Path(roundedRect: CGRect(x: bbx, y: by, width: bw, height: 13), cornerRadius: 3), with: .color(iconColor.opacity(0.3)), lineWidth: 0.5)
                 ctx.draw(Text(text).font(.system(size: 6, weight: .bold, design: .monospaced)).foregroundColor(iconColor),
-                         at: CGPoint(x: bx, y: by+5.5))
+                         at: CGPoint(x: bx, y: by+6.5))
             }
 
             drawHighFiveSparkIfNeeded(for: char)
@@ -2258,7 +2378,7 @@ struct OfficeSpriteRenderer {
                !(badge.label == "DONE" && !tab.officeParallelTasks.isEmpty) {
                 let badgeWidth = max(18, CGFloat(badge.label.count) * 4.4 + 8)
                 let hasTopProjectBadge = tab.automationSourceTabId == nil && char.usesSeatPose
-                let badgeY: CGFloat = (bubbleText != nil || hasTopProjectBadge || !tab.officeParallelTasks.isEmpty) ? by + 13 : by + 2
+                let badgeY: CGFloat = (bubbleText != nil || hasTopProjectBadge || !tab.officeParallelTasks.isEmpty) ? by + 15 : by + 2
                 let badgeX: CGFloat = (bubbleText != nil || hasTopProjectBadge || !tab.officeParallelTasks.isEmpty) ? bx - badgeWidth / 2 : bx + 9
                 let badgeRect = CGRect(x: badgeX, y: badgeY, width: badgeWidth, height: 9)
                 ctx.fill(Path(roundedRect: badgeRect, cornerRadius: 2.5),
@@ -2298,12 +2418,7 @@ struct OfficeSpriteRenderer {
             }
         }
 
-        // Zone labels
-        for (t, x, y) in [("OFFICE", 14*16, 2.3*16), ("PANTRY", 35*16, 2.3*16), ("MEETING", 35*16, 12.3*16)] as [(String, CGFloat, CGFloat)] {
-            ctx.draw(Text(t).font(.system(size: 7, weight: .heavy, design: .monospaced))
-                .foregroundColor((dark ? Color.white : Color.black).opacity(palette.labelOpacity)),
-                     at: CGPoint(x: x, y: y))
-        }
+        // Zone labels removed for cleaner look
     }
 
     private func projectTint(for tab: TerminalTab) -> Color {

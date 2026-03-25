@@ -8,8 +8,14 @@ class SessionManager: ObservableObject {
     @Published var tabs: [TerminalTab] = []
     @Published var activeTabId: String?
     @Published var showNewTabSheet: Bool = false
+    @Published var showSessionSearch: Bool = false
+    @Published var searchQuery: String = ""
     @Published var groups: [SessionGroup] = []
-    @Published var selectedGroupPath: String? = nil  // nil = 전체 보기
+    @Published var selectedGroupPath: String? = nil {  // nil = 전체 보기
+        didSet {
+            UserDefaults.standard.set(selectedGroupPath ?? "", forKey: "workman.selectedGroupPath")
+        }
+    }
     @Published var focusSingleTab: Bool = false       // 개별 워커 포커스
     @Published private(set) var availableReportCount: Int = 0
     @Published private(set) var totalTokensUsed: Int = 0
@@ -72,6 +78,57 @@ class SessionManager: ObservableObject {
     private var reportRefreshToken = UUID()
     private var isAppActive = true
 
+    // MARK: - Session Search
+
+    struct SearchResult: Identifiable {
+        let id = UUID()
+        let tabId: String
+        let tabName: String
+        let projectPath: String
+        let blockId: UUID
+        let blockContent: String
+        let blockType: StreamBlock.BlockType
+        let timestamp: Date
+        let matchRange: Range<String.Index>
+    }
+
+    var searchResults: [SearchResult] {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return [] }
+
+        var results: [SearchResult] = []
+        for tab in userVisibleTabs {
+            let tabName = tab.projectName.isEmpty ? tab.workerName : tab.projectName
+            for block in tab.blocks {
+                let content = block.content
+                guard !content.isEmpty else { continue }
+                let lowered = content.lowercased()
+                if let range = lowered.range(of: query) {
+                    results.append(SearchResult(
+                        tabId: tab.id,
+                        tabName: tabName,
+                        projectPath: tab.projectPath,
+                        blockId: block.id,
+                        blockContent: content,
+                        blockType: block.blockType,
+                        timestamp: block.timestamp,
+                        matchRange: range
+                    ))
+                }
+            }
+        }
+        return results
+    }
+
+    func navigateToSearchResult(_ result: SearchResult) {
+        selectTab(result.tabId)
+        // Post notification so TerminalAreaView can scroll to the block
+        NotificationCenter.default.post(
+            name: .workmanScrollToBlock,
+            object: result.blockId
+        )
+    }
+
     var activeTab: TerminalTab? {
         guard let activeTabId,
               let tab = tabs.first(where: { $0.id == activeTabId }) else {
@@ -119,6 +176,12 @@ class SessionManager: ObservableObject {
             }
         ]
         scheduleAvailableReportCountRefresh()
+
+        // Restore persisted selectedGroupPath
+        let storedPath = UserDefaults.standard.string(forKey: "workman.selectedGroupPath") ?? ""
+        if !storedPath.isEmpty {
+            selectedGroupPath = storedPath
+        }
 
         // 30초마다 자동 저장 (강제 종료 대비)
         autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
@@ -186,6 +249,11 @@ class SessionManager: ObservableObject {
         cachedAvailableReports.removeAll()
         cachedAvailableReportsSignature = nil
         cachedAvailableReportsAt = 0
+    }
+
+    func invalidateReportCache() {
+        invalidateAvailableReportsCache()
+        objectWillChange.send()
     }
 
     // MARK: - Auto Detect on Launch
@@ -1737,6 +1805,7 @@ class SessionManager: ObservableObject {
     // Feature 4: 세션 복원 (이전 기록에서 경로 로드 - 같은 프로젝트 여러 탭 지원)
     func restoreSessions() {
         let saved = SessionStore.shared.load()
+            .sorted { ($0.tabOrder ?? Int.max) < ($1.tabOrder ?? Int.max) }
         var interruptedSessions: [SavedSession] = []
         var recoveryBundles: [URL] = []
 

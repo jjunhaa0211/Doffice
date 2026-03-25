@@ -29,8 +29,8 @@ struct WorkManApp: App {
         .defaultSize(width: 900, height: 600)
         .commands {
             CommandGroup(after: .toolbar) {
-                Button("Refresh Sessions") {
-                    NotificationCenter.default.post(name: .workmanRefresh, object: nil)
+                Button("Restart Session") {
+                    NotificationCenter.default.post(name: .workmanRestartSession, object: nil)
                 }
                 .keyboardShortcut("r", modifiers: .command)
             }
@@ -48,10 +48,56 @@ struct WorkManApp: App {
 
                 Divider()
 
+                Button("Next Tab") {
+                    NotificationCenter.default.post(name: .workmanNextTab, object: nil)
+                }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
+
+                Button("Previous Tab") {
+                    NotificationCenter.default.post(name: .workmanPreviousTab, object: nil)
+                }
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+
+                Divider()
+
+                Button("Cancel Processing") {
+                    NotificationCenter.default.post(name: .workmanCancelProcessing, object: nil)
+                }
+                .keyboardShortcut(".", modifiers: .command)
+
+                Button("Clear Terminal") {
+                    NotificationCenter.default.post(name: .workmanClearTerminal, object: nil)
+                }
+                .keyboardShortcut("k", modifiers: .command)
+
+                Button("Command Palette") {
+                    NotificationCenter.default.post(name: .workmanCommandPalette, object: nil)
+                }
+                .keyboardShortcut("p", modifiers: .command)
+
+                Button("Action Center") {
+                    NotificationCenter.default.post(name: .workmanActionCenter, object: nil)
+                }
+                .keyboardShortcut("j", modifiers: .command)
+
+                Divider()
+
                 Button("Toggle Split View") {
                     NotificationCenter.default.post(name: .workmanToggleSplit, object: nil)
                 }
                 .keyboardShortcut("\\", modifiers: .command)
+
+                Button("Toggle Office View") {
+                    NotificationCenter.default.post(name: .workmanToggleOffice, object: nil)
+                }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+
+                Button("Toggle Terminal View") {
+                    NotificationCenter.default.post(name: .workmanToggleTerminal, object: nil)
+                }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+
+                Divider()
 
                 Button("Export Session Log") {
                     NotificationCenter.default.post(name: .workmanExportLog, object: nil)
@@ -78,10 +124,20 @@ extension Notification.Name {
     static let workmanSelectTab = Notification.Name("workmanSelectTab")
     static let workmanToggleSplit = Notification.Name("workmanToggleSplit")
     static let workmanExportLog = Notification.Name("workmanExportLog")
+    static let workmanRestartSession = Notification.Name("workmanRestartSession")
+    static let workmanNextTab = Notification.Name("workmanNextTab")
+    static let workmanPreviousTab = Notification.Name("workmanPreviousTab")
+    static let workmanCancelProcessing = Notification.Name("workmanCancelProcessing")
+    static let workmanClearTerminal = Notification.Name("workmanClearTerminal")
+    static let workmanToggleOffice = Notification.Name("workmanToggleOffice")
+    static let workmanToggleTerminal = Notification.Name("workmanToggleTerminal")
     static let workmanClaudeNotInstalled = Notification.Name("workmanClaudeNotInstalled")
     static let workmanTabCycleCompleted = Notification.Name("workmanTabCycleCompleted")
     static let workmanRoleNotice = Notification.Name("workmanRoleNotice")
     static let workmanSessionStoreDidChange = Notification.Name("workmanSessionStoreDidChange")
+    static let workmanScrollToBlock = Notification.Name("workmanScrollToBlock")
+    static let workmanCommandPalette = Notification.Name("workmanCommandPalette")
+    static let workmanActionCenter = Notification.Name("workmanActionCenter")
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -91,12 +147,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         menuBarManager.setup()
 
+        // 글로벌 크래시 핸들러 — 예기치 않은 종료 시 세션 자동 저장
+        setupCrashRecovery()
+
         // Claude 설치 확인
         ClaudeInstallChecker.shared.check()
         if ClaudeInstallChecker.shared.isInstalled {
             print("[WorkMan] Claude Code \(ClaudeInstallChecker.shared.version) found at \(ClaudeInstallChecker.shared.path)")
         } else {
             print("[WorkMan] ⚠️ Claude Code not installed")
+        }
+    }
+
+    private func setupCrashRecovery() {
+        // SIGTERM, SIGINT 등 시그널 수신 시 세션 저장
+        let signals: [Int32] = [SIGTERM, SIGINT, SIGHUP]
+        for sig in signals {
+            signal(sig) { _ in
+                SessionManager.shared.saveSessions(immediately: true)
+                exit(0)
+            }
+        }
+
+        // NSException (Objective-C 예외) 핸들러
+        NSSetUncaughtExceptionHandler { exception in
+            print("[WorkMan] ⚠️ Uncaught exception: \(exception.name) — \(exception.reason ?? "unknown")")
+            SessionManager.shared.saveSessions(immediately: true)
         }
     }
 

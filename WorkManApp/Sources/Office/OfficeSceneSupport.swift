@@ -344,6 +344,7 @@ final class OfficeSceneStore: ObservableObject {
     @Published var backgroundSnapshot: CGImage?
 
     @Published var frame: Int = 0
+    @Published var needsRedraw: Bool = false
     var chromeScreenshots: [String: CGImage] = [:]  // Canvas가 frame 타이머로 읽으므로 @Published 불필요
 
     private var lastAdvanceTime: TimeInterval = 0
@@ -368,16 +369,25 @@ final class OfficeSceneStore: ObservableObject {
         self.controller = OfficeCharacterController(map: officeMap)
     }
 
-    func advance(with tabs: [TerminalTab], activeTabId: String?, focusMode: Bool) {
+    func advance(with tabs: [TerminalTab], activeTabId: String?, focusMode: Bool, fps: Double = OfficeConstants.fps) {
         let now = Date().timeIntervalSinceReferenceDate
-        if now - lastAdvanceTime < (0.6 / OfficeConstants.fps) {
+        let effectiveFPS = max(fps, 1)
+        if now - lastAdvanceTime < (0.6 / effectiveFPS) {
             return
         }
         lastAdvanceTime = now
+        let prevCharacters = controller.characters
         frame += 1
         syncCharactersIfNeeded(with: tabs)
-        controller.tick(deltaTime: 1.0 / OfficeConstants.fps)
+        controller.tick(deltaTime: 1.0 / effectiveFPS)
         updateCamera(activeTabId: activeTabId, focusMode: focusMode)
+        // Mark redraw needed if any character state actually changed
+        let changed = prevCharacters.count != controller.characters.count ||
+            prevCharacters.contains { id, ch in
+                guard let newCh = controller.characters[id] else { return true }
+                return ch.pixelX != newCh.pixelX || ch.pixelY != newCh.pixelY || ch.frame != newCh.frame
+            }
+        needsRedraw = changed
     }
 
     func refreshLayout(with tabs: [TerminalTab]) {
@@ -550,6 +560,7 @@ final class OfficeSceneStore: ObservableObject {
         backgroundSnapshot = nil
         backgroundSnapshotSignature = nil
         isPreparingBackgroundSnapshot = false
+        OfficeSpriteRenderer.invalidateBackgroundCache()
     }
 
     private func staticBackgroundSignature(theme: BackgroundTheme, dark: Bool) -> Int {

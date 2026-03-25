@@ -6,6 +6,7 @@ import SwiftUI
 
 class OfficeCharacterController: ObservableObject {
     @Published var characters: [String: OfficeCharacter] = [:]
+    @Published var celebrationTimer: Double = 0
     let map: OfficeMap
     private let registry = CharacterRegistry.shared
     private var walkableTiles: [TileCoord] = []
@@ -456,9 +457,18 @@ class OfficeCharacterController: ObservableObject {
 
     // MARK: - Tick
 
+    func triggerCelebration() {
+        celebrationTimer = 5.0  // 5 seconds of celebration
+    }
+
     func tick(deltaTime: Double) {
         socialEventCooldown = max(0, socialEventCooldown - deltaTime)
         socialScanCooldown = max(0, socialScanCooldown - deltaTime)
+
+        // Celebration countdown
+        if celebrationTimer > 0 {
+            celebrationTimer -= deltaTime
+        }
 
         for (id, var ch) in characters {
             ch.frameTimer += deltaTime
@@ -548,9 +558,7 @@ class OfficeCharacterController: ObservableObject {
 
     // MARK: - Walking
 
-    private func snapPixel(_ value: CGFloat) -> CGFloat {
-        value.rounded(.toNearestOrAwayFromZero)
-    }
+    private func snapPixel(_ value: CGFloat) -> CGFloat { value }
 
     private func advanceWalking(_ ch: inout OfficeCharacter, target: TileCoord, dt: Double) {
         guard !ch.path.isEmpty else {
@@ -565,7 +573,7 @@ class OfficeCharacterController: ObservableObject {
         let dy = ty - ch.pixelY
         let dist = sqrt(dx * dx + dy * dy)
         let rawStep = OfficeConstants.walkSpeed * CGFloat(dt)
-        let step = max(1, rawStep.rounded(.down))
+        let step = max(0.5, rawStep)
         let previousX = ch.pixelX
         let previousY = ch.pixelY
 

@@ -746,7 +746,7 @@ struct CharacterCollectionView: View {
     @State private var showPipeline = false
 
     let columns = [
-        GridItem(.adaptive(minimum: 200, maximum: 240), spacing: 12, alignment: .top)
+        GridItem(.adaptive(minimum: 240, maximum: 320), spacing: 12, alignment: .top)
     ]
 
     private var filteredHired: [WorkerCharacter] {
@@ -792,14 +792,18 @@ struct CharacterCollectionView: View {
             .padding(.horizontal, 20).padding(.vertical, 14)
             .background(Theme.bgCard)
 
-            // Species filter row
+            // Species filter row – compact wrapping grid
+            let allSpecies = WorkerCharacter.Species.allCases
+            let speciesWithCount: [(sp: WorkerCharacter.Species?, label: String, count: Int)] =
+                [(nil, "All", registry.allCharacters.count)] +
+                allSpecies.map { sp in (sp as WorkerCharacter.Species?, speciesFilterEmoji(sp), registry.allCharacters.filter { $0.species == sp }.count) }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
-                    speciesFilter(nil, label: "All")
-                    ForEach(WorkerCharacter.Species.allCases, id: \.rawValue) { sp in
-                        speciesFilter(sp, label: speciesFilterEmoji(sp))
+                    ForEach(Array(speciesWithCount.enumerated()), id: \.offset) { _, item in
+                        speciesChip(species: item.sp, emoji: item.label, count: item.count)
                     }
-                }.padding(.horizontal, 16).padding(.vertical, 8)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
             }
             .background(Theme.bgSurface.opacity(0.3))
 
@@ -922,34 +926,25 @@ struct CharacterCollectionView: View {
         .frame(minWidth: 920, minHeight: 720)
     }
 
-    private func speciesFilter(_ species: WorkerCharacter.Species?, label: String) -> some View {
+    private func speciesChip(species: WorkerCharacter.Species?, emoji: String, count: Int) -> some View {
         let active = selectedSpecies == species
-        let count: Int = {
-            if species == nil { return registry.allCharacters.count }
-            return registry.allCharacters.filter { $0.species == species }.count
-        }()
-
         return Button(action: { withAnimation(.easeInOut(duration: 0.15)) { selectedSpecies = species } }) {
-            VStack(spacing: 2) {
-                Text(label)
-                    .font(species == nil ? Theme.mono(9, weight: active ? .bold : .medium) : .system(size: 16))
-                    .frame(height: 20)
-                Text(species?.rawValue ?? "전체")
-                    .font(Theme.mono(7, weight: .medium))
-                    .foregroundColor(active ? Theme.accent : Theme.textDim)
-                    .lineLimit(1)
+            HStack(spacing: 3) {
+                Text(emoji)
+                    .font(species == nil ? Theme.mono(8, weight: active ? .bold : .medium) : .system(size: 13))
                 Text("\(count)")
-                    .font(Theme.mono(7, weight: .bold))
-                    .foregroundColor(active ? Theme.accent : Theme.textDim.opacity(0.5))
+                    .font(Theme.mono(8, weight: .bold))
+                    .foregroundColor(active ? Theme.accent : Theme.textDim.opacity(0.6))
             }
-            .frame(width: 48, height: 50)
-            .clipped()
+            .padding(.horizontal, 7).padding(.vertical, 4)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(active ? Theme.accent.opacity(0.1) : Theme.bgCard.opacity(0.5))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(active ? Theme.accent.opacity(0.4) : Theme.border.opacity(0.15), lineWidth: active ? 1.5 : 0.5))
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(active ? Theme.accent.opacity(0.12) : Theme.bgCard.opacity(0.5))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(active ? Theme.accent.opacity(0.4) : Theme.border.opacity(0.15), lineWidth: active ? 1.5 : 0.5))
             )
-        }.buttonStyle(.plain)
+        }
+        .buttonStyle(.plain)
+        .help(species?.rawValue ?? "전체")
     }
 
     private func speciesFilterEmoji(_ sp: WorkerCharacter.Species) -> String {
@@ -1036,134 +1031,6 @@ struct CharacterCollectionView: View {
     }
 }
 
-// MARK: - Character List Row
-
-struct CharacterListRow: View {
-    let character: WorkerCharacter
-    let isHired: Bool
-    @Binding var editingId: String?
-    @Binding var editName: String
-    @ObservedObject private var registry = CharacterRegistry.shared
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 2).fill(Color(hex: character.shirtColor)).frame(width: 4, height: 20)
-                Text(character.species.rawValue).font(Theme.scaled(10))
-                if editingId == character.id {
-                    TextField("이름", text: $editName)
-                        .textFieldStyle(.roundedBorder).font(Theme.mono(10)).frame(width: 80)
-                        .onSubmit { registry.rename(character.id, to: editName); editingId = nil }
-                } else {
-                    Text(character.name).font(Theme.mono(10, weight: .semibold)).foregroundColor(Theme.textPrimary)
-                        .onTapGesture(count: 2) { editName = character.name; editingId = character.id }
-                }
-                Text(character.archetype).font(Theme.mono(8)).foregroundColor(Theme.textDim)
-                Spacer()
-                if isHired {
-                    roleMenu
-                    vacationButton
-                    Button(action: { registry.fire(character.id) }) {
-                        Text("해고").font(Theme.mono(8, weight: .medium)).foregroundColor(Theme.red)
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Theme.red.opacity(0.1)).cornerRadius(4)
-                    }.buttonStyle(.plain)
-                } else {
-                    Button(action: { registry.hire(character.id) }) {
-                        Text("고용").font(Theme.mono(8, weight: .bold)).foregroundColor(Theme.green)
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Theme.green.opacity(0.1)).cornerRadius(4)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!registry.canHire(character.id))
-                    .opacity(registry.canHire(character.id) ? 1 : 0.45)
-                }
-            }
-
-            HStack(spacing: 6) {
-                Label(character.jobRole.displayName, systemImage: character.jobRole.icon)
-                    .font(Theme.mono(8, weight: .semibold))
-                    .foregroundColor(roleTint)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(roleTint.opacity(0.1))
-                    .cornerRadius(5)
-
-                if character.isOnVacation {
-                    Text("휴가 중")
-                        .font(Theme.mono(8, weight: .bold))
-                        .foregroundColor(Theme.orange)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(Theme.orange.opacity(0.1))
-                        .cornerRadius(5)
-                }
-
-                Text(character.jobRole.relationshipHint)
-                    .font(Theme.mono(8))
-                    .foregroundColor(Theme.textDim)
-
-                if character.jobRole.usesExtraTokensWarning {
-                    Spacer()
-                    Text("추가 토큰 사용 가능")
-                        .font(Theme.mono(8, weight: .bold))
-                        .foregroundColor(Theme.yellow)
-                }
-            }
-        }
-        .padding(.horizontal, 8).padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 6).fill(isHired ? Theme.bgSelected.opacity(0.5) : Theme.bgSurface.opacity(0.3)))
-    }
-
-    private var roleMenu: some View {
-        Menu {
-            ForEach(WorkerJob.allCases) { role in
-                Button {
-                    registry.setJobRole(role, for: character.id)
-                } label: {
-                    Label(role.displayName, systemImage: role.icon)
-                }
-            }
-        } label: {
-            Label(character.jobRole.shortLabel, systemImage: character.jobRole.icon)
-                .font(Theme.mono(8, weight: .bold))
-                .foregroundColor(roleTint)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(roleTint.opacity(0.12))
-                .cornerRadius(5)
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-    }
-
-    private var vacationButton: some View {
-        Button(action: { registry.setVacation(!character.isOnVacation, for: character.id) }) {
-            Text(character.isOnVacation ? "복귀" : "휴가")
-                .font(Theme.mono(8, weight: .medium))
-                .foregroundColor(character.isOnVacation ? Theme.green : Theme.orange)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background((character.isOnVacation ? Theme.green : Theme.orange).opacity(0.1))
-                .cornerRadius(4)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var roleTint: Color {
-        switch character.jobRole {
-        case .developer: return Theme.accent
-        case .qa: return Theme.green
-        case .reporter: return Theme.purple
-        case .boss: return Theme.orange
-        case .planner: return Theme.cyan
-        case .reviewer: return Theme.yellow
-        case .designer: return Theme.pink
-        case .sre: return Theme.red
-        }
-    }
-}
-
 // MARK: - Character Card
 
 struct CharacterCard: View {
@@ -1226,7 +1093,7 @@ struct CharacterCard: View {
                     }
 
                     Text(character.archetype)
-                        .font(Theme.mono(7)).foregroundColor(Theme.textDim).lineLimit(1)
+                        .font(Theme.mono(7)).foregroundColor(Theme.textDim).lineLimit(2).fixedSize(horizontal: false, vertical: true)
 
                     // Role badge - full width with no truncation
                     Menu {
@@ -1265,15 +1132,27 @@ struct CharacterCard: View {
             if isHired {
                 HStack(spacing: 6) {
                     Button(action: { registry.setVacation(!character.isOnVacation, for: character.id) }) {
-                        Text(character.isOnVacation ? "복귀" : "휴가")
-                            .font(Theme.mono(8, weight: .medium))
-                            .foregroundColor(character.isOnVacation ? Theme.green : Theme.textDim)
+                        Text(character.isOnVacation ? "업무 복귀" : "휴가")
+                            .font(Theme.mono(9, weight: .bold))
+                            .foregroundColor(character.isOnVacation ? Theme.green : Theme.orange)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 7)
+                            .background(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .fill((character.isOnVacation ? Theme.green : Theme.orange).opacity(0.08))
+                            )
                     }.buttonStyle(.plain)
 
-                    Spacer()
-
                     Button(action: { registry.fire(character.id) }) {
-                        Text("해고").font(Theme.mono(8, weight: .medium)).foregroundColor(Theme.red.opacity(0.7))
+                        Text("해고")
+                            .font(Theme.mono(9, weight: .bold))
+                            .foregroundColor(Theme.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 7)
+                            .background(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .fill(Theme.red.opacity(0.08))
+                            )
                     }.buttonStyle(.plain)
                 }
             } else {
@@ -1282,8 +1161,8 @@ struct CharacterCard: View {
                         .font(Theme.mono(9, weight: .bold))
                         .foregroundColor(Theme.green)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.green.opacity(0.08)))
+                        .padding(.vertical, 7)
+                        .background(RoundedRectangle(cornerRadius: 7).fill(Theme.green.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
                 .disabled(!registry.canHire(character.id))
@@ -1766,5 +1645,52 @@ struct LockedCharacterCard: View {
                 Text("도전과제를 달성하면 잠금이 해제됩니다.")
             }
         }
+    }
+}
+
+// MARK: - FlowLayout (wrapping HStack)
+
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = computeRows(proposal: proposal, subviews: subviews)
+        var height: CGFloat = 0
+        for (i, row) in rows.enumerated() {
+            let rowHeight = row.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
+            height += rowHeight + (i > 0 ? spacing : 0)
+        }
+        return CGSize(width: proposal.width ?? 0, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = computeRows(proposal: proposal, subviews: subviews)
+        var y = bounds.minY
+        for row in rows {
+            let rowHeight = row.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
+            var x = bounds.minX
+            for view in row {
+                let size = view.sizeThatFits(.unspecified)
+                view.place(at: CGPoint(x: x, y: y + (rowHeight - size.height) / 2), proposal: .unspecified)
+                x += size.width + spacing
+            }
+            y += rowHeight + spacing
+        }
+    }
+
+    private func computeRows(proposal: ProposedViewSize, subviews: Subviews) -> [[LayoutSubviews.Element]] {
+        let maxWidth = proposal.width ?? .infinity
+        var rows: [[LayoutSubviews.Element]] = [[]]
+        var currentWidth: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if currentWidth + size.width > maxWidth && !rows[rows.count - 1].isEmpty {
+                rows.append([])
+                currentWidth = 0
+            }
+            rows[rows.count - 1].append(view)
+            currentWidth += size.width + spacing
+        }
+        return rows
     }
 }

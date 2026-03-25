@@ -275,12 +275,43 @@ class SessionGroup: ObservableObject, Identifiable {
 
 class ClaudeInstallChecker {
     static let shared = ClaudeInstallChecker()
-    var isInstalled = false, version = "", path = ""
+    var isInstalled = false, version = "", path = "", errorInfo = ""
     func check() {
+        // 1) Try `which claude` with our enriched PATH
         if let p = TerminalTab.shellSync("which claude 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines), !p.isEmpty {
             isInstalled = true; path = p
             version = TerminalTab.shellSync("claude --version 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return
         }
+
+        // 2) Check well-known installation paths directly
+        let home = NSHomeDirectory()
+        let knownPaths = [
+            "/usr/local/bin/claude",
+            "/opt/homebrew/bin/claude",
+            home + "/.npm-global/bin/claude",
+        ]
+        let allPATHDirs = TerminalTab.buildFullPATH().split(separator: ":").map(String.init)
+        let allCandidates = knownPaths + allPATHDirs.map { $0 + "/claude" }
+
+        for candidate in allCandidates {
+            if FileManager.default.isExecutableFile(atPath: candidate) {
+                isInstalled = true; path = candidate
+                version = TerminalTab.shellSync("\"\(candidate)\" --version 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return
+            }
+        }
+
+        // 3) Fallback: try login shell with timeout (prevents hang)
+        if let p = TerminalTab.shellSyncLoginWithTimeout("which claude 2>/dev/null", timeout: 3)?.trimmingCharacters(in: .whitespacesAndNewlines), !p.isEmpty {
+            isInstalled = true; path = p
+            version = TerminalTab.shellSyncLoginWithTimeout("\"\(p)\" --version 2>/dev/null", timeout: 3)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return
+        }
+
+        // Not found
+        isInstalled = false
+        errorInfo = "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"
     }
 }
 
@@ -748,6 +779,7 @@ class TerminalTab: ObservableObject, Identifiable {
     var characterId: String?  // CharacterRegistry 연동
     var automationSourceTabId: String?
     var automationReportPath: String?
+    var manualLaunch: Bool = false
     @Published var workflowSourceRequest: String = ""
     @Published var workflowPlanSummary: String = ""
     @Published var workflowDesignSummary: String = ""
@@ -984,7 +1016,7 @@ class TerminalTab: ObservableObject, Identifiable {
 
         let checker = ClaudeInstallChecker.shared; checker.check()
         if !checker.isInstalled {
-            appendBlock(.error(message: "Claude Code 미설치"), content: "npm install -g @anthropic-ai/claude-code")
+            appendBlock(.error(message: "Claude Code 미설치"), content: "Claude Code CLI를 찾을 수 없습니다.\n\n설치: npm install -g @anthropic-ai/claude-code\n\nPATH가 설정되지 않았을 수 있습니다.\n'which claude'로 경로를 확인하거나,\nnvm/fnm 사용 시 .zshrc 설정을 확인하세요.")
             startError = "Claude Code not installed"
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .workmanClaudeNotInstalled, object: nil)
@@ -1170,12 +1202,23 @@ class TerminalTab: ObservableObject, Identifiable {
             // 이미지 첨부 초기화
             DispatchQueue.main.async { self.attachedImages.removeAll() }
 
+            // 프로젝트 경로 존재 여부 확인
+            let projectDirURL = URL(fileURLWithPath: path)
+            if !FileManager.default.fileExists(atPath: projectDirURL.path) {
+                DispatchQueue.main.async {
+                    self.appendBlock(.error(message: "프로젝트 경로 없음"), content: "경로를 찾을 수 없습니다: \(path)\n디렉토리가 삭제되었거나 외장 드라이브가 분리되었을 수 있습니다.")
+                    self.isProcessing = false
+                    self.claudeActivity = .idle
+                }
+                return
+            }
+
             let proc = Process()
             let outPipe = Pipe()
             let errPipe = Pipe()
             proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
             proc.arguments = ["-f", "-c", cmd]
-            proc.currentDirectoryURL = URL(fileURLWithPath: path)
+            proc.currentDirectoryURL = projectDirURL
             var env = ProcessInfo.processInfo.environment
             env["PATH"] = Self.buildFullPATH()
             env["TERM"] = "dumb"; env["NO_COLOR"] = "1"
@@ -1253,8 +1296,9 @@ class TerminalTab: ObservableObject, Identifiable {
                 proc.waitUntilExit()
                 watchdog.cancel()
             } catch {
+                print("[도피스] 프로세스 실행 실패: \(error)")
                 DispatchQueue.main.async {
-                    self.appendBlock(.error(message: error.localizedDescription))
+                    self.appendBlock(.error(message: "프로세스 실행 실패"), content: "Claude Code를 실행할 수 없습니다.\n\n오류: \(error.localizedDescription)\n\nPATH가 올바르게 설정되어 있는지 확인하세요.\n터미널에서 'which claude'를 실행해 경로를 확인할 수 있습니다.")
                 }
             }
 
@@ -1805,8 +1849,8 @@ class TerminalTab: ObservableObject, Identifiable {
         let alreadyUsed = Set(parallelTasks.map(\.assigneeCharacterId))
         let available = pool.filter { !alreadyUsed.contains($0.id) }
         let effectivePool = available.isEmpty ? pool : available
-        let hash = abs(seed.hashValue)
-        return effectivePool[hash % effectivePool.count].id
+        let hash = Int(UInt(bitPattern: seed.hashValue) % UInt(effectivePool.count))
+        return effectivePool[hash].id
     }
 
     // MARK: - Block Management
@@ -2112,6 +2156,10 @@ class TerminalTab: ObservableObject, Identifiable {
         appendBlock(.status(message: "토큰 보호로 중단"), content: reason)
     }
 
+    /// Cached login shell PATH (resolved once at first call)
+    private static var cachedLoginPath: String?
+    private static var loginPathChecked = false
+
     /// GUI 앱에서도 claude CLI를 찾을 수 있도록 PATH를 완전히 구성
     static func buildFullPATH() -> String {
         let home = NSHomeDirectory()
@@ -2152,12 +2200,39 @@ class TerminalTab: ObservableObject, Identifiable {
         paths.append(home + "/Library/pnpm")
         paths.append(home + "/.local/share/pnpm")
 
+        // Bun runtime
+        paths.append(home + "/.bun/bin")
+
+        // Rust / Cargo
+        paths.append(home + "/.cargo/bin")
+
+        // Deno
+        paths.append(home + "/.deno/bin")
+
+        // MacPorts
+        paths.append("/opt/local/bin")
+
         // 일반적인 경로들
         paths += [home + "/.local/bin", home + "/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
 
         // 기존 PATH 유지
         let existing = ProcessInfo.processInfo.environment["PATH"] ?? ""
         if !existing.isEmpty { paths.append(existing) }
+
+        // Merge paths from login shell (async, non-blocking)
+        // 로그인 셸 PATH는 백그라운드에서 비동기로 가져옴 — 메인 스레드 블로킹 방지
+        if !loginPathChecked {
+            loginPathChecked = true
+            DispatchQueue.global(qos: .utility).async {
+                let result = shellSyncLoginWithTimeout("echo $PATH", timeout: 3)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let r = result, !r.isEmpty {
+                    cachedLoginPath = r
+                }
+            }
+        }
+        if let loginPath = cachedLoginPath, !loginPath.isEmpty {
+            paths.append(loginPath)
+        }
 
         return paths.joined(separator: ":")
     }
@@ -2173,6 +2248,30 @@ class TerminalTab: ObservableObject, Identifiable {
         do { try p.run(); p.waitUntilExit()
             let d = pipe.fileHandleForReading.readDataToEndOfFile()
             let o = String(data: d, encoding: .utf8); return o?.isEmpty == true ? nil : o
+        } catch { return nil }
+    }
+
+    /// Login shell with timeout — prevents hang if user's .zshrc is slow or broken
+    static func shellSyncLoginWithTimeout(_ command: String, timeout: TimeInterval = 3) -> String? {
+        let p = Process(); let pipe = Pipe()
+        p.standardOutput = pipe; p.standardError = FileHandle.nullDevice
+        p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        p.arguments = ["-l", "-c", command]
+        p.environment = ProcessInfo.processInfo.environment
+        do {
+            try p.run()
+            // 타임아웃: 지정 시간 내에 끝나지 않으면 강제 종료
+            let deadline = Date().addingTimeInterval(timeout)
+            while p.isRunning && Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+            if p.isRunning {
+                p.terminate()
+                return nil
+            }
+            let d = pipe.fileHandleForReading.readDataToEndOfFile()
+            let o = String(data: d, encoding: .utf8)
+            return o?.isEmpty == true ? nil : o
         } catch { return nil }
     }
 
@@ -2455,5 +2554,210 @@ extension TerminalTab {
             return "병렬 \(failed)개 실패"
         }
         return "병렬 작업 완료"
+    }
+}
+
+// ═══════════════════════════════════════════════════════
+// MARK: - Claude Usage Fetcher (실제 Claude 플랜 사용량 조회)
+// ═══════════════════════════════════════════════════════
+
+enum ClaudeUsageFetcher {
+    /// Claude CLI를 인터랙티브로 실행하여 /usage 결과를 캡처
+    static func fetch() -> String {
+        let claudePath = findClaude()
+        guard let claudePath else {
+            return "❌ Claude CLI를 찾을 수 없습니다.\nPATH가 설정되지 않았을 수 있습니다. 터미널에서 'which claude'로 확인하세요."
+        }
+
+        // claude 실행 파일 존재 확인
+        guard FileManager.default.fileExists(atPath: claudePath) else {
+            return "❌ Claude CLI 경로를 찾았지만 파일이 존재하지 않습니다: \(claudePath)\n재설치가 필요할 수 있습니다: npm install -g @anthropic-ai/claude-code"
+        }
+
+        var masterFD: Int32 = 0
+        var slaveFD: Int32 = 0
+        guard openpty(&masterFD, &slaveFD, nil, nil, nil) == 0 else {
+            return "❌ PTY를 열 수 없습니다."
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: claudePath)
+        process.environment = ProcessInfo.processInfo.environment
+        process.environment?["PATH"] = TerminalTab.buildFullPATH()
+        process.environment?["TERM"] = "xterm-256color"
+
+        let slaveHandle = FileHandle(fileDescriptor: slaveFD, closeOnDealloc: false)
+        process.standardInput = slaveHandle
+        process.standardOutput = slaveHandle
+        process.standardError = slaveHandle
+
+        do {
+            try process.launch()
+        } catch {
+            close(masterFD)
+            close(slaveFD)
+            return "❌ Claude 실행 실패: \(error.localizedDescription)"
+        }
+
+        close(slaveFD)
+
+        // 시작 대기 (Claude 초기화 완료까지)
+        Thread.sleep(forTimeInterval: 5.0)
+        drainFD(masterFD)
+
+        // /usage 전송 — 한 글자씩 보내서 자동완성 활성화 후 Enter
+        for ch in "/usage" {
+            let s = String(ch)
+            _ = s.withCString { ptr in Darwin.write(masterFD, ptr, 1) }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        Thread.sleep(forTimeInterval: 0.5)
+        // Enter로 자동완성 선택 확정
+        _ = Darwin.write(masterFD, "\r", 1)
+
+        // usage 데이터 로딩 대기
+        Thread.sleep(forTimeInterval: 6.0)
+
+        // 결과를 여러 번 읽기 (데이터가 점진적으로 올 수 있음)
+        var rawOutput = ""
+        for _ in 0..<3 {
+            let chunk = readAllAvailable(masterFD)
+            rawOutput += chunk
+            if rawOutput.contains("% used") || rawOutput.contains("Esc to cancel") { break }
+            Thread.sleep(forTimeInterval: 2.0)
+        }
+
+        // 정리 — Esc로 usage 화면 닫기
+        _ = Darwin.write(masterFD, "\u{1b}", 1)
+        Thread.sleep(forTimeInterval: 1.0)
+        // Ctrl+C + /exit
+        _ = Darwin.write(masterFD, "\u{03}", 1)
+        Thread.sleep(forTimeInterval: 0.5)
+        for ch in "/exit\r" {
+            let s = String(ch)
+            _ = s.withCString { ptr in Darwin.write(masterFD, ptr, 1) }
+            Thread.sleep(forTimeInterval: 0.03)
+        }
+        Thread.sleep(forTimeInterval: 1.0)
+        process.terminate()
+        close(masterFD)
+
+        return parseUsageOutput(rawOutput)
+    }
+
+    private static func findClaude() -> String? {
+        let paths = TerminalTab.buildFullPATH().split(separator: ":").map(String.init)
+        for dir in paths {
+            let p = dir + "/claude"
+            if FileManager.default.isExecutableFile(atPath: p) { return p }
+        }
+        return nil
+    }
+
+    private static func drainFD(_ fd: Int32) {
+        let flags = fcntl(fd, F_GETFL)
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+        var buf = [UInt8](repeating: 0, count: 4096)
+        while Darwin.read(fd, &buf, buf.count) > 0 {}
+        fcntl(fd, F_SETFL, flags)
+    }
+
+    private static func readAllAvailable(_ fd: Int32) -> String {
+        let flags = fcntl(fd, F_GETFL)
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+        var all = Data()
+        var buf = [UInt8](repeating: 0, count: 4096)
+        while true {
+            let n = Darwin.read(fd, &buf, buf.count)
+            if n <= 0 { break }
+            all.append(buf, count: n)
+        }
+        fcntl(fd, F_SETFL, flags)
+        return String(data: all, encoding: .utf8) ?? ""
+    }
+
+    private static func parseUsageOutput(_ raw: String) -> String {
+        // ANSI 이스케이프 코드 제거 (ESC = \u{1b})
+        var text = raw
+        text = text.replacingOccurrences(of: "\u{1b}\\[[0-9;]*[a-zA-Z]", with: "", options: .regularExpression)
+        text = text.replacingOccurrences(of: "\u{1b}\\[\\?[0-9;]*[a-zA-Z]", with: "", options: .regularExpression)
+        text = text.replacingOccurrences(of: "\u{1b}[=>]", with: "", options: .regularExpression)
+        text = text.replacingOccurrences(of: "\\][0-9];[^\u{07}]*\u{07}", with: "", options: .regularExpression)
+        // 추가 정리: 기타 제어 문자
+        text = text.replacingOccurrences(of: "\u{1b}", with: "")
+        text = text.replacingOccurrences(of: "\r", with: "")
+
+        // 핵심 데이터 추출
+        var sections: [(title: String, percent: String, resetInfo: String)] = []
+
+        // "Current session" ~ "XX% used"
+        let patterns: [(key: String, label: String)] = [
+            ("Current session", "📊 현재 세션"),
+            ("Current week (all models)", "📊 이번 주 (전체 모델)"),
+            ("Current week (Sonnet only)", "📊 이번 주 (Sonnet 전용)"),
+            ("Current week (Opus only)", "📊 이번 주 (Opus 전용)"),
+        ]
+
+        for (key, label) in patterns {
+            if text.contains(key) {
+                // Find percentage
+                let percentPattern = key + ".*?(\\d+)%\\s*used"
+                if let regex = try? NSRegularExpression(pattern: percentPattern, options: [.dotMatchesLineSeparators]),
+                   let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
+                    let percent = (text as NSString).substring(with: match.range(at: 1))
+
+                    // Find reset info
+                    var resetInfo = ""
+                    let resetPattern = "Resets?\\s+([^\\n]+)"
+                    if let idx = text.range(of: key),
+                       let resetRegex = try? NSRegularExpression(pattern: resetPattern),
+                       let resetMatch = resetRegex.firstMatch(in: text, range: NSRange(idx.upperBound..., in: text)) {
+                        resetInfo = (text as NSString).substring(with: resetMatch.range(at: 1))
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+
+                    sections.append((label, percent, resetInfo))
+                }
+            }
+        }
+
+        // Extra usage
+        var extraUsage = ""
+        if text.contains("Extra usage not enabled") {
+            extraUsage = "Extra usage: 비활성 (/extra-usage로 활성화)"
+        } else if text.contains("Extra usage") {
+            extraUsage = "Extra usage: 활성"
+        }
+
+        if sections.isEmpty {
+            return "📊 Claude 사용량\n\n⚠️ 사용량 데이터를 파싱할 수 없습니다.\n원본:\n\(text.prefix(500))"
+        }
+
+        // 결과 조립
+        var lines = ["📊 Claude 플랜 사용량", "═══════════════════════════════════"]
+
+        for s in sections {
+            let pct = Int(s.percent) ?? 0
+            let barLen = 30
+            let filled = Int(Double(barLen) * Double(pct) / 100.0)
+            let bar = String(repeating: "█", count: filled) + String(repeating: "░", count: barLen - filled)
+
+            lines.append("")
+            lines.append(s.title)
+            lines.append("  \(bar)  \(s.percent)%")
+            if !s.resetInfo.isEmpty {
+                lines.append("  리셋: \(s.resetInfo)")
+            }
+        }
+
+        if !extraUsage.isEmpty {
+            lines.append("")
+            lines.append(extraUsage)
+        }
+
+        lines.append("")
+        lines.append("═══════════════════════════════════")
+
+        return lines.joined(separator: "\n")
     }
 }

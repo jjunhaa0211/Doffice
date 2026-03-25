@@ -188,9 +188,19 @@ struct MainView: View {
                     NSWorkspace.shared.open(url)
                 }
             }
+            Button("재시도") {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    ClaudeInstallChecker.shared.check()
+                    DispatchQueue.main.async {
+                        if !ClaudeInstallChecker.shared.isInstalled {
+                            showClaudeNotInstalledAlert = true
+                        }
+                    }
+                }
+            }
             Button("확인", role: .cancel) {}
         } message: {
-            Text("Claude Code CLI가 설치되어 있지 않습니다.\n\n터미널에서 아래 명령어로 설치해주세요:\n\nnpm install -g @anthropic-ai/claude-code\n\n설치 후 앱을 다시 실행해주세요.")
+            Text("Claude Code CLI가 설치되어 있지 않습니다.\n\n터미널에서 아래 명령어로 설치해주세요:\n\nnpm install -g @anthropic-ai/claude-code\n\n이미 설치했는데 이 메시지가 보인다면:\n• PATH가 설정되지 않았을 수 있습니다\n• 터미널에서 'which claude'를 실행해 경로를 확인하세요\n• nvm/fnm 등 버전 매니저를 사용 중이라면 셸 프로파일(.zshrc)에 초기화 코드가 있는지 확인하세요\n\n설치 후 '재시도' 버튼을 눌러주세요.")
         }
         .alert(roleNoticeTitle, isPresented: $showRoleNoticeAlert) {
             Button("확인", role: .cancel) {}

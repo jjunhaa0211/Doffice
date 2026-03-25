@@ -996,75 +996,73 @@ enum Theme {
     /// UI 크롬(툴바, 사이드바, 필터 등)용 완화된 스케일 — 콘텐츠보다 덜 커짐
     private static var chromeScale: CGFloat { 1 + (scale - 1) * 0.5 }
 
-    // ── Backgrounds ──
-    // 다크: 깊은 네이비 계열 / 라이트: 따뜻한 그레이 계열
-    static var bg: Color { dark ? Color(hex: "0d1017") : Color(hex: "f2f3f5") }
-    static var bgCard: Color { dark ? Color(hex: "141820") : Color(hex: "ffffff") }
-    static var bgSurface: Color { dark ? Color(hex: "1a1e28") : Color(hex: "edeef1") }
-    static var bgTerminal: Color { dark ? Color(hex: "0d1017") : Color(hex: "f8f9fb") }
-    static var bgInput: Color { dark ? Color(hex: "151a22") : Color(hex: "f4f5f7") }
-    static var bgHover: Color { dark ? Color(hex: "1e2330") : Color(hex: "e6e8ec") }
-    static var bgSelected: Color { dark ? Color(hex: "1a2540") : Color(hex: "dce4f4") }
+    // ═══════════════════════════════════════════════════════
+    // Vercel Geist Design System
+    // ═══════════════════════════════════════════════════════
 
-    // ── Borders ──
-    static var border: Color { dark ? Color(hex: "262d3a") : Color(hex: "d0d5de") }
-    static var borderActive: Color { dark ? Color(hex: "4a90d9") : Color(hex: "3070d0") }
+    // ── Backgrounds (Geist: --ds-background, --accents) ──
+    static var bg: Color { dark ? Color(hex: "000000") : Color(hex: "fafafa") }
+    static var bgCard: Color { dark ? Color(hex: "0a0a0a") : Color(hex: "ffffff") }
+    static var bgSurface: Color { dark ? Color(hex: "111111") : Color(hex: "f5f5f5") }
+    static var bgTerminal: Color { dark ? Color(hex: "000000") : Color(hex: "fafafa") }
+    static var bgInput: Color { dark ? Color(hex: "0a0a0a") : Color(hex: "ffffff") }
+    static var bgHover: Color { dark ? Color(hex: "1a1a1a") : Color(hex: "f0f0f0") }
+    static var bgSelected: Color { dark ? Color(hex: "1a1a1a") : Color(hex: "eaeaea") }
 
-    // ── Text ──
-    static var textPrimary: Color { dark ? Color(hex: "e8ecf4") : Color(hex: "1a1a2e") }
-    static var textSecondary: Color { dark ? Color(hex: "8892a6") : Color(hex: "4a5568") }
-    static var textDim: Color { dark ? Color(hex: "4e586e") : Color(hex: "8892a4") }
-    static var textTerminal: Color { dark ? Color(hex: "d0d8e8") : Color(hex: "1e2838") }
+    // ── Borders (Geist: --accents-2, --accents-3) ──
+    static var border: Color { dark ? Color(hex: "333333") : Color(hex: "eaeaea") }
+    static var borderActive: Color { dark ? Color(hex: "666666") : Color(hex: "999999") }
+
+    // ── Text (Geist: --geist-foreground scale) ──
+    static var textPrimary: Color { dark ? Color(hex: "ededed") : Color(hex: "171717") }
+    static var textSecondary: Color { dark ? Color(hex: "a1a1a1") : Color(hex: "666666") }
+    static var textDim: Color { dark ? Color(hex: "666666") : Color(hex: "999999") }
+    static var textTerminal: Color { dark ? Color(hex: "ededed") : Color(hex: "171717") }
 
     // ── System ──
     static var textOnAccent: Color { .white }
-    static var overlay: Color { dark ? Color.white : Color.black }
-    static var overlayBg: Color { dark ? Color.black : Color.white }
+    static var overlay: Color { dark ? .white : .black }
+    static var overlayBg: Color { dark ? .black : .white }
 
-    // ── Accents ──
-    // 다크: 밝고 선명하게 / 라이트: 진하고 대비 강하게
-    static var accent: Color { dark ? Color(hex: "5c9ef5") : Color(hex: "2563eb") }
-    static var green: Color { dark ? Color(hex: "4ade80") : Color(hex: "16a34a") }
-    static var red: Color { dark ? Color(hex: "f87171") : Color(hex: "dc2626") }
-    static var yellow: Color { dark ? Color(hex: "fbbf24") : Color(hex: "ca8a04") }
-    static var purple: Color { dark ? Color(hex: "a78bfa") : Color(hex: "7c3aed") }
-    static var orange: Color { dark ? Color(hex: "fb923c") : Color(hex: "ea580c") }
-    static var cyan: Color { dark ? Color(hex: "22d3ee") : Color(hex: "0891b2") }
-    static var pink: Color { dark ? Color(hex: "f472b6") : Color(hex: "db2777") }
+    // ── Accents (Geist: semantic colors, muted for Vercel feel) ──
+    static var accent: Color { dark ? Color(hex: "0070f3") : Color(hex: "0070f3") }  // Vercel Blue
+    static var green: Color { dark ? Color(hex: "3ecf8e") : Color(hex: "18a058") }
+    static var red: Color { dark ? Color(hex: "ee5555") : Color(hex: "e5484d") }
+    static var yellow: Color { dark ? Color(hex: "f5a623") : Color(hex: "ca8a04") }
+    static var purple: Color { dark ? Color(hex: "8e4ec6") : Color(hex: "6e56cf") }
+    static var orange: Color { dark ? Color(hex: "f97316") : Color(hex: "e5560a") }
+    static var cyan: Color { dark ? Color(hex: "06b6d4") : Color(hex: "0891b2") }
+    static var pink: Color { dark ? Color(hex: "e54d9e") : Color(hex: "d23197") }
 
-    // Fonts (scaled) — 콘텐츠 영역
-    static var monoTiny: Font { .system(size: round(9 * scale), design: .monospaced) }
-    static var monoSmall: Font { .system(size: round(10 * scale), design: .monospaced) }
-    static var monoNormal: Font { .system(size: round(12 * scale), design: .monospaced) }
+    // ── Typography (Geist: system sans-serif for UI, mono for code) ──
+    static var monoTiny: Font { .system(size: round(9 * scale), weight: .regular, design: .monospaced) }
+    static var monoSmall: Font { .system(size: round(10 * scale), weight: .regular, design: .monospaced) }
+    static var monoNormal: Font { .system(size: round(12 * scale), weight: .regular, design: .monospaced) }
     static var monoBold: Font { .system(size: round(11 * scale), weight: .semibold, design: .monospaced) }
     static var pixel: Font { .system(size: round(8 * chromeScale), weight: .bold, design: .monospaced) }
 
-    // Scaled font helper — 콘텐츠
+    /// UI 텍스트용 (Geist Sans 대체 — 시스템 산세리프)
     static func mono(_ baseSize: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: round(baseSize * scale), weight: weight, design: .default)
+    }
+
+    /// 코드/터미널 전용 monospaced
+    static func code(_ baseSize: CGFloat, weight: Font.Weight = .regular) -> Font {
         .system(size: round(baseSize * scale), weight: weight, design: .monospaced)
     }
 
-    // 일반 시스템 폰트도 스케일 적용
     static func scaled(_ baseSize: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
         .system(size: round(baseSize * scale), weight: weight, design: design)
     }
 
-    // UI 크롬용 폰트 (툴바, 사이드바, 필터 버튼 등)
     static func chrome(_ baseSize: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: round(baseSize * chromeScale), weight: weight, design: .monospaced)
+        .system(size: round(baseSize * chromeScale), weight: weight, design: .default)
     }
 
-    // 아이콘 크기 스케일
-    static func iconSize(_ baseSize: CGFloat) -> CGFloat {
-        round(baseSize * scale)
-    }
+    static func iconSize(_ baseSize: CGFloat) -> CGFloat { round(baseSize * scale) }
+    static func chromeIconSize(_ baseSize: CGFloat) -> CGFloat { round(baseSize * chromeScale) }
 
-    // UI 크롬용 아이콘 스케일
-    static func chromeIconSize(_ baseSize: CGFloat) -> CGFloat {
-        round(baseSize * chromeScale)
-    }
-
-    // Worker colors
+    // ── Worker Colors (preserved for dot characters) ──
     static var workerColors: [Color] {
         dark ? [
             Color(hex: "ee7878"), Color(hex: "68d498"), Color(hex: "eebb50"),
@@ -1077,20 +1075,20 @@ enum Theme {
         ]
     }
 
-    // Gradients
+    // ── Gradients ──
     static var bgGradient: LinearGradient {
-        dark ? LinearGradient(colors: [Color(hex: "0c0e14"), Color(hex: "101420")], startPoint: .top, endPoint: .bottom)
-             : LinearGradient(colors: [Color(hex: "f5f5f7"), Color(hex: "eeeef2")], startPoint: .top, endPoint: .bottom)
+        dark ? LinearGradient(colors: [Color(hex: "000000"), Color(hex: "0a0a0a")], startPoint: .top, endPoint: .bottom)
+             : LinearGradient(colors: [Color(hex: "ffffff"), Color(hex: "fafafa")], startPoint: .top, endPoint: .bottom)
     }
 
-    // ── Design Tokens ──
-    static let cornerSmall: CGFloat = 8
-    static let cornerMedium: CGFloat = 12
-    static let cornerLarge: CGFloat = 16
+    // ── Design Tokens (Vercel: minimal radius, no shadow) ──
+    static let cornerSmall: CGFloat = 6
+    static let cornerMedium: CGFloat = 8
+    static let cornerLarge: CGFloat = 10
 
-    static let borderDefault: CGFloat = 0.26
-    static let borderActiveOpacity: CGFloat = 0.4
-    static let borderLight: CGFloat = 0.15
+    static let borderDefault: CGFloat = 1.0   // Vercel uses full-opacity thin borders
+    static let borderActiveOpacity: CGFloat = 1.0
+    static let borderLight: CGFloat = 0.5
 }
 
 enum AppChromeTone: Equatable {
@@ -1117,12 +1115,13 @@ enum AppChromeTone: Equatable {
     }
 }
 
+// Vercel-style: border-only panels, no shadows, flat surfaces
 private struct AppPanelModifier: ViewModifier {
     let padding: CGFloat
     let radius: CGFloat
     let fill: Color
     let strokeOpacity: Double
-    let shadow: Bool
+    let shadow: Bool  // ignored — Vercel style has no shadows
 
     func body(content: Content) -> some View {
         content
@@ -1133,12 +1132,7 @@ private struct AppPanelModifier: ViewModifier {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: radius)
-                    .stroke(Theme.border.opacity(strokeOpacity), lineWidth: 1)
-            )
-            .shadow(
-                color: shadow ? Color.black.opacity(AppSettings.shared.isDarkMode ? 0.14 : 0.04) : .clear,
-                radius: shadow ? 10 : 0,
-                y: shadow ? 4 : 0
+                    .stroke(Theme.border, lineWidth: 1)
             )
     }
 }
@@ -1150,14 +1144,14 @@ private struct AppFieldModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: radius)
                     .fill(Theme.bgInput)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: radius)
-                    .stroke((emphasized ? Theme.accent : Theme.border).opacity(emphasized ? 0.36 : 0.32), lineWidth: 1)
+                    .stroke(emphasized ? Theme.accent : Theme.border, lineWidth: 1)
             )
     }
 }
@@ -1169,18 +1163,19 @@ private struct AppButtonSurfaceModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let tint = tone.color
+        let r = compact ? Theme.cornerSmall : Theme.cornerMedium
 
         content
             .foregroundColor(prominent ? Theme.textOnAccent : (tone == .neutral ? Theme.textPrimary : tint))
             .padding(.horizontal, compact ? 10 : 14)
-            .padding(.vertical, compact ? 7 : 10)
+            .padding(.vertical, compact ? 6 : 8)
             .background(
-                RoundedRectangle(cornerRadius: compact ? Theme.cornerSmall : Theme.cornerMedium)
-                    .fill(prominent ? tint : (tone == .neutral ? Theme.bgSurface : tint.opacity(0.08)))
+                RoundedRectangle(cornerRadius: r)
+                    .fill(prominent ? tint : (tone == .neutral ? Theme.bgSurface : tint.opacity(0.1)))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: compact ? Theme.cornerSmall : Theme.cornerMedium)
-                    .stroke(prominent ? tint.opacity(0.16) : (tone == .neutral ? Theme.border.opacity(0.28) : tint.opacity(0.18)), lineWidth: 1)
+                RoundedRectangle(cornerRadius: r)
+                    .stroke(prominent ? .clear : Theme.border, lineWidth: 1)
             )
     }
 }

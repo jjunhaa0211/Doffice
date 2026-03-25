@@ -432,149 +432,166 @@ class GitDataProvider: ObservableObject {
 
     // MARK: - Direct Git Operations
 
-    func commitDirectly(message: String) -> Bool {
+    func commitDirectly(message: String, completion: ((Bool) -> Void)? = nil) {
         guard !message.isEmpty else {
             lastError = "Commit message cannot be empty"
-            return false
+            completion?(false)
+            return
         }
         let path = projectPath
         // Escape double quotes in commit message to prevent injection
         let safeMessage = message.replacingOccurrences(of: "\"", with: "\\\"")
             .replacingOccurrences(of: "$", with: "\\$")
             .replacingOccurrences(of: "`", with: "\\`")
-        let result = TerminalTab.shellSync("git -C \"\(path)\" commit -m \"\(safeMessage)\" 2>&1") ?? ""
-        if result.contains("fatal") || result.contains("error") {
-            lastError = result
-            refreshAll()
-            return false
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = TerminalTab.shellSync("git -C \"\(path)\" commit -m \"\(safeMessage)\" 2>&1") ?? ""
+            let failed = result.contains("fatal") || result.contains("error")
+            DispatchQueue.main.async {
+                if failed { self?.lastError = result }
+                self?.refreshAll()
+                completion?(!failed)
+            }
         }
-        refreshAll()
-        return true
     }
 
-    func createBranch(name: String) -> Bool {
+    func createBranch(name: String, completion: ((Bool) -> Void)? = nil) {
         guard GitDataParser.isValidBranchName(name) else {
             lastError = "Invalid branch name: \(name)"
-            return false
+            completion?(false)
+            return
         }
         let path = projectPath
-        let result = TerminalTab.shellSync("git -C \"\(path)\" checkout -b \"\(name)\" 2>&1") ?? ""
-        if result.contains("fatal") || result.contains("error") {
-            lastError = result
-            refreshAll()
-            return false
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = TerminalTab.shellSync("git -C \"\(path)\" checkout -b \"\(name)\" 2>&1") ?? ""
+            let failed = result.contains("fatal") || result.contains("error")
+            DispatchQueue.main.async {
+                if failed { self?.lastError = result }
+                self?.refreshAll()
+                completion?(!failed)
+            }
         }
-        refreshAll()
-        return true
     }
 
-    func deleteBranch(name: String, force: Bool = false) -> Bool {
+    func deleteBranch(name: String, force: Bool = false, completion: ((Bool) -> Void)? = nil) {
         guard GitDataParser.isValidBranchName(name) else {
             lastError = "Invalid branch name: \(name)"
-            return false
+            completion?(false)
+            return
         }
         let path = projectPath
         let flag = force ? "-D" : "-d"
-        let result = TerminalTab.shellSync("git -C \"\(path)\" branch \(flag) \"\(name)\" 2>&1") ?? ""
-        if result.contains("fatal") || result.contains("error") {
-            lastError = result
-            refreshAll()
-            return false
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = TerminalTab.shellSync("git -C \"\(path)\" branch \(flag) \"\(name)\" 2>&1") ?? ""
+            let failed = result.contains("fatal") || result.contains("error")
+            DispatchQueue.main.async {
+                if failed { self?.lastError = result }
+                self?.refreshAll()
+                completion?(!failed)
+            }
         }
-        refreshAll()
-        return true
     }
 
-    func createTag(name: String, message: String? = nil) -> Bool {
+    func createTag(name: String, message: String? = nil, completion: ((Bool) -> Void)? = nil) {
         guard GitDataParser.isValidRefName(name) else {
             lastError = "Invalid tag name: \(name)"
-            return false
+            completion?(false)
+            return
         }
         let path = projectPath
-        let result: String?
-        if let message = message, !message.isEmpty {
-            let safeMsg = message.replacingOccurrences(of: "\"", with: "\\\"")
-                .replacingOccurrences(of: "$", with: "\\$")
-                .replacingOccurrences(of: "`", with: "\\`")
-            result = TerminalTab.shellSync("git -C \"\(path)\" tag -a \"\(name)\" -m \"\(safeMsg)\" 2>&1")
-        } else {
-            result = TerminalTab.shellSync("git -C \"\(path)\" tag \"\(name)\" 2>&1")
+        let tagMessage = message
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result: String?
+            if let message = tagMessage, !message.isEmpty {
+                let safeMsg = message.replacingOccurrences(of: "\"", with: "\\\"")
+                    .replacingOccurrences(of: "$", with: "\\$")
+                    .replacingOccurrences(of: "`", with: "\\`")
+                result = TerminalTab.shellSync("git -C \"\(path)\" tag -a \"\(name)\" -m \"\(safeMsg)\" 2>&1")
+            } else {
+                result = TerminalTab.shellSync("git -C \"\(path)\" tag \"\(name)\" 2>&1")
+            }
+            let failed = result != nil && (result!.contains("fatal") || result!.contains("error"))
+            DispatchQueue.main.async {
+                if failed { self?.lastError = result ?? "" }
+                self?.refreshAll()
+                completion?(!failed)
+            }
         }
-        if let result = result, (result.contains("fatal") || result.contains("error")) {
-            lastError = result
-            refreshAll()
-            return false
-        }
-        refreshAll()
-        return true
     }
 
-    func deleteTag(name: String) -> Bool {
+    func deleteTag(name: String, completion: ((Bool) -> Void)? = nil) {
         guard GitDataParser.isValidRefName(name) else {
             lastError = "Invalid tag name: \(name)"
-            return false
+            completion?(false)
+            return
         }
         let path = projectPath
-        let result = TerminalTab.shellSync("git -C \"\(path)\" tag -d \"\(name)\" 2>&1") ?? ""
-        if result.contains("fatal") || result.contains("error") {
-            lastError = result
-            refreshAll()
-            return false
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = TerminalTab.shellSync("git -C \"\(path)\" tag -d \"\(name)\" 2>&1") ?? ""
+            let failed = result.contains("fatal") || result.contains("error")
+            DispatchQueue.main.async {
+                if failed { self?.lastError = result }
+                self?.refreshAll()
+                completion?(!failed)
+            }
         }
-        refreshAll()
-        return true
     }
 
-    func stashSave(message: String? = nil) -> Bool {
+    func stashSave(message: String? = nil, completion: ((Bool) -> Void)? = nil) {
         let path = projectPath
-        let result: String?
-        if let message = message, !message.isEmpty {
-            let safeMsg = message.replacingOccurrences(of: "\"", with: "\\\"")
-                .replacingOccurrences(of: "$", with: "\\$")
-                .replacingOccurrences(of: "`", with: "\\`")
-            result = TerminalTab.shellSync("git -C \"\(path)\" stash push -m \"\(safeMsg)\" 2>&1")
-        } else {
-            result = TerminalTab.shellSync("git -C \"\(path)\" stash push 2>&1")
+        let stashMessage = message
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result: String?
+            if let message = stashMessage, !message.isEmpty {
+                let safeMsg = message.replacingOccurrences(of: "\"", with: "\\\"")
+                    .replacingOccurrences(of: "$", with: "\\$")
+                    .replacingOccurrences(of: "`", with: "\\`")
+                result = TerminalTab.shellSync("git -C \"\(path)\" stash push -m \"\(safeMsg)\" 2>&1")
+            } else {
+                result = TerminalTab.shellSync("git -C \"\(path)\" stash push 2>&1")
+            }
+            let failed = result != nil && result!.contains("fatal")
+            DispatchQueue.main.async {
+                if failed { self?.lastError = result ?? "" }
+                self?.refreshAll()
+                completion?(!failed)
+            }
         }
-        if let result = result, result.contains("fatal") {
-            lastError = result
-            refreshAll()
-            return false
-        }
-        refreshAll()
-        return true
     }
 
-    func stashApply(index: Int) -> Bool {
+    func stashApply(index: Int, completion: ((Bool) -> Void)? = nil) {
         guard index >= 0 else {
             lastError = "Invalid stash index"
-            return false
+            completion?(false)
+            return
         }
         let path = projectPath
-        let result = TerminalTab.shellSync("git -C \"\(path)\" stash apply stash@{\(index)} 2>&1") ?? ""
-        if result.contains("fatal") || result.contains("error") {
-            lastError = result
-            refreshAll()
-            return false
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = TerminalTab.shellSync("git -C \"\(path)\" stash apply stash@{\(index)} 2>&1") ?? ""
+            let failed = result.contains("fatal") || result.contains("error")
+            DispatchQueue.main.async {
+                if failed { self?.lastError = result }
+                self?.refreshAll()
+                completion?(!failed)
+            }
         }
-        refreshAll()
-        return true
     }
 
-    func stashDrop(index: Int) -> Bool {
+    func stashDrop(index: Int, completion: ((Bool) -> Void)? = nil) {
         guard index >= 0 else {
             lastError = "Invalid stash index"
-            return false
+            completion?(false)
+            return
         }
         let path = projectPath
-        let result = TerminalTab.shellSync("git -C \"\(path)\" stash drop stash@{\(index)} 2>&1") ?? ""
-        if result.contains("fatal") || result.contains("error") {
-            lastError = result
-            refreshAll()
-            return false
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = TerminalTab.shellSync("git -C \"\(path)\" stash drop stash@{\(index)} 2>&1") ?? ""
+            let failed = result.contains("fatal") || result.contains("error")
+            DispatchQueue.main.async {
+                if failed { self?.lastError = result }
+                self?.refreshAll()
+                completion?(!failed)
+            }
         }
-        refreshAll()
-        return true
     }
 }
 

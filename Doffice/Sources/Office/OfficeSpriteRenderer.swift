@@ -1550,13 +1550,13 @@ struct OfficeSpriteRenderer {
         let sprite: SpriteData
         switch state {
         case .typing, .reading, .searching:
-            let frames = sprites.typing[dir] ?? sprites.typing[.down]!
-            sprite = frames[(frame / 4) % frames.count]
+            let frames = sprites.typing[dir] ?? sprites.typing[.down] ?? sprites.typing.values.first ?? []
+            sprite = frames.isEmpty ? [] : frames[(frame / 4) % frames.count]
         case .walkingTo, .wandering:
-            let frames = sprites.walk[dir] ?? sprites.walk[.down]!
-            sprite = frames[frame % frames.count]
+            let frames = sprites.walk[dir] ?? sprites.walk[.down] ?? sprites.walk.values.first ?? []
+            sprite = frames.isEmpty ? [] : frames[frame % frames.count]
         default:
-            sprite = sprites.idle[dir] ?? sprites.idle[.down]!
+            sprite = sprites.idle[dir] ?? sprites.idle[.down] ?? sprites.idle.values.first ?? []
         }
 
         let spriteH = CGFloat(sprite.count)
@@ -2427,7 +2427,7 @@ struct OfficeSpriteRenderer {
 
     private func projectTint(for tab: TerminalTab) -> Color {
         let colors: [Color] = [Theme.accent, Theme.cyan, Theme.green, Theme.orange, Theme.purple, Theme.pink]
-        let index = abs(tab.projectPath.hashValue) % max(colors.count, 1)
+        let index = Int(UInt(bitPattern: tab.projectPath.hashValue) % UInt(max(colors.count, 1)))
         return colors[index]
     }
 }

@@ -153,12 +153,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 글로벌 크래시 핸들러 — 예기치 않은 종료 시 세션 자동 저장
         setupCrashRecovery()
 
-        // Claude 설치 확인
-        ClaudeInstallChecker.shared.check()
-        if ClaudeInstallChecker.shared.isInstalled {
-            print("[도피스] Claude Code \(ClaudeInstallChecker.shared.version) found at \(ClaudeInstallChecker.shared.path)")
-        } else {
-            print("[도피스] ⚠️ Claude Code not installed")
+        // Claude 설치 확인 (백그라운드에서 실행 — 메인 스레드 블로킹 방지)
+        DispatchQueue.global(qos: .userInitiated).async {
+            ClaudeInstallChecker.shared.check()
+            DispatchQueue.main.async {
+                if ClaudeInstallChecker.shared.isInstalled {
+                    print("[도피스] Claude Code \(ClaudeInstallChecker.shared.version) found at \(ClaudeInstallChecker.shared.path)")
+                } else {
+                    print("[도피스] ⚠️ Claude Code not installed")
+                }
+            }
         }
     }
 

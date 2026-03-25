@@ -167,10 +167,12 @@ struct GitPanelView: View {
             Button("취소", role: .cancel) { branchToDelete = nil }
             Button("삭제", role: .destructive) {
                 if let b = branchToDelete {
-                    if git.deleteBranch(name: b) {
-                        showToast("브랜치 삭제됨: \(b)", icon: "trash.fill", color: Theme.red)
-                    } else {
-                        showErrorToast("브랜치 삭제 실패")
+                    git.deleteBranch(name: b) { success in
+                        if success {
+                            showToast("브랜치 삭제됨: \(b)", icon: "trash.fill", color: Theme.red)
+                        } else {
+                            showErrorToast("브랜치 삭제 실패")
+                        }
                     }
                 }
                 branchToDelete = nil
@@ -589,7 +591,7 @@ struct GitPanelView: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button("태그 삭제", role: .destructive) {
-                let _ = git.deleteTag(name: tag.name)
+                git.deleteTag(name: tag.name)
             }
         }
     }
@@ -619,8 +621,8 @@ struct GitPanelView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("적용 (Apply)") { let _ = git.stashApply(index: stash.id) }
-            Button("삭제 (Drop)", role: .destructive) { let _ = git.stashDrop(index: stash.id) }
+            Button("적용 (Apply)") { git.stashApply(index: stash.id) }
+            Button("삭제 (Drop)", role: .destructive) { git.stashDrop(index: stash.id) }
         }
     }
 
@@ -1307,21 +1309,28 @@ struct GitPanelView: View {
                             Button(action: {
                                 guard !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                                 let msg = commitMessage
-                                var success = false
                                 if selectedFilesForCommit.isEmpty || selectedFilesForCommit.count == git.workingDirStaged.count {
-                                    success = git.commitDirectly(message: msg)
+                                    git.commitDirectly(message: msg) { success in
+                                        if success {
+                                            let short = msg.count > 30 ? String(msg.prefix(30)) + "..." : msg
+                                            showSuccessToast("커밋 완료: \(short)")
+                                        } else {
+                                            showErrorToast("커밋 실패: \(git.lastError ?? "알 수 없는 오류")")
+                                        }
+                                    }
                                 } else {
                                     let allStaged = git.workingDirStaged.map { $0.path }
                                     let unselected = allStaged.filter { !selectedFilesForCommit.contains($0) }
                                     for path in unselected { git.unstageFile(path: path) }
-                                    success = git.commitDirectly(message: msg)
-                                    for path in unselected { git.stageFile(path: path) }
-                                }
-                                if success {
-                                    let short = msg.count > 30 ? String(msg.prefix(30)) + "..." : msg
-                                    showSuccessToast("커밋 완료: \(short)")
-                                } else {
-                                    showErrorToast("커밋 실패: \(git.lastError ?? "알 수 없는 오류")")
+                                    git.commitDirectly(message: msg) { success in
+                                        for path in unselected { git.stageFile(path: path) }
+                                        if success {
+                                            let short = msg.count > 30 ? String(msg.prefix(30)) + "..." : msg
+                                            showSuccessToast("커밋 완료: \(short)")
+                                        } else {
+                                            showErrorToast("커밋 실패: \(git.lastError ?? "알 수 없는 오류")")
+                                        }
+                                    }
                                 }
                                 commitMessage = ""
                                 selectedFilesForCommit.removeAll()
@@ -1656,12 +1665,12 @@ struct GitPanelView: View {
                     Text("stash@{\(s.id)}").font(Theme.mono(8, weight: .medium)).foregroundColor(Theme.cyan)
                     Text(s.message).font(Theme.mono(8)).foregroundColor(Theme.textSecondary).lineLimit(1)
                     Spacer()
-                    Button(action: { let _ = git.stashApply(index: s.id) }) {
+                    Button(action: { git.stashApply(index: s.id) }) {
                         Text("적용").font(Theme.mono(7, weight: .bold)).foregroundColor(Theme.green)
                             .padding(.horizontal, 4).padding(.vertical, 1)
                             .background(RoundedRectangle(cornerRadius: 3).fill(Theme.green.opacity(0.08)))
                     }.buttonStyle(.plain)
-                    Button(action: { let _ = git.stashDrop(index: s.id) }) {
+                    Button(action: { git.stashDrop(index: s.id) }) {
                         Text("삭제").font(Theme.mono(7, weight: .bold)).foregroundColor(Theme.red)
                             .padding(.horizontal, 4).padding(.vertical, 1)
                             .background(RoundedRectangle(cornerRadius: 3).fill(Theme.red.opacity(0.08)))

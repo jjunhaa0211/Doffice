@@ -384,52 +384,19 @@ struct EventStreamView: View {
             """
             tab.appendBlock(.status(message: text))
         },
-        SlashCommand("usage", "Claude 사용량 요약 (결제 기간 기준)", category: "화면") { tab, _, _ in
-            let tracker = TokenTracker.shared
-            let billingDay = AppSettings.shared.billingDay
-            let level = AchievementManager.shared.currentLevel
-
-            var lines = [
-                "📊 Claude 사용량 (Usage)",
-                "═══════════════════════════════",
-                "",
-                "🔹 이 세션",
-                "   토큰: \(tracker.formatTokens(tab.tokensUsed)) (In \(tracker.formatTokens(tab.inputTokensUsed)) / Out \(tracker.formatTokens(tab.outputTokensUsed)))",
-                "   비용: $\(String(format: "%.4f", tab.totalCost))",
-                "",
-                "🔹 오늘",
-                "   토큰: \(tracker.formatTokens(tracker.todayTokens)) / \(tracker.formatTokens(tracker.dailyTokenLimit))",
-                "   비용: $\(String(format: "%.4f", tracker.todayCost))",
-                "   남은 양: \(tracker.formatTokens(tracker.dailyRemaining))",
-                "",
-                "🔹 이번 주",
-                "   토큰: \(tracker.formatTokens(tracker.weekTokens)) / \(tracker.formatTokens(tracker.weeklyTokenLimit))",
-                "   비용: $\(String(format: "%.4f", tracker.weekCost))",
-                "   남은 양: \(tracker.formatTokens(tracker.weeklyRemaining))",
-            ]
-
-            if billingDay > 0 {
-                lines += [
-                    "",
-                    "🔹 결제 기간 (\(tracker.billingPeriodLabel))",
-                    "   토큰: \(tracker.formatTokens(tracker.billingPeriodTokens))",
-                    "   비용: $\(String(format: "%.4f", tracker.billingPeriodCost))",
-                    "   경과: \(tracker.billingPeriodDays)일",
-                ]
+        SlashCommand("usage", "Claude 플랜 사용량 표시 (API에서 직접 조회)", category: "화면") { tab, _, _ in
+            tab.appendBlock(.status(message: "⏳ Claude 사용량 조회 중..."))
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = ClaudeUsageFetcher.fetch()
+                DispatchQueue.main.async {
+                    // 마지막 "조회 중" 블록 제거
+                    if let lastIdx = tab.blocks.indices.last,
+                       tab.blocks[lastIdx].content.contains("조회 중") {
+                        tab.blocks.remove(at: lastIdx)
+                    }
+                    tab.appendBlock(.status(message: result))
+                }
             }
-
-            lines += [
-                "",
-                "🔹 누적 (전체)",
-                "   토큰: \(tracker.formatTokens(tracker.totalAllTimeTokens))",
-                "   비용: $\(String(format: "%.4f", tracker.totalAllTimeCost))",
-                "   기록일: \(tracker.history.count)일",
-                "",
-                "═══════════════════════════════",
-                "🏆 Lv.\(level.level) \(level.title) \(level.badge)",
-            ]
-
-            tab.appendBlock(.status(message: lines.joined(separator: "\n")))
         },
         SlashCommand("config", "현재 설정 요약", category: "화면") { tab, _, _ in
             var lines = [
@@ -582,6 +549,7 @@ struct EventStreamView: View {
                             ForEach(filteredBlocks) { block in
                                 EventBlockView(block: block, compact: compact)
                                     .id(block.id)
+                                    .textSelection(.enabled)
                             }
 
                             if tab.isProcessing {

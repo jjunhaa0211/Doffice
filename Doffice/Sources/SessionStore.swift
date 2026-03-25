@@ -80,6 +80,7 @@ struct SavedSession: Codable {
     let enableChrome: Bool?
     let forkSession: Bool?
     let fromPR: String?
+    let manualLaunch: Bool?
     let enableBrief: Bool?
     let tmuxMode: Bool?
     let strictMcpConfig: Bool?
@@ -141,10 +142,16 @@ class SessionStore {
 
     private static func defaultFileURL() -> URL {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            print("[도피스] Application Support 디렉토리를 찾을 수 없습니다. 임시 디렉토리를 사용합니다.")
             return FileManager.default.temporaryDirectory.appendingPathComponent("workman_sessions.json")
         }
         let dir = appSupport.appendingPathComponent("WorkMan", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            print("[도피스] Application Support/WorkMan 디렉토리 생성 실패: \(error.localizedDescription). 임시 디렉토리를 사용합니다.")
+            return FileManager.default.temporaryDirectory.appendingPathComponent("workman_sessions.json")
+        }
         return dir.appendingPathComponent("sessions.json")
     }
 
@@ -220,6 +227,7 @@ class SessionStore {
                 enableChrome: tab.enableChrome,
                 forkSession: tab.forkSession,
                 fromPR: tab.fromPR,
+                manualLaunch: tab.manualLaunch,
                 enableBrief: tab.enableBrief,
                 tmuxMode: tab.tmuxMode,
                 strictMcpConfig: tab.strictMcpConfig,
@@ -284,10 +292,14 @@ class SessionStore {
         stateLock.unlock()
 
         let loadedHistory: SessionHistory
-        if let data = try? Data(contentsOf: fileURL),
-           let decoded = try? JSONDecoder().decode(SessionHistory.self, from: data) {
-            loadedHistory = decoded
-        } else {
+        do {
+            let data = try Data(contentsOf: fileURL)
+            loadedHistory = try JSONDecoder().decode(SessionHistory.self, from: data)
+        } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {
+            // 파일이 아직 없는 경우 (첫 실행) — 정상
+            loadedHistory = SessionHistory()
+        } catch {
+            print("[도피스] 세션 파일 로드 실패: \(error.localizedDescription). 빈 세션으로 시작합니다.")
             loadedHistory = SessionHistory()
         }
 
@@ -332,7 +344,16 @@ class SessionStore {
             let data = try JSONEncoder().encode(history)
             try data.write(to: fileURL, options: .atomicWrite)
         } catch {
-            print("[도피스] Failed to save sessions: \(error)")
+            print("[도피스] 세션 저장 실패 (\(fileURL.path)): \(error.localizedDescription)")
+            // 기본 경로에 쓰기 실패 시 임시 디렉토리에 백업 시도
+            let fallbackURL = FileManager.default.temporaryDirectory.appendingPathComponent("workman_sessions_backup.json")
+            do {
+                let data = try JSONEncoder().encode(history)
+                try data.write(to: fallbackURL, options: .atomicWrite)
+                print("[도피스] 임시 디렉토리에 세션 백업 저장 완료: \(fallbackURL.path)")
+            } catch {
+                print("[도피스] 임시 디렉토리 백업도 실패: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -386,6 +407,7 @@ class SessionStore {
             enableChrome: tab.enableChrome,
             forkSession: tab.forkSession,
             fromPR: tab.fromPR,
+            manualLaunch: tab.manualLaunch,
             enableBrief: tab.enableBrief,
             tmuxMode: tab.tmuxMode,
             strictMcpConfig: tab.strictMcpConfig,

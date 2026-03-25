@@ -674,6 +674,7 @@ class SessionManager: ObservableObject {
         tab.characterId = characterId
         tab.automationSourceTabId = automationSourceTabId
         tab.automationReportPath = automationReportPath
+        tab.manualLaunch = manualLaunch || (restoredSession != nil)
 
         tabs.append(tab)
         invalidateProjectGroupsCache()
@@ -1807,7 +1808,9 @@ class SessionManager: ObservableObject {
     // Feature 4: 세션 저장 (빈 자동화 탭 제외)
     func saveSessions(immediately: Bool = false) {
         let savableTabs = userVisibleTabs.filter { tab in
-            // 토큰 사용 없고, 완료되지 않았고, 처리 중도 아닌 빈 탭은 저장하지 않음
+            // 사용자가 직접 추가한 세션(manualLaunch)은 항상 저장
+            if tab.manualLaunch { return true }
+            // 토큰 사용 없고, 완료되지 않았고, 처리 중도 아닌 빈 자동 탭은 저장하지 않음
             if tab.tokensUsed == 0 && !tab.isCompleted && !tab.isProcessing && tab.completedPromptCount == 0 {
                 return false
             }
@@ -1830,8 +1833,10 @@ class SessionManager: ObservableObject {
             // 완료된 세션은 복원하지 않음
             guard !session.isCompleted && FileManager.default.fileExists(atPath: session.projectPath) else { continue }
 
-            // 토큰 사용 없고 프롬프트도 없는 빈 세션은 건너뜀
-            if session.tokensUsed == 0 &&
+            // 토큰 사용 없고 프롬프트도 없는 빈 자동 세션은 건너뜀 (사용자 추가 세션은 유지)
+            let isManualSession = session.manualLaunch ?? false
+            if !isManualSession &&
+               session.tokensUsed == 0 &&
                 (session.initialPrompt == nil || session.initialPrompt?.isEmpty == true) &&
                 (session.lastPrompt == nil || session.lastPrompt?.isEmpty == true) &&
                 session.wasProcessing != true {
@@ -1906,19 +1911,33 @@ class SessionManager: ObservableObject {
     /// Cmd+R: 전체 새로고침 - 기존 탭 정리 후 다시 스캔
     func refresh() {
         saveSessions() // 새로고침 전 저장
-        // 기존 터미널 프로세스 정리
-        for tab in tabs {
+
+        // 사용자가 직접 추가한 세션은 보존, 자동 감지 세션만 정리
+        let manualTabs = tabs.filter { $0.manualLaunch }
+        let autoTabs = tabs.filter { !$0.manualLaunch }
+
+        for tab in autoTabs {
             tab.stop()
         }
-        tabs.removeAll()
-        activeTabId = nil
+
+        tabs = manualTabs
+        if !tabs.contains(where: { $0.id == activeTabId }) {
+            activeTabId = tabs.first?.id
+        }
+
+        // 사용자 세션은 모드 전환 시 재시작
+        for tab in manualTabs {
+            if !tab.isProcessing && !tab.isCompleted {
+                tab.start()
+            }
+        }
+
         invalidateProjectGroupsCache()
         invalidateAvailableReportsCache()
         scheduleAvailableReportCountRefresh()
         updateTabDerivedCaches()
-        workerIndex = 0
 
-        // 다시 스캔
+        // 자동 감지 다시 스캔
         autoDetectAndConnect()
     }
 

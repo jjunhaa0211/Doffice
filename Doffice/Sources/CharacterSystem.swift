@@ -16,14 +16,14 @@ enum WorkerJob: String, Codable, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .developer: return "개발자"
-        case .qa: return "QA"
-        case .reporter: return "보고자"
-        case .boss: return "사장"
-        case .planner: return "기획자"
-        case .reviewer: return "코드 리뷰어"
-        case .designer: return "디자이너"
-        case .sre: return "SRE"
+        case .developer: return NSLocalizedString("job.developer", comment: "")
+        case .qa: return NSLocalizedString("job.qa", comment: "")
+        case .reporter: return NSLocalizedString("job.reporter", comment: "")
+        case .boss: return NSLocalizedString("job.boss", comment: "")
+        case .planner: return NSLocalizedString("job.planner", comment: "")
+        case .reviewer: return NSLocalizedString("job.reviewer", comment: "")
+        case .designer: return NSLocalizedString("job.designer", comment: "")
+        case .sre: return NSLocalizedString("job.sre", comment: "")
         }
     }
 
@@ -152,6 +152,30 @@ struct WorkerCharacter: Identifiable, Codable {
         case panda = "판다"
         case unicorn = "유니콘"
         case skeleton = "해골"
+
+        var localizationKey: String {
+            switch self {
+            case .human: return "species.human"
+            case .cat: return "species.cat"
+            case .dog: return "species.dog"
+            case .rabbit: return "species.rabbit"
+            case .bear: return "species.bear"
+            case .penguin: return "species.penguin"
+            case .fox: return "species.fox"
+            case .robot: return "species.robot"
+            case .claude: return "species.claude"
+            case .alien: return "species.alien"
+            case .ghost: return "species.ghost"
+            case .dragon: return "species.dragon"
+            case .chicken: return "species.chicken"
+            case .owl: return "species.owl"
+            case .frog: return "species.frog"
+            case .panda: return "species.panda"
+            case .unicorn: return "species.unicorn"
+            case .skeleton: return "species.skeleton"
+            }
+        }
+        var localizedName: String { NSLocalizedString(localizationKey, comment: "") }
     }
 
     init(
@@ -218,7 +242,7 @@ struct WorkerCharacter: Identifiable, Codable {
 
 class CharacterRegistry: ObservableObject {
     static let shared = CharacterRegistry()
-    static let maxHiredCount = 13
+    static let maxHiredCount = 12
 
     @Published var allCharacters: [WorkerCharacter] = []
     @Published private(set) var manuallyUnlockedCharacterIDs: Set<String> = []
@@ -929,7 +953,7 @@ struct CharacterCollectionView: View {
             )
         }
         .buttonStyle(.plain)
-        .help(species?.rawValue ?? "전체")
+        .help(species?.localizedName ?? NSLocalizedString("status.all", comment: ""))
     }
 
     private func speciesFilterEmoji(_ sp: WorkerCharacter.Species) -> String {
@@ -1595,7 +1619,7 @@ struct LockedCharacterCard: View {
             .frame(width: 52, height: 68)
 
             Text("???").font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.textDim.opacity(0.4))
-            Text(character.species.rawValue).font(Theme.mono(7)).foregroundColor(Theme.textDim.opacity(0.3))
+            Text(character.species.localizedName).font(Theme.mono(7)).foregroundColor(Theme.textDim.opacity(0.3))
 
             Spacer(minLength: 0).frame(height: 12)
 

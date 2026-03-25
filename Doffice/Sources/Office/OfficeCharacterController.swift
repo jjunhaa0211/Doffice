@@ -647,6 +647,26 @@ class OfficeCharacterController: ObservableObject {
     private func startWander(_ ch: inout OfficeCharacter) {
         guard !walkableTiles.isEmpty else { return }
 
+        // 30% 확률로 가구 이벤트 시도
+        if !ch.isActive, Double.random(in: 0...1) < 0.3 {
+            let interactions = map.availableInteractions()
+            if let (furniture, event) = interactions.randomElement(),
+               let tile = map.interactionTile(for: furniture) {
+                let path = map.findPath(from: ch.tileCoord, to: tile)
+                if !path.isEmpty {
+                    ch.path = path
+                    ch.targetTile = tile
+                    ch.state = .wandering
+                    ch.frame = 0; ch.frameTimer = 0; ch.moveProgress = 0
+                    ch.destinationPurpose = .breakSpot
+                    // 이벤트 도착 후 wanderPause에서 이벤트 시간만큼 대기
+                    ch.wanderTimer = event.duration
+                    ch.wanderCount += 1
+                    return
+                }
+            }
+        }
+
         guard let target = bestBreakTarget(for: ch) else {
             ch.wanderTimer = wanderPauseDuration()
             return

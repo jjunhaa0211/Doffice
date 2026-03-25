@@ -174,7 +174,7 @@ struct OnboardingView: View {
             }
 
             VStack(spacing: 8) {
-                Text("도피스")
+                Text(NSLocalizedString("app.name", comment: ""))
                     .font(Theme.mono(28, weight: .black))
                     .foregroundColor(Theme.textPrimary)
                 Text("Claude Code 시각적 관리 도구")

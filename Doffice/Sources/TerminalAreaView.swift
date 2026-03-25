@@ -1156,18 +1156,12 @@ struct EventStreamView: View {
 
                 // Auto-growing TextEditor
                 ZStack(alignment: .topLeading) {
-                    // Placeholder
-                    if inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(tab.isProcessing ? "실행 중..." : "명령을 입력하세요")
-                            .font(Theme.monoNormal).foregroundColor(Theme.textDim.opacity(0.5))
-                            .padding(.horizontal, 4).padding(.vertical, 8)
-                            .allowsHitTesting(false)
-                    }
                     // Hidden text for height calculation
                     Text(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? " " : inputText)
                         .font(Theme.monoNormal).foregroundColor(.clear)
                         .padding(.horizontal, 4).padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .allowsHitTesting(false)
                     // Actual editor
                     TextEditor(text: $inputText)
                         .font(Theme.monoNormal).foregroundColor(Theme.textPrimary)
@@ -1176,6 +1170,13 @@ struct EventStreamView: View {
                         .scrollContentBackground(.hidden)
                         .padding(.horizontal, 0).padding(.vertical, 4)
                         .accessibilityLabel("명령 입력")
+                    // Placeholder (on top visually but doesn't intercept clicks)
+                    if inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(tab.isProcessing ? "실행 중..." : "명령을 입력하세요")
+                            .font(Theme.monoNormal).foregroundColor(Theme.textDim.opacity(0.5))
+                            .padding(.horizontal, 4).padding(.vertical, 8)
+                            .allowsHitTesting(false)
+                    }
                 }
                 .frame(minHeight: 32, maxHeight: 120)
                 .onKeyPress(.return, phases: .down) { event in
@@ -1249,20 +1250,21 @@ struct EventStreamView: View {
     private var compactInputBar: some View {
         HStack(alignment: .bottom, spacing: 4) {
             ZStack(alignment: .topLeading) {
-                if inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("입력...").font(Theme.monoSmall).foregroundColor(Theme.textDim.opacity(0.5))
-                        .padding(.horizontal, 4).padding(.vertical, 6)
-                        .allowsHitTesting(false)
-                }
                 Text(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? " " : inputText)
                     .font(Theme.monoSmall).foregroundColor(.clear)
                     .padding(.horizontal, 4).padding(.vertical, 6)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .allowsHitTesting(false)
                 TextEditor(text: $inputText)
                     .font(Theme.monoSmall).foregroundColor(Theme.textPrimary)
                     .focused($isFocused).disabled(tab.isProcessing)
                     .scrollContentBackground(.hidden)
                     .padding(.horizontal, 0).padding(.vertical, 2)
+                if inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("입력...").font(Theme.monoSmall).foregroundColor(Theme.textDim.opacity(0.5))
+                        .padding(.horizontal, 4).padding(.vertical, 6)
+                        .allowsHitTesting(false)
+                }
             }
             .frame(minHeight: 28, maxHeight: 100)
             .onKeyPress(.return, phases: .down) { event in
@@ -3095,7 +3097,7 @@ struct NewTabSheet: View {
             DSModalHeader(
                 icon: "plus.circle.fill",
                 iconColor: Theme.accent,
-                title: "새 세션",
+                title: NSLocalizedString("session.new", comment: ""),
                 subtitle: "프로젝트 경로를 선택하고 실행 규칙만 정하면 바로 시작할 수 있습니다."
             )
 

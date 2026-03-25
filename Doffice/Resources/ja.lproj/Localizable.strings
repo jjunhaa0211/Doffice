@@ -67,3 +67,128 @@
 
 /* Office view */
 "office.title" = "ドフィスオフィス";
+
+/* Job titles */
+"job.developer" = "開発者";
+"job.qa" = "QA";
+"job.reporter" = "レポーター";
+"job.boss" = "社長";
+"job.planner" = "企画者";
+"job.reviewer" = "レビュアー";
+"job.designer" = "デザイナー";
+"job.sre" = "SRE";
+
+/* Settings tab names */
+"settings.general" = "一般";
+"settings.display" = "表示";
+"settings.office" = "オフィス";
+"settings.token" = "トークン";
+"settings.data" = "データ";
+"settings.template" = "テンプレート";
+"settings.support" = "サポート";
+"settings.security" = "セキュリティ";
+"settings.title" = "設定";
+"settings.language" = "言語";
+"settings.language.system" = "システムデフォルト";
+"settings.language.restart" = "言語を変更します。\n適用するにはアプリの再起動が必要です。";
+"settings.language.change" = "言語変更";
+"settings.restart" = "再起動";
+
+/* New session */
+"session.new" = "新規セッション";
+"session.project" = "プロジェクトを開いて\n作業を開始します。";
+"session.no.match" = "条件に合う\nセッションがありません";
+"session.no.match.hint" = "フィルターを変更するか\n新しいセッションを開始してください。";
+"session.none" = "セッションなし";
+
+/* Boss jokes */
+"joke.1" = "プログラマーが海に行くと？ギットハブ（Git波）。";
+"joke.2" = "バグを発見したら？虫眼鏡で探す。";
+"joke.3" = "サーバーがダウンしたら？サーバー返し。";
+"joke.4" = "プログラマーの好きな音楽は？アールアンドビー(R&B)。";
+"joke.5" = "犬が人を教えると？個人指導（犬人指導）。";
+"joke.6" = "世界で一番叩かれる人は？美肌の人。いつもスキンケアされてる。";
+"joke.7" = "猫が好きな車は？キャットラック。";
+"joke.8" = "開発者が映画を見ると？インターフェーステラー。";
+"joke.9" = "コンピュータが寒かったら？ウィンドウを閉じろ。";
+"joke.10" = "CSSが転んだら？スタイルシート（落ちた）。";
+
+/* View modes */
+"view.split" = "分割";
+"view.office" = "オフィス";
+"view.strip" = "ストリップ";
+"view.terminal" = "ターミナル";
+
+/* Common actions */
+"action.open" = "開く";
+"action.save" = "保存";
+"action.copy" = "コピー";
+"action.paste" = "貼り付け";
+"action.undo" = "元に戻す";
+"action.send" = "送信";
+"action.apply" = "適用";
+"action.reset" = "リセット";
+"action.finder" = "Finderで開く";
+"action.copy.path" = "パスをコピー";
+"action.close.session" = "セッションを閉じる";
+
+/* Onboarding */
+"onboard.welcome" = "ドフィスへようこそ！";
+"onboard.desc" = "各セッションは職業を持つキャラクターで表現されます。";
+
+/* Level titles */
+"level.intern" = "インターン";
+"level.junior" = "ジュニア";
+"level.senior" = "シニア";
+"level.lead" = "リード";
+"level.principal" = "プリンシパル";
+"level.cto" = "CTO";
+"level.legend" = "レジェンド";
+"level.saint" = "聖人";
+
+/* Species names */
+"species.human" = "人間";
+"species.cat" = "猫";
+"species.dog" = "犬";
+"species.rabbit" = "うさぎ";
+"species.bear" = "クマ";
+"species.penguin" = "ペンギン";
+"species.fox" = "キツネ";
+"species.robot" = "ロボット";
+"species.claude" = "Claude";
+"species.alien" = "宇宙人";
+"species.ghost" = "幽霊";
+"species.dragon" = "ドラゴン";
+"species.chicken" = "ニワトリ";
+"species.owl" = "フクロウ";
+"species.frog" = "カエル";
+"species.panda" = "パンダ";
+"species.unicorn" = "ユニコーン";
+"species.skeleton" = "ガイコツ";
+
+/* Furniture names */
+"furniture.sofa" = "ソファ";
+"furniture.coffee" = "コーヒーマシン";
+"furniture.plant" = "植物";
+"furniture.clock" = "時計";
+"furniture.neon" = "ネオンサイン";
+"furniture.rug" = "ラグ";
+"furniture.bookshelf" = "本棚";
+"furniture.aquarium" = "水槽";
+"furniture.arcade" = "アーケード";
+"furniture.whiteboard" = "ホワイトボード";
+"furniture.lamp" = "ランプ";
+"furniture.cat" = "猫";
+"furniture.tv" = "テレビ";
+"furniture.fan" = "扇風機";
+"furniture.calendar" = "カレンダー";
+"furniture.poster" = "ポスター";
+
+/* Misc */
+"misc.today" = "今日";
+"misc.thisweek" = "今週";
+"misc.remaining" = "残量";
+"misc.cost" = "コスト";
+"misc.usage" = "使用量";
+"misc.level" = "レベル";
+"misc.processing" = "処理中";

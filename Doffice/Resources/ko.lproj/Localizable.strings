@@ -67,3 +67,128 @@
 
 /* Office view */
 "office.title" = "도피스 오피스";
+
+/* Job titles */
+"job.developer" = "개발자";
+"job.qa" = "QA";
+"job.reporter" = "보고자";
+"job.boss" = "사장";
+"job.planner" = "기획자";
+"job.reviewer" = "리뷰어";
+"job.designer" = "디자이너";
+"job.sre" = "SRE";
+
+/* Settings tab names */
+"settings.general" = "일반";
+"settings.display" = "화면";
+"settings.office" = "오피스";
+"settings.token" = "토큰";
+"settings.data" = "데이터";
+"settings.template" = "양식";
+"settings.support" = "후원하기";
+"settings.security" = "보안";
+"settings.title" = "설정";
+"settings.language" = "언어";
+"settings.language.system" = "시스템 기본";
+"settings.language.restart" = "언어를 변경합니다.\n앱을 재시작해야 적용됩니다.";
+"settings.language.change" = "언어 변경";
+"settings.restart" = "재시작";
+
+/* New session */
+"session.new" = "새 세션 시작";
+"session.project" = "프로젝트를 열고 바로\n작업을 시작합니다.";
+"session.no.match" = "조건에 맞는\n세션이 없습니다";
+"session.no.match.hint" = "필터를 바꾸거나 새\n세션을 시작해보세요.";
+"session.none" = "세션 없음";
+
+/* Boss jokes */
+"joke.1" = "개발자가 바다에 가면? 깃헙.";
+"joke.2" = "코드가 춤을 추면? 알고리듬.";
+"joke.3" = "서버가 다운되면? 서버엎.";
+"joke.4" = "프로그래머가 좋아하는 음악? 알앤비(R&B).";
+"joke.5" = "개가 사람을 가르치면? 개인지도.";
+"joke.6" = "세상에서 가장 많이 맞는 사람은? 피부미인. 늘 스킨 맞음.";
+"joke.7" = "고양이가 좋아하는 차는? 카푸치노.";
+"joke.8" = "개발자가 영화보면? 인터스텔라(인터페이스텔라).";
+"joke.9" = "컴퓨터가 추우면? 윈도우를 닫아.";
+"joke.10" = "CSS가 넘어지면? 스타일시트.";
+
+/* View modes */
+"view.split" = "분할";
+"view.office" = "오피스";
+"view.strip" = "스트립";
+"view.terminal" = "터미널";
+
+/* Common actions */
+"action.open" = "열기";
+"action.save" = "저장";
+"action.copy" = "복사";
+"action.paste" = "붙여넣기";
+"action.undo" = "실행 취소";
+"action.send" = "보내기";
+"action.apply" = "적용";
+"action.reset" = "초기화";
+"action.finder" = "Finder에서 열기";
+"action.copy.path" = "경로 복사";
+"action.close.session" = "세션 닫기";
+
+/* Onboarding */
+"onboard.welcome" = "도피스에 오신 것을 환영합니다!";
+"onboard.desc" = "각 세션은 직업을 가진 캐릭터로 표현됩니다.";
+
+/* Level titles */
+"level.intern" = "인턴";
+"level.junior" = "주니어";
+"level.senior" = "시니어";
+"level.lead" = "리드";
+"level.principal" = "수석";
+"level.cto" = "CTO";
+"level.legend" = "전설";
+"level.saint" = "성운";
+
+/* Species names */
+"species.human" = "사람";
+"species.cat" = "고양이";
+"species.dog" = "강아지";
+"species.rabbit" = "토끼";
+"species.bear" = "곰";
+"species.penguin" = "펭귄";
+"species.fox" = "여우";
+"species.robot" = "로봇";
+"species.claude" = "Claude";
+"species.alien" = "외계인";
+"species.ghost" = "유령";
+"species.dragon" = "드래곤";
+"species.chicken" = "닭";
+"species.owl" = "부엉이";
+"species.frog" = "개구리";
+"species.panda" = "판다";
+"species.unicorn" = "유니콘";
+"species.skeleton" = "해골";
+
+/* Furniture names */
+"furniture.sofa" = "소파";
+"furniture.coffee" = "커피머신";
+"furniture.plant" = "화분";
+"furniture.clock" = "시계";
+"furniture.neon" = "네온사인";
+"furniture.rug" = "러그";
+"furniture.bookshelf" = "책장";
+"furniture.aquarium" = "수족관";
+"furniture.arcade" = "아케이드";
+"furniture.whiteboard" = "화이트보드";
+"furniture.lamp" = "램프";
+"furniture.cat" = "고양이";
+"furniture.tv" = "TV";
+"furniture.fan" = "선풍기";
+"furniture.calendar" = "달력";
+"furniture.poster" = "포스터";
+
+/* Misc */
+"misc.today" = "오늘";
+"misc.thisweek" = "이번 주";
+"misc.remaining" = "남은 양";
+"misc.cost" = "비용";
+"misc.usage" = "USAGE";
+"misc.level" = "LEVEL";
+"misc.processing" = "작업 중";

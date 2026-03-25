@@ -67,3 +67,128 @@
 
 /* Office view */
 "office.title" = "Doffice Office";
+
+/* Job titles */
+"job.developer" = "Developer";
+"job.qa" = "QA";
+"job.reporter" = "Reporter";
+"job.boss" = "Boss";
+"job.planner" = "Planner";
+"job.reviewer" = "Reviewer";
+"job.designer" = "Designer";
+"job.sre" = "SRE";
+
+/* Settings tab names */
+"settings.general" = "General";
+"settings.display" = "Display";
+"settings.office" = "Office";
+"settings.token" = "Tokens";
+"settings.data" = "Data";
+"settings.template" = "Templates";
+"settings.support" = "Support";
+"settings.security" = "Security";
+"settings.title" = "Settings";
+"settings.language" = "Language";
+"settings.language.system" = "System Default";
+"settings.language.restart" = "Language will be changed.\nRestart required to apply.";
+"settings.language.change" = "Change Language";
+"settings.restart" = "Restart";
+
+/* New session */
+"session.new" = "New Session";
+"session.project" = "Open a project and\nstart working.";
+"session.no.match" = "No matching\nsessions";
+"session.no.match.hint" = "Change filter or start\na new session.";
+"session.none" = "No sessions";
+
+/* Boss jokes */
+"joke.1" = "Why do programmers prefer dark mode? Because light attracts bugs.";
+"joke.2" = "What's a programmer's favorite hangout? Foo Bar.";
+"joke.3" = "Why was the JavaScript developer sad? He didn't Node how to Express himself.";
+"joke.4" = "What do you call a computer that sings? A-Dell.";
+"joke.5" = "Why do Java developers wear glasses? They can't C#.";
+"joke.6" = "A SQL query walks into a bar, sees two tables and asks... Can I JOIN you?";
+"joke.7" = "Why did the developer go broke? He used up all his cache.";
+"joke.8" = "What did the router say to the doctor? It hurts when IP.";
+"joke.9" = "Why did the computer keep sneezing? It had a virus.";
+"joke.10" = "How does a computer get drunk? It takes screenshots.";
+
+/* View modes */
+"view.split" = "Split";
+"view.office" = "Office";
+"view.strip" = "Strip";
+"view.terminal" = "Terminal";
+
+/* Common actions */
+"action.open" = "Open";
+"action.save" = "Save";
+"action.copy" = "Copy";
+"action.paste" = "Paste";
+"action.undo" = "Undo";
+"action.send" = "Send";
+"action.apply" = "Apply";
+"action.reset" = "Reset";
+"action.finder" = "Open in Finder";
+"action.copy.path" = "Copy Path";
+"action.close.session" = "Close Session";
+
+/* Onboarding */
+"onboard.welcome" = "Welcome to Doffice!";
+"onboard.desc" = "Each session is represented by a character with a job.";
+
+/* Level titles */
+"level.intern" = "Intern";
+"level.junior" = "Junior";
+"level.senior" = "Senior";
+"level.lead" = "Lead";
+"level.principal" = "Principal";
+"level.cto" = "CTO";
+"level.legend" = "Legend";
+"level.saint" = "Saint";
+
+/* Species names */
+"species.human" = "Human";
+"species.cat" = "Cat";
+"species.dog" = "Dog";
+"species.rabbit" = "Rabbit";
+"species.bear" = "Bear";
+"species.penguin" = "Penguin";
+"species.fox" = "Fox";
+"species.robot" = "Robot";
+"species.claude" = "Claude";
+"species.alien" = "Alien";
+"species.ghost" = "Ghost";
+"species.dragon" = "Dragon";
+"species.chicken" = "Chicken";
+"species.owl" = "Owl";
+"species.frog" = "Frog";
+"species.panda" = "Panda";
+"species.unicorn" = "Unicorn";
+"species.skeleton" = "Skeleton";
+
+/* Furniture names */
+"furniture.sofa" = "Sofa";
+"furniture.coffee" = "Coffee Machine";
+"furniture.plant" = "Plant";
+"furniture.clock" = "Clock";
+"furniture.neon" = "Neon Sign";
+"furniture.rug" = "Rug";
+"furniture.bookshelf" = "Bookshelf";
+"furniture.aquarium" = "Aquarium";
+"furniture.arcade" = "Arcade";
+"furniture.whiteboard" = "Whiteboard";
+"furniture.lamp" = "Lamp";
+"furniture.cat" = "Cat";
+"furniture.tv" = "TV";
+"furniture.fan" = "Fan";
+"furniture.calendar" = "Calendar";
+"furniture.poster" = "Poster";
+
+/* Misc */
+"misc.today" = "Today";
+"misc.thisweek" = "This Week";
+"misc.remaining" = "Remaining";
+"misc.cost" = "Cost";
+"misc.usage" = "USAGE";
+"misc.level" = "LEVEL";
+"misc.processing" = "Processing";

@@ -1877,11 +1877,13 @@ struct SettingsView: View {
     @State private var clearAllMode = false
     @State private var showTokenResetConfirm = false
     @State private var showTemplateResetConfirm = false
+    @State private var showLanguageRestartAlert = false
+    @State private var pendingLanguage: String?
 
     private let settingsTabs: [(String, String)] = [
-        ("slider.horizontal.3", "일반"), ("paintbrush.fill", "화면"), ("building.2.fill", "오피스"),
-        ("bolt.fill", "토큰"), ("externaldrive.fill", "데이터"), ("doc.text.fill", "양식"),
-        ("cup.and.saucer.fill", "후원하기"), ("lock.shield.fill", "보안")
+        ("slider.horizontal.3", NSLocalizedString("settings.general", comment: "")), ("paintbrush.fill", NSLocalizedString("settings.display", comment: "")), ("building.2.fill", NSLocalizedString("settings.office", comment: "")),
+        ("bolt.fill", NSLocalizedString("settings.token", comment: "")), ("externaldrive.fill", NSLocalizedString("settings.data", comment: "")), ("doc.text.fill", NSLocalizedString("settings.template", comment: "")),
+        ("cup.and.saucer.fill", NSLocalizedString("settings.support", comment: "")), ("lock.shield.fill", NSLocalizedString("settings.security", comment: ""))
     ]
 
     var body: some View {
@@ -1889,7 +1891,7 @@ struct SettingsView: View {
             DSModalHeader(
                 icon: "gearshape.fill",
                 iconColor: Theme.textSecondary,
-                title: "설정",
+                title: NSLocalizedString("settings.title", comment: ""),
                 onClose: { dismiss() }
             )
             .keyboardShortcut(.escape)
@@ -1955,6 +1957,51 @@ struct SettingsView: View {
         } message: {
             Text("사용자가 수정한 기획자/디자이너/리뷰어/QA/보고자/SRE 양식을 모두 기본값으로 되돌립니다.")
         }
+        .alert("언어 변경", isPresented: $showLanguageRestartAlert) {
+            Button("재시작", role: .destructive) {
+                if let lang = pendingLanguage {
+                    settings.appLanguage = lang
+                    // 세션 저장 후 앱 재시작
+                    SessionManager.shared.saveSessions(immediately: true)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        let url = URL(fileURLWithPath: Bundle.main.resourcePath!)
+                        let path = url.deletingLastPathComponent().deletingLastPathComponent().absoluteString
+                        let task = Process()
+                        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                        task.arguments = [path]
+                        try? task.run()
+                        NSApp.terminate(nil)
+                    }
+                }
+            }
+            Button("취소", role: .cancel) { pendingLanguage = nil }
+        } message: {
+            let langName: String = {
+                switch pendingLanguage {
+                case "ko": return "한국어"
+                case "en": return "English"
+                case "ja": return "日本語"
+                default: return "시스템 기본"
+                }
+            }()
+            Text("언어를 \(langName)(으)로 변경합니다.\n앱을 재시작해야 적용됩니다.")
+        }
+    }
+
+    private func langButton(_ label: String, code: String) -> some View {
+        let isActive = settings.appLanguage == code
+        return Button(action: {
+            guard code != settings.appLanguage else { return }
+            pendingLanguage = code
+            showLanguageRestartAlert = true
+        }) {
+            Text(label)
+                .font(Theme.mono(9, weight: isActive ? .bold : .regular))
+                .foregroundColor(isActive ? .white : Theme.textSecondary)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 6).fill(isActive ? Theme.accent : Theme.bgSurface))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(isActive ? Theme.accent : Theme.border.opacity(0.3), lineWidth: 0.5))
+        }.buttonStyle(.plain)
     }
 
     // MARK: - Tab Button
@@ -2033,19 +2080,16 @@ struct SettingsView: View {
                 }
             }
 
-            settingsSection(title: "언어", subtitle: settings.currentLanguageLabel) {
+            settingsSection(title: "언어 / Language", subtitle: settings.currentLanguageLabel) {
                 VStack(spacing: 10) {
                     securityRow(label: "앱 언어") {
-                        Picker("", selection: $settings.appLanguage) {
-                            Text("시스템 기본").tag("auto")
-                            Text("한국어").tag("ko")
-                            Text("English").tag("en")
-                            Text("日本語").tag("ja")
+                        HStack(spacing: 8) {
+                            langButton("시스템", code: "auto")
+                            langButton("한국어", code: "ko")
+                            langButton("English", code: "en")
+                            langButton("日本語", code: "ja")
                         }
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: 150)
                     }
-                    statusHint(icon: "info.circle", text: "언어 변경 후 앱을 재시작하면 적용됩니다.", tint: Theme.accent)
                 }
             }
 

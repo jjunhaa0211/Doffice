@@ -215,8 +215,8 @@ struct SidebarView: View {
                 VStack(spacing: 4) {
                     if groups.isEmpty {
                         AppEmptyStateView(
-                            title: "조건에 맞는 세션이 없습니다",
-                            message: searchQuery.isEmpty ? "필터를 바꾸거나 새 세션을 시작해보세요." : "검색어나 필터를 조정해보세요.",
+                            title: NSLocalizedString("session.no.match", comment: ""),
+                            message: searchQuery.isEmpty ? NSLocalizedString("session.no.match.hint", comment: "") : "검색어나 필터를 조정해보세요.",
                             symbol: searchQuery.isEmpty ? "rectangle.stack.badge.plus" : "magnifyingglass",
                             tint: searchQuery.isEmpty ? Theme.accent : Theme.textDim
                         )
@@ -490,7 +490,7 @@ struct SidebarView: View {
                     Spacer()
                     Text("Cmd+T").font(Theme.chrome(8, weight: .medium)).foregroundColor(Theme.textDim)
                 }
-                Text("프로젝트를 열고 바로 작업을 시작합니다.")
+                Text(NSLocalizedString("session.project", comment: ""))
                     .font(Theme.chrome(8))
                     .foregroundColor(Theme.textDim)
             }
@@ -651,7 +651,7 @@ struct SidebarView: View {
                     .foregroundColor(Theme.textSecondary)
                 Text(title).font(Theme.chrome(11, weight: .medium))
                 Spacer()
-                Text("열기")
+                Text(NSLocalizedString("action.open", comment: ""))
                     .font(Theme.chrome(8, weight: .bold))
                     .foregroundColor(Theme.textDim)
             }
@@ -989,11 +989,11 @@ struct ReportCenterView: View {
         .onHover { h in withAnimation(.easeInOut(duration: 0.1)) { hoveredReportId = h ? report.id : nil } }
         .contextMenu {
             Button { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: report.path)]) }
-                label: { Label("Finder에서 보기", systemImage: "folder") }
+                label: { Label(NSLocalizedString("action.finder", comment: ""), systemImage: "folder") }
             Button {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(report.path, forType: .string)
-            } label: { Label("경로 복사", systemImage: "doc.on.doc") }
+            } label: { Label(NSLocalizedString("action.copy.path", comment: ""), systemImage: "doc.on.doc") }
             Divider()
             Button(role: .destructive) { reportToDelete = report; showDeleteConfirm = true }
                 label: { Label("삭제", systemImage: "trash") }
@@ -1165,14 +1165,14 @@ struct SessionGroupCard: View {
         .contextMenu {
             Button {
                 NSWorkspace.shared.open(URL(fileURLWithPath: group.tabs.first?.projectPath ?? ""))
-            } label: { Label("Finder에서 열기", systemImage: "folder") }
+            } label: { Label(NSLocalizedString("action.finder", comment: ""), systemImage: "folder") }
 
             Button {
                 if let p = group.tabs.first?.projectPath {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(p, forType: .string)
                 }
-            } label: { Label("경로 복사", systemImage: "doc.on.doc") }
+            } label: { Label(NSLocalizedString("action.copy.path", comment: ""), systemImage: "doc.on.doc") }
 
             Divider()
 
@@ -1219,14 +1219,14 @@ struct WorkerMiniCard: View {
         .accessibilityHint("이 세션을 단독으로 엽니다")
         .contextMenu {
             Button { NSWorkspace.shared.open(URL(fileURLWithPath: tab.projectPath)) }
-                label: { Label("Finder에서 열기", systemImage: "folder") }
+                label: { Label(NSLocalizedString("action.finder", comment: ""), systemImage: "folder") }
             Button {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(tab.projectPath, forType: .string)
-            } label: { Label("경로 복사", systemImage: "doc.on.doc") }
+            } label: { Label(NSLocalizedString("action.copy.path", comment: ""), systemImage: "doc.on.doc") }
             Divider()
             Button(role: .destructive) { manager.removeTab(tab.id) }
-                label: { Label("세션 닫기", systemImage: "xmark") }
+                label: { Label(NSLocalizedString("action.close.session", comment: ""), systemImage: "xmark") }
         }
     }
 }
@@ -1327,11 +1327,11 @@ struct SessionCard: View {
         .accessibilityHint("이 세션을 선택합니다")
         .contextMenu {
             Button { NSWorkspace.shared.open(URL(fileURLWithPath: tab.projectPath)) }
-                label: { Label("Finder에서 열기", systemImage: "folder") }
+                label: { Label(NSLocalizedString("action.finder", comment: ""), systemImage: "folder") }
             Button {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(tab.projectPath, forType: .string)
-            } label: { Label("경로 복사", systemImage: "doc.on.doc") }
+            } label: { Label(NSLocalizedString("action.copy.path", comment: ""), systemImage: "doc.on.doc") }
             if tab.gitInfo.isGitRepo {
                 Divider()
                 Button {
@@ -1341,7 +1341,7 @@ struct SessionCard: View {
             }
             Divider()
             Button(role: .destructive) { manager.removeTab(tab.id) }
-                label: { Label("세션 닫기", systemImage: "xmark") }
+                label: { Label(NSLocalizedString("action.close.session", comment: ""), systemImage: "xmark") }
         }
     }
 

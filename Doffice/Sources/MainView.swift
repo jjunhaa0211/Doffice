@@ -483,10 +483,10 @@ struct MainView: View {
 
             // 뷰 모드 전환
             HStack(spacing: 0) {
-                viewModeButton(icon: "rectangle.split.1x2", mode: .split, label: "분할")
-                viewModeButton(icon: "building.2", mode: .office, label: "오피스")
-                viewModeButton(icon: "person.2.fill", mode: .strip, label: "스트립")
-                viewModeButton(icon: "terminal", mode: .terminal, label: "터미널")
+                viewModeButton(icon: "rectangle.split.1x2", mode: .split, label: NSLocalizedString("view.split", comment: ""))
+                viewModeButton(icon: "building.2", mode: .office, label: NSLocalizedString("view.office", comment: ""))
+                viewModeButton(icon: "person.2.fill", mode: .strip, label: NSLocalizedString("view.strip", comment: ""))
+                viewModeButton(icon: "terminal", mode: .terminal, label: NSLocalizedString("view.terminal", comment: ""))
             }
             .fixedSize(horizontal: true, vertical: true)
             .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(Theme.bgSurface))

@@ -1095,3 +1095,48 @@
 "coffee.opened" = "Opened %@. Account number has been copied.";
 "coffee.fallback.opened" = "Could not find the %@ app. Opened the official website instead. Account number has been copied.";
 "coffee.copy.only" = "Could not open %@. Account number has been copied.";
+
+/* Office Presets */
+"preset.cozy" = "Cozy";
+"preset.collab" = "Collab";
+"preset.focus" = "Focus";
+"preset.cozy.desc" = "A cozy office with lounge and decorations";
+"preset.collab.desc" = "Collaboration layout with meeting areas and whiteboards";
+"preset.focus.desc" = "Focus layout with quiet seating arrangement";
+
+/* Permission Mode */
+"perm.acceptEdits" = "Accept Edits";
+"perm.acceptEdits.desc" = "Auto-approve file edit permissions";
+"perm.bypass" = "Allow All";
+"perm.bypass.desc" = "Auto-approve all permissions";
+"perm.auto" = "Auto";
+"perm.auto.desc" = "Decide automatically based on context";
+"perm.default" = "Default";
+"perm.default.desc" = "Requires approval for dangerous commands";
+"perm.plan" = "Plan Only";
+"perm.plan.desc" = "Plan only, no execution";
+
+/* Approval Mode */
+"output.auto" = "Auto";
+"output.auto.desc" = "Execute all commands automatically";
+"output.ask" = "Ask";
+"output.ask.desc" = "Requires approval for dangerous commands";
+"output.safe" = "Safe";
+"output.safe.desc" = "Read only";
+
+/* Character Archetypes */
+"archetype.pixel" = "Coffee Machine ☕";
+"archetype.byte" = "Overtime Master";
+"archetype.code" = "Ctrl+Z Addict";
+"archetype.bug" = "Bug Factory";
+"archetype.chip" = "Ignores Slack";
+"archetype.mochi" = "Away from Desk";
+"archetype.nabi" = "Cat on Keyboard";
+"archetype.bori" = "Lunch Hero";
+"archetype.gomi" = "Fell Asleep Coding";
+"archetype.dash" = "Energy Drink";
+"archetype.nova" = "Silent Genius";
+"archetype.pengu" = "Salary Thief";
+"archetype.zero" = "Stack Overflow Dependent";
+"archetype.boo" = "Invisible Bug";
+"archetype.drako" = "Server Arsonist";

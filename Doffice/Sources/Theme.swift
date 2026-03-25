@@ -1940,17 +1940,15 @@ struct SettingsView: View {
                 if let lang = pendingLanguage {
                     settings.appLanguage = lang
                     SessionManager.shared.saveSessions(immediately: true)
-                    // 앱 재시작: 현재 앱 경로를 열고 종료
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        let appPath = Bundle.main.bundlePath
-                        let task = Process()
-                        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-                        task.arguments = ["-n", appPath]  // -n: new instance
-                        try? task.run()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            NSApp.terminate(nil)
-                        }
-                    }
+                    // 셸 스크립트로 재시작: 현재 앱 종료 후 다시 열기
+                    let appPath = Bundle.main.bundlePath
+                    let script = "sleep 0.5; open \"\(appPath)\""
+                    let task = Process()
+                    task.executableURL = URL(fileURLWithPath: "/bin/zsh")
+                    task.arguments = ["-c", script]
+                    try? task.run()
+                    // 강제 종료 (확인 다이얼로그 건너뜀)
+                    exit(0)
                 }
             }
             Button(NSLocalizedString("cancel", comment: ""), role: .cancel) { pendingLanguage = nil }

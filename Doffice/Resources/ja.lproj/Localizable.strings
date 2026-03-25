@@ -1095,3 +1095,48 @@
 "coffee.opened" = "%@を開きました。口座番号もコピーしました。";
 "coffee.fallback.opened" = "%@アプリが見つからなかったため、公式ウェブサイトを開きました。口座番号はコピー済みです。";
 "coffee.copy.only" = "%@を開けなかったため、口座番号のみコピーしました。";
+
+/* Office Presets */
+"preset.cozy" = "Cozy";
+"preset.collab" = "Collab";
+"preset.focus" = "Focus";
+"preset.cozy.desc" = "ラウンジと装飾のある居心地の良いオフィス";
+"preset.collab.desc" = "会議とホワイトボード中心の協業型レイアウト";
+"preset.focus.desc" = "集中席と静かな流れに合わせたレイアウト";
+
+/* Permission Mode */
+"perm.acceptEdits" = "編集のみ許可";
+"perm.acceptEdits.desc" = "ファイル編集権限を自動承認";
+"perm.bypass" = "全て許可";
+"perm.bypass.desc" = "全権限を自動承認";
+"perm.auto" = "自動";
+"perm.auto.desc" = "状況に応じて自動判断";
+"perm.default" = "デフォルト";
+"perm.default.desc" = "危険なコマンドは承認が必要";
+"perm.plan" = "計画のみ";
+"perm.plan.desc" = "計画のみ、実行しない";
+
+/* Approval Mode */
+"output.auto" = "自動";
+"output.auto.desc" = "全コマンド自動実行";
+"output.ask" = "確認";
+"output.ask.desc" = "危険なコマンドは承認が必要";
+"output.safe" = "安全";
+"output.safe.desc" = "読み取り専用";
+
+/* Character Archetypes */
+"archetype.pixel" = "コーヒーマシン ☕";
+"archetype.byte" = "残業マスター";
+"archetype.code" = "Ctrl+Z 中毒者";
+"archetype.bug" = "バグ製造機";
+"archetype.chip" = "Slack無視";
+"archetype.mochi" = "離席中";
+"archetype.nabi" = "キーボードの上の猫";
+"archetype.bori" = "ランチヒーロー";
+"archetype.gomi" = "コーディング中に寝た者";
+"archetype.dash" = "エナジードリンク";
+"archetype.nova" = "静かな天才";
+"archetype.pengu" = "給料泥棒";
+"archetype.zero" = "Stack Overflow依存";
+"archetype.boo" = "見えないバグ";
+"archetype.drako" = "サーバー放火魔";

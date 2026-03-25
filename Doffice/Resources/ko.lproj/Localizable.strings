@@ -1095,3 +1095,48 @@
 "coffee.opened" = "%@을 열었습니다. 계좌도 함께 복사했습니다.";
 "coffee.fallback.opened" = "%@ 앱을 찾지 못해 공식 웹사이트를 열었습니다. 계좌는 복사되어 있습니다.";
 "coffee.copy.only" = "%@을 열지 못해 계좌만 복사했습니다.";
+
+/* Office Presets */
+"preset.cozy" = "Cozy";
+"preset.collab" = "Collab";
+"preset.focus" = "Focus";
+"preset.cozy.desc" = "라운지와 장식이 살아있는 기본 사무실";
+"preset.collab.desc" = "회의와 화이트보드 중심의 협업형 배치";
+"preset.focus.desc" = "집중 좌석과 조용한 흐름에 맞춘 배치";
+
+/* Permission Mode */
+"perm.acceptEdits" = "수정만 허용";
+"perm.acceptEdits.desc" = "파일 수정 권한 자동 승인";
+"perm.bypass" = "전체 허용";
+"perm.bypass.desc" = "모든 권한 자동 승인";
+"perm.auto" = "자동";
+"perm.auto.desc" = "상황에 따라 자동 판단";
+"perm.default" = "기본";
+"perm.default.desc" = "위험 명령 승인 필요";
+"perm.plan" = "계획만";
+"perm.plan.desc" = "계획만 세우고 실행 안함";
+
+/* Approval Mode */
+"output.auto" = "자동";
+"output.auto.desc" = "모든 명령 자동 실행";
+"output.ask" = "확인";
+"output.ask.desc" = "위험 명령 승인 필요";
+"output.safe" = "안전";
+"output.safe.desc" = "읽기 전용";
+
+/* Character Archetypes */
+"archetype.pixel" = "커피머신 ☕";
+"archetype.byte" = "야근 마스터";
+"archetype.code" = "Ctrl+Z 중독자";
+"archetype.bug" = "버그 제조기";
+"archetype.chip" = "슬랙 답장 안함";
+"archetype.mochi" = "자리 이탈 중";
+"archetype.nabi" = "키보드 위의 고양이";
+"archetype.bori" = "런치 히어로";
+"archetype.gomi" = "코딩하다 잠든 자";
+"archetype.dash" = "에너지 드링크";
+"archetype.nova" = "조용한 천재";
+"archetype.pengu" = "월급루팡";
+"archetype.zero" = "Stack Overflow 의존";
+"archetype.boo" = "보이지 않는 버그";
+"archetype.drako" = "서버 불지르는 자";

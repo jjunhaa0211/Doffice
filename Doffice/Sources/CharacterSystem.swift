@@ -125,6 +125,12 @@ struct WorkerCharacter: Identifiable, Codable {
     var jobRole: WorkerJob = .developer
     var isOnVacation: Bool = false
 
+    var localizedArchetype: String {
+        let key = "archetype.\(id)"
+        let localized = NSLocalizedString(key, comment: "")
+        return localized == key ? archetype : localized
+    }
+
     enum HatType: String, Codable, CaseIterable {
         case none, beanie, cap, hardhat, wizard, crown, headphones, beret
     }
@@ -1112,7 +1118,7 @@ struct CharacterCard: View {
                             }
                     }
 
-                    Text(character.archetype)
+                    Text(character.localizedArchetype)
                         .font(Theme.mono(7)).foregroundColor(Theme.textDim).lineLimit(2).fixedSize(horizontal: false, vertical: true)
 
                     // Role badge - full width with no truncation

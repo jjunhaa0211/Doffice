@@ -105,20 +105,20 @@ enum PermissionMode: String, CaseIterable, Identifiable {
     }
     var displayName: String {
         switch self {
-        case .acceptEdits: return "수정만 허용"
-        case .bypassPermissions: return "전체 허용"
-        case .auto: return "자동"
-        case .defaultMode: return "기본"
-        case .plan: return "계획만"
+        case .acceptEdits: return NSLocalizedString("perm.acceptEdits", comment: "")
+        case .bypassPermissions: return NSLocalizedString("perm.bypass", comment: "")
+        case .auto: return NSLocalizedString("perm.auto", comment: "")
+        case .defaultMode: return NSLocalizedString("perm.default", comment: "")
+        case .plan: return NSLocalizedString("perm.plan", comment: "")
         }
     }
     var desc: String {
         switch self {
-        case .acceptEdits: return "파일 수정 권한 자동 승인"
-        case .bypassPermissions: return "모든 권한 자동 승인"
-        case .auto: return "상황에 따라 자동 판단"
-        case .defaultMode: return "위험 명령 승인 필요"
-        case .plan: return "계획만 세우고 실행 안함"
+        case .acceptEdits: return NSLocalizedString("perm.acceptEdits.desc", comment: "")
+        case .bypassPermissions: return NSLocalizedString("perm.bypass.desc", comment: "")
+        case .auto: return NSLocalizedString("perm.auto.desc", comment: "")
+        case .defaultMode: return NSLocalizedString("perm.default.desc", comment: "")
+        case .plan: return NSLocalizedString("perm.plan.desc", comment: "")
         }
     }
 }
@@ -130,7 +130,8 @@ enum ApprovalMode: String, CaseIterable, Identifiable {
     case safe = "Safe"
     var id: String { rawValue }
     var icon: String { switch self { case .auto: return "⚡"; case .ask: return "🛡️"; case .safe: return "🔒" } }
-    var desc: String { switch self { case .auto: return "모든 명령 자동 실행"; case .ask: return "위험 명령 승인 필요"; case .safe: return "읽기 전용" } }
+    var displayName: String { switch self { case .auto: return NSLocalizedString("output.auto", comment: ""); case .ask: return NSLocalizedString("output.ask", comment: ""); case .safe: return NSLocalizedString("output.safe", comment: "") } }
+    var desc: String { switch self { case .auto: return NSLocalizedString("output.auto.desc", comment: ""); case .ask: return NSLocalizedString("output.ask.desc", comment: ""); case .safe: return NSLocalizedString("output.safe.desc", comment: "") } }
 }
 
 // 로그 필터

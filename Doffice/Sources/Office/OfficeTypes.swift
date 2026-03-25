@@ -79,17 +79,17 @@ enum OfficePreset: String, Codable, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .cozy: return "Cozy"
-        case .collaboration: return "Collab"
-        case .focus: return "Focus"
+        case .cozy: return NSLocalizedString("preset.cozy", comment: "")
+        case .collaboration: return NSLocalizedString("preset.collab", comment: "")
+        case .focus: return NSLocalizedString("preset.focus", comment: "")
         }
     }
 
     var subtitle: String {
         switch self {
-        case .cozy: return "라운지와 장식이 살아있는 기본 사무실"
-        case .collaboration: return "회의와 화이트보드 중심의 협업형 배치"
-        case .focus: return "집중 좌석과 조용한 흐름에 맞춘 배치"
+        case .cozy: return NSLocalizedString("preset.cozy.desc", comment: "")
+        case .collaboration: return NSLocalizedString("preset.collab.desc", comment: "")
+        case .focus: return NSLocalizedString("preset.focus.desc", comment: "")
         }
     }
 

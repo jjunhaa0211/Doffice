@@ -8,6 +8,7 @@ import Combine
 struct ActionCenterView: View {
     @EnvironmentObject var manager: SessionManager
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var settings = AppSettings.shared
 
     private var attentionTabs: [TerminalTab] {
         manager.userVisibleTabs.filter { $0.statusPresentation.category == .attention }
@@ -53,7 +54,7 @@ struct ActionCenterView: View {
                                     dismiss()
                                 }
                                 .font(Theme.mono(8, weight: .bold))
-                                .foregroundColor(Theme.accent)
+                                .foregroundStyle(Theme.accentBackground)
                                 .buttonStyle(.plain)
                             }
                         }
@@ -78,7 +79,7 @@ struct ActionCenterView: View {
                                     dismiss()
                                 }
                                 .font(Theme.mono(8, weight: .bold))
-                                .foregroundColor(Theme.accent)
+                                .foregroundStyle(Theme.accentBackground)
                                 .buttonStyle(.plain)
                             }
                         }
@@ -102,7 +103,7 @@ struct ActionCenterView: View {
                                     dismiss()
                                 }
                                 .font(Theme.mono(8, weight: .bold))
-                                .foregroundColor(Theme.accent)
+                                .foregroundStyle(Theme.accentBackground)
                                 .buttonStyle(.plain)
                             }
                         }
@@ -128,7 +129,7 @@ struct ActionCenterView: View {
                                     dismiss()
                                 }
                                 .font(Theme.mono(8, weight: .bold))
-                                .foregroundColor(Theme.accent)
+                                .foregroundStyle(Theme.accentBackground)
                                 .buttonStyle(.plain)
                             }
                         }
@@ -221,6 +222,7 @@ struct CommandPaletteAction: Identifiable {
 
 struct CommandPaletteView: View {
     @EnvironmentObject var manager: SessionManager
+    @ObservedObject private var settings = AppSettings.shared
     @Binding var isPresented: Bool
     @State private var query = ""
     @FocusState private var isFocused: Bool
@@ -467,6 +469,7 @@ final class CustomPresetStore: ObservableObject {
 
 struct SavePresetSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var store = CustomPresetStore.shared
     @State private var presetName = ""
     @State private var selectedIcon = "star.fill"
@@ -569,7 +572,7 @@ struct SavePresetSheet: View {
                 .font(Theme.mono(10, weight: .bold))
                 .foregroundColor(.white)
                 .padding(.horizontal, 20).padding(.vertical, 8)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accent))
+                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accentBackground))
                 .keyboardShortcut(.return)
                 .disabled(presetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -700,6 +703,7 @@ final class SessionNotificationManager: ObservableObject {
 
 struct SessionNotificationBannerStack: View {
     @ObservedObject var notificationManager = SessionNotificationManager.shared
+    @ObservedObject private var settings = AppSettings.shared
     var onTapNotification: ((String) -> Void)?
 
     var body: some View {

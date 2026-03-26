@@ -9,6 +9,7 @@ struct GitPanelView: View {
 
     @EnvironmentObject var manager: SessionManager
     @StateObject private var git = GitDataProvider()
+    @ObservedObject private var settings = AppSettings.shared
 
     // Selection & navigation
     @State private var selectedCommitId: String?
@@ -338,7 +339,7 @@ struct GitPanelView: View {
                     Image(systemName: "checkmark.circle.fill").font(.system(size: Theme.iconSize(9)))
                     Text(NSLocalizedString("git.commit", comment: "")).font(Theme.chrome(9, weight: .bold))
                 }
-                .foregroundColor(.white)
+                .foregroundColor(Theme.textOnAccent)
                 .padding(.horizontal, 10).padding(.vertical, 5)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Theme.green))
             }
@@ -459,7 +460,7 @@ struct GitPanelView: View {
                                 resolveConflict(file.path, strategy: "theirs")
                             }
                             .font(Theme.mono(7, weight: .bold))
-                            .foregroundColor(Theme.accent)
+                            .foregroundStyle(Theme.accentBackground)
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(RoundedRectangle(cornerRadius: 4).fill(Theme.accent.opacity(0.1)))
                             .buttonStyle(.plain)
@@ -818,7 +819,7 @@ struct GitPanelView: View {
                                     Text(NSLocalizedString("git.load.more", comment: ""))
                                         .font(Theme.mono(8, weight: .medium))
                                 }
-                                .foregroundColor(Theme.accent)
+                                .foregroundStyle(Theme.accentBackground)
                                 .padding(.horizontal, 8).padding(.vertical, 4)
                                 .background(RoundedRectangle(cornerRadius: 5).fill(Theme.accent.opacity(0.06)))
                             }
@@ -949,7 +950,7 @@ struct GitPanelView: View {
         }
         .overlay(alignment: .leading) {
             if isSelected {
-                Rectangle().fill(Theme.accent).frame(width: 2)
+                Rectangle().fill(Theme.accentBackground).frame(width: 2)
             } else if commit.refs.contains(where: { $0.type == .head }) {
                 Rectangle().fill(Theme.green).frame(width: 2)
             }
@@ -1163,7 +1164,7 @@ struct GitPanelView: View {
                 HStack(spacing: 6) {
                     Text(commit.shortHash)
                         .font(Theme.mono(9, weight: .bold))
-                        .foregroundColor(Theme.accent)
+                        .foregroundStyle(Theme.accentBackground)
                     Text(commit.message)
                         .font(Theme.mono(9))
                         .foregroundColor(Theme.textPrimary)
@@ -1268,7 +1269,7 @@ struct GitPanelView: View {
             HStack(spacing: 6) {
                 Image(systemName: "folder.badge.gearshape")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(Theme.accent)
+                    .foregroundStyle(Theme.accentBackground)
                 Text(NSLocalizedString("git.working.directory", comment: ""))
                     .font(Theme.chrome(9, weight: .bold))
                     .foregroundColor(Theme.textPrimary)
@@ -1301,7 +1302,7 @@ struct GitPanelView: View {
                                 }) {
                                     Text(selectedFilesForCommit.count == git.workingDirStaged.count && !selectedFilesForCommit.isEmpty ? NSLocalizedString("git.deselect.all", comment: "") : NSLocalizedString("git.select.all", comment: ""))
                                         .font(Theme.mono(7, weight: .bold))
-                                        .foregroundColor(Theme.accent)
+                                        .foregroundStyle(Theme.accentBackground)
                                         .padding(.horizontal, 6).padding(.vertical, 2)
                                         .background(RoundedRectangle(cornerRadius: 4).fill(Theme.accent.opacity(0.08)))
                                 }
@@ -1322,10 +1323,10 @@ struct GitPanelView: View {
                                 HStack(spacing: 4) {
                                     Image(systemName: "checkmark.square.fill")
                                         .font(.system(size: 8))
-                                        .foregroundColor(Theme.accent)
+                                        .foregroundStyle(Theme.accentBackground)
                                     Text(String(format: NSLocalizedString("git.files.selected", comment: ""), selectedFilesForCommit.count, git.workingDirStaged.count))
                                         .font(Theme.mono(8))
-                                        .foregroundColor(Theme.accent)
+                                        .foregroundStyle(Theme.accentBackground)
                                 }
                                 .padding(.horizontal, 4)
                             }
@@ -1454,7 +1455,7 @@ struct GitPanelView: View {
                             if !selectedFilesForCommit.isEmpty {
                                 Text(String(format: NSLocalizedString("git.files.selected", comment: ""), selectedFilesForCommit.count, git.workingDirStaged.count))
                                     .font(Theme.mono(8))
-                                    .foregroundColor(Theme.accent)
+                                    .foregroundStyle(Theme.accentBackground)
                             }
                             Spacer()
                             Button(action: {
@@ -1492,7 +1493,7 @@ struct GitPanelView: View {
                                     Text(selectedFilesForCommit.isEmpty ? NSLocalizedString("git.commit", comment: "") : NSLocalizedString("git.commit.selected", comment: ""))
                                         .font(Theme.chrome(9, weight: .bold))
                                 }
-                                .foregroundColor(.white)
+                                .foregroundColor(Theme.textOnAccent)
                                 .padding(.horizontal, 12).padding(.vertical, 6)
                                 .background(RoundedRectangle(cornerRadius: 6).fill(
                                     commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1599,7 +1600,7 @@ struct GitPanelView: View {
 
                 Text(NSLocalizedString("git.unified.view", comment: ""))
                     .font(Theme.mono(7, weight: .bold))
-                    .foregroundColor(Theme.accent)
+                    .foregroundStyle(Theme.accentBackground)
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(RoundedRectangle(cornerRadius: 4).fill(Theme.accent.opacity(0.1)))
             }
@@ -1898,7 +1899,7 @@ struct GitPanelView: View {
             HStack(alignment: .top, spacing: 6) {
                 Text(commit.shortHash)
                     .font(Theme.mono(8, weight: .bold))
-                    .foregroundColor(Theme.accent)
+                    .foregroundStyle(Theme.accentBackground)
                 Text(commit.message)
                     .font(Theme.mono(9, weight: .medium))
                     .foregroundColor(Theme.textPrimary)
@@ -1971,7 +1972,7 @@ struct GitPanelView: View {
             if !selectedFilesForCommit.isEmpty {
                 Text(String(format: NSLocalizedString("git.files.selected", comment: ""), selectedFilesForCommit.count, git.workingDirStaged.count))
                     .font(Theme.mono(7, weight: .bold))
-                    .foregroundColor(Theme.accent)
+                    .foregroundStyle(Theme.accentBackground)
                     .padding(.horizontal, 6).padding(.vertical, 3)
                     .background(Capsule().fill(Theme.accent.opacity(0.1)))
             }
@@ -2003,7 +2004,7 @@ struct GitPanelView: View {
                             .foregroundColor(Theme.green)
                     }
                 }
-                .foregroundColor(Theme.accent)
+                .foregroundStyle(Theme.accentBackground)
                 .padding(.horizontal, 8).padding(.vertical, 5)
                 .background(RoundedRectangle(cornerRadius: 5).fill(Theme.accent.opacity(0.06))
                     .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.accent.opacity(0.12), lineWidth: 0.5)))
@@ -2157,7 +2158,7 @@ struct GitPanelView: View {
     private var actionSheet: some View {
         VStack(spacing: 16) {
             HStack {
-                Image(systemName: actionIcon(actionType)).font(.system(size: 16)).foregroundColor(Theme.accent)
+                Image(systemName: actionIcon(actionType)).font(.system(size: 16)).foregroundStyle(Theme.accentBackground)
                 Text("Git \(actionType.displayName)").font(Theme.mono(14, weight: .bold)).foregroundColor(Theme.textPrimary)
                 Spacer()
             }
@@ -2225,8 +2226,8 @@ struct GitPanelView: View {
                         Image(systemName: "paperplane.fill").font(.system(size: 9))
                         Text(NSLocalizedString("git.ask.claude", comment: "")).font(Theme.mono(10, weight: .bold))
                     }
-                    .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent))
+                    .foregroundColor(Theme.textOnAccent).padding(.horizontal, 16).padding(.vertical, 8)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accentBackground))
                 }
                 .buttonStyle(.plain)
                 .disabled(needsInput && actionInput.isEmpty)
@@ -2383,6 +2384,7 @@ struct GitPanelView: View {
 // MARK: - Git Toast View
 
 struct GitToastView: View {
+    @ObservedObject private var settings = AppSettings.shared
     let message: String
     let icon: String
     let color: Color

@@ -7,6 +7,7 @@ import Combine
 
 struct TerminalAreaView: View {
     @EnvironmentObject var manager: SessionManager
+    @ObservedObject private var settings = AppSettings.shared
     @State private var viewMode: ViewMode = .grid
     enum ViewMode { case grid, single, git }
 
@@ -111,7 +112,7 @@ struct TerminalAreaView: View {
                 if isPinned {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(Theme.accent)
+                        .foregroundStyle(Theme.accentBackground)
                 } else {
                     Circle().fill(t.workerColor.opacity(0.5)).frame(width: 5, height: 5)
                 }
@@ -667,15 +668,15 @@ struct EventStreamView: View {
                 }.buttonStyle(.plain).help(NSLocalizedString("terminal.help.close.session", comment: ""))
                 Text("claude — \(tab.projectName)")
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundColor(Color(red: 0.45, green: 0.45, blue: 0.5))
+                    .foregroundColor(Theme.textDim)
                 Spacer()
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(Color(red: 0.15, green: 0.15, blue: 0.15))
+            .background(Theme.bgSurface)
 
             CLITerminalView(tab: tab, fontSize: 13 * settings.fontSizeScale)
         }
-        .background(Color(red: 0.1, green: 0.1, blue: 0.1))
+        .background(Theme.bgTerminal)
     }
 
     // MARK: - Normal Body (WorkMan UI)
@@ -943,7 +944,7 @@ struct EventStreamView: View {
             Spacer()
             if blockFilter.isActive {
                 Button(action: { blockFilter = BlockFilter() }) {
-                    Text("Clear").font(Theme.chrome(8)).foregroundColor(Theme.accent)
+                    Text("Clear").font(Theme.chrome(8)).foregroundStyle(Theme.accentBackground)
                 }.buttonStyle(.plain)
             }
             // Search
@@ -987,11 +988,11 @@ struct EventStreamView: View {
     private var fileChangePanel: some View {
         VStack(spacing: 0) {
             HStack {
-                Image(systemName: "doc.text").font(Theme.chrome(9)).foregroundColor(Theme.accent)
+                Image(systemName: "doc.text").font(Theme.chrome(9)).foregroundStyle(Theme.accentBackground)
                 Text("FILES").font(Theme.pixel).foregroundColor(Theme.textDim).tracking(1.5)
                 Spacer()
                 Text("\(Set(tab.fileChanges.map(\.fileName)).count)")
-                    .font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.accent)
+                    .font(Theme.chrome(9, weight: .bold)).foregroundStyle(Theme.accentBackground)
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(Theme.bgSurface.opacity(0.5))
@@ -1160,7 +1161,7 @@ struct EventStreamView: View {
                 HStack(spacing: 3) {
                     RoundedRectangle(cornerRadius: 1).fill(tab.workerColor).frame(width: 3, height: 16)
                     Text(tab.projectName).font(Theme.chrome(10)).foregroundColor(Theme.textDim)
-                    Text(">").font(Theme.chrome(12, weight: .semibold)).foregroundColor(Theme.accent)
+                    Text(">").font(Theme.chrome(12, weight: .semibold)).foregroundStyle(Theme.accentBackground)
                 }.padding(.bottom, 4)
 
                 // Auto-growing TextEditor
@@ -1388,8 +1389,8 @@ struct EventStreamView: View {
         return VStack(alignment: .leading, spacing: 0) {
             Rectangle().fill(Theme.border).frame(height: 1)
             HStack(spacing: 4) {
-                Image(systemName: "command").font(Theme.chrome(8)).foregroundColor(Theme.accent)
-                Text(NSLocalizedString("terminal.command.label", comment: "")).font(Theme.chrome(8, weight: .bold)).foregroundColor(Theme.accent)
+                Image(systemName: "command").font(Theme.chrome(8)).foregroundStyle(Theme.accentBackground)
+                Text(NSLocalizedString("terminal.command.label", comment: "")).font(Theme.chrome(8, weight: .bold)).foregroundStyle(Theme.accentBackground)
                 if commands.count < Self.allSlashCommands.count {
                     Text(String(format: NSLocalizedString("terminal.cmd.match.count", comment: ""), commands.count)).font(Theme.chrome(7)).foregroundColor(Theme.textDim)
                 }
@@ -1660,7 +1661,7 @@ struct EventStreamView: View {
             HStack(spacing: 6) {
                 Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
                     .font(Theme.mono(8))
-                    .foregroundColor(Theme.accent)
+                    .foregroundStyle(Theme.accentBackground)
                 Text(NSLocalizedString("terminal.argument.flow", comment: ""))
                     .font(Theme.mono(8, weight: .bold))
                     .foregroundColor(Theme.textDim)
@@ -2026,8 +2027,8 @@ struct EventBlockView: View {
 
     private var userPromptBlock: some View {
         HStack(alignment: .top, spacing: 6) {
-            Text(">").font(Theme.mono(13, weight: .bold)).foregroundColor(Theme.accent)
-            Text(block.content).font(Theme.mono(compact ? 11 : 13)).foregroundColor(Theme.accent)
+            Text(">").font(Theme.mono(13, weight: .bold)).foregroundStyle(Theme.accentBackground)
+            Text(block.content).font(Theme.mono(compact ? 11 : 13)).foregroundStyle(Theme.accentBackground)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 6).padding(.horizontal, 8)
@@ -2242,7 +2243,7 @@ struct MarkdownTextView: View {
                         .textSelection(.enabled)
                 case .bullet(let content):
                     HStack(alignment: .top, spacing: 6) {
-                        Text("•").font(Theme.mono(compact ? 10 : 11)).foregroundColor(Theme.accent)
+                        Text("•").font(Theme.mono(compact ? 10 : 11)).foregroundStyle(Theme.accentBackground)
                             .frame(width: 10)
                         inlineMarkdown(content)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2496,6 +2497,7 @@ struct ProcessingIndicator: View {
 
 struct GridPanelView: View {
     @EnvironmentObject var manager: SessionManager
+    @ObservedObject private var settings = AppSettings.shared
 
     private var hasPinnedTabs: Bool { !manager.pinnedTabIds.isEmpty }
 
@@ -2698,6 +2700,7 @@ struct ApprovalSheet: View {
 // ═══════════════════════════════════════════════════════
 
 struct EmptySessionView: View {
+    @ObservedObject private var settings = AppSettings.shared
     var body: some View {
         VStack {
             Spacer()
@@ -3021,10 +3024,10 @@ struct NewTabSheet: View {
 
             // 경로 표시
             HStack(spacing: 6) {
-                Image(systemName: "folder.fill").font(.system(size: Theme.iconSize(10))).foregroundColor(Theme.accent)
+                Image(systemName: "folder.fill").font(.system(size: Theme.iconSize(10))).foregroundStyle(Theme.accentBackground)
                 Text(projectPath)
                     .font(Theme.mono(10))
-                    .foregroundColor(Theme.accent).lineLimit(1).truncationMode(.middle)
+                    .foregroundStyle(Theme.accentBackground).lineLimit(1).truncationMode(.middle)
             }
             .padding(.horizontal, 16).padding(.vertical, 8)
             .frame(maxWidth: .infinity)
@@ -3315,7 +3318,7 @@ struct NewTabSheet: View {
                                 Spacer()
                                 Text(String(format: NSLocalizedString("terminal.count.items", comment: ""), terminalCount))
                                     .font(Theme.mono(9, weight: .bold))
-                                    .foregroundColor(Theme.accent)
+                                    .foregroundStyle(Theme.accentBackground)
                             }
 
                             HStack(spacing: 8) {
@@ -3564,7 +3567,7 @@ struct NewTabSheet: View {
             // 추가 디렉토리
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
-                    Image(systemName: "folder.badge.plus").font(.system(size: Theme.iconSize(9))).foregroundColor(Theme.accent)
+                    Image(systemName: "folder.badge.plus").font(.system(size: Theme.iconSize(9))).foregroundStyle(Theme.accentBackground)
                     Text(NSLocalizedString("terminal.additional.dirs", comment: "")).font(Theme.mono(9, weight: .medium)).foregroundColor(Theme.textSecondary)
                 }
                 HStack(spacing: 4) {
@@ -3576,7 +3579,7 @@ struct NewTabSheet: View {
                         let p = NSOpenPanel(); p.canChooseFiles = false; p.canChooseDirectories = true
                         if p.runModal() == .OK, let u = p.url { additionalDir = u.path }
                     }) {
-                        Image(systemName: "folder").font(.system(size: Theme.iconSize(10))).foregroundColor(Theme.accent)
+                        Image(systemName: "folder").font(.system(size: Theme.iconSize(10))).foregroundStyle(Theme.accentBackground)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(NSLocalizedString("terminal.additional.dir.select.a11y", comment: ""))
@@ -4008,7 +4011,7 @@ struct SleepWorkSetupSheet: View {
                         Image(systemName: "moon.zzz.fill").font(.system(size: 12))
                         Text(NSLocalizedString("terminal.sleepwork.start", comment: "")).font(Theme.mono(11, weight: .bold))
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(Theme.textOnAccent)
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Theme.purple))
                 }

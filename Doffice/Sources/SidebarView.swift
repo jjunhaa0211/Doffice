@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 private struct CollapsibleSidebarPanel<Content: View>: View {
+    @ObservedObject private var settings = AppSettings.shared
     let title: String
     let icon: String
     let tint: Color
@@ -205,7 +206,7 @@ struct SidebarView: View {
                         Text(NSLocalizedString("sidebar.view.all", comment: "")).font(Theme.chrome(9, weight: .medium))
                         Spacer()
                     }
-                    .foregroundColor(Theme.accent)
+                    .foregroundStyle(Theme.accentBackground)
                     .padding(.horizontal, 14).padding(.vertical, 6)
                 }.buttonStyle(.plain)
             }
@@ -273,7 +274,7 @@ struct SidebarView: View {
 
             if isMultiSelectMode && !selectedTabIds.isEmpty {
                 HStack(spacing: 8) {
-                    Text(String(format: NSLocalizedString("sidebar.selected.count", comment: ""), selectedTabIds.count)).font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.accent)
+                    Text(String(format: NSLocalizedString("sidebar.selected.count", comment: ""), selectedTabIds.count)).font(Theme.chrome(9, weight: .bold)).foregroundStyle(Theme.accentBackground)
                     Spacer()
                     Button(action: { batchRestart() }) {
                         Image(systemName: "arrow.clockwise").font(.system(size: 10))
@@ -415,7 +416,7 @@ struct SidebarView: View {
                         if totalIn > 0 || totalOut > 0 {
                             HStack(spacing: 4) {
                                 Text("In").font(Theme.chrome(7)).foregroundColor(Theme.textDim)
-                                Text(formatTokens(totalIn)).font(Theme.chrome(8, weight: .semibold)).foregroundColor(Theme.accent)
+                                Text(formatTokens(totalIn)).font(Theme.chrome(8, weight: .semibold)).foregroundStyle(Theme.accentBackground)
                                 Text("Out").font(Theme.chrome(7)).foregroundColor(Theme.textDim)
                                 Text(formatTokens(totalOut)).font(Theme.chrome(8, weight: .semibold)).foregroundColor(Theme.green)
                             }
@@ -780,22 +781,23 @@ struct SidebarView: View {
         tone: AppChromeTone,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        let toneStyle: AnyShapeStyle = tone == .accent ? Theme.accentBackground : AnyShapeStyle(tone.color)
+        return Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: icon)
                     .font(.system(size: Theme.chromeIconSize(12), weight: .semibold))
-                    .foregroundColor(tone.color)
+                    .foregroundStyle(toneStyle)
                     .frame(width: 18)
                 Text(title).font(Theme.chrome(11, weight: .medium))
                 Spacer()
                 Text(countText)
                     .font(Theme.chrome(9, weight: .bold))
-                    .foregroundColor(tone.color)
+                    .foregroundStyle(toneStyle)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: Theme.cornerSmall).fill(tone.color.opacity(0.10)))
+                    .background(RoundedRectangle(cornerRadius: Theme.cornerSmall).fill(tone == .accent ? Theme.accentSoftBackground : AnyShapeStyle(tone.color.opacity(0.10))))
             }
-            .foregroundColor(Theme.textSecondary)
+            .foregroundStyle(AnyShapeStyle(Theme.textSecondary))
             .padding(.vertical, 10)
             .padding(.horizontal, 12)
             .background(
@@ -814,6 +816,7 @@ struct SidebarView: View {
 struct ReportCenterView: View {
     @EnvironmentObject var manager: SessionManager
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var settings = AppSettings.shared
     @State private var selectedReportPath: String?
     @State private var reportText: String = ""
     @State private var reportToDelete: SessionManager.ReportReference?
@@ -1144,7 +1147,7 @@ struct SessionGroupCard: View {
                         symbol: groupStatus.symbol,
                         tint: groupStatus.tint
                     )
-                    Text("\(group.tabs.count)").font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.accent)
+                    Text("\(group.tabs.count)").font(Theme.chrome(9, weight: .bold)).foregroundStyle(Theme.accentBackground)
                         .padding(.horizontal, 5).padding(.vertical, 1).background(Theme.accent.opacity(0.1)).cornerRadius(3)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 8)
@@ -1192,6 +1195,7 @@ struct SessionGroupCard: View {
 struct WorkerMiniCard: View {
     @ObservedObject var tab: TerminalTab
     @EnvironmentObject var manager: SessionManager
+    @ObservedObject private var settings = AppSettings.shared
     private var isSelected: Bool { manager.activeTabId == tab.id }
     var body: some View {
         Button(action: { manager.focusSingleTab = true; manager.selectTab(tab.id) }) {
@@ -1377,6 +1381,7 @@ struct SessionHistoryView: View {
     @State private var history: [SavedSession] = []
     @State private var lastSaved: Date?
     @EnvironmentObject var manager: SessionManager
+    @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1415,7 +1420,7 @@ struct SessionHistoryView: View {
                                         manager.notifyManualLaunchCapacity()
                                     }
                                 }) {
-                                    Image(systemName: "arrow.counterclockwise").font(Theme.chrome(9)).foregroundColor(Theme.accent)
+                                    Image(systemName: "arrow.counterclockwise").font(Theme.chrome(9)).foregroundStyle(Theme.accentBackground)
                                 }.buttonStyle(.plain).help(NSLocalizedString("sidebar.help.session.restart", comment: ""))
                             }
                         }

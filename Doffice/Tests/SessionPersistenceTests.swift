@@ -110,6 +110,7 @@ final class SessionPersistenceTests: XCTestCase {
         )
 
         tab.restoreSavedSessionSnapshot(saved)
+        tab.appendRestorationNotice(from: saved, recoveryBundleURL: nil)
 
         XCTAssertEqual(tab.tokensUsed, 120)
         XCTAssertEqual(tab.inputTokensUsed, 45)
@@ -122,12 +123,20 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(tab.lastResultText, "done")
         XCTAssertNil(tab.initialPrompt)
         XCTAssertFalse(tab.isCompleted)
+        XCTAssertFalse(tab.isProcessing)
         XCTAssertTrue(tab.isRunning)
         XCTAssertEqual(tab.startTime, start)
         XCTAssertEqual(tab.lastActivityTime, start.addingTimeInterval(90))
         XCTAssertEqual(tab.summary?.filesModified, ["Sources/App.swift"])
         XCTAssertEqual(tab.summary?.duration, 33)
         XCTAssertEqual(tab.summary?.tokenCount, 120)
+        XCTAssertEqual(
+            tab.blocks.filter {
+                if case .sessionStart = $0.blockType { return true }
+                return false
+            }.count,
+            0
+        )
     }
 
     func testSaveLoadAndRecoveryBundleKeepSessionIdentityAndFiles() throws {
@@ -255,13 +264,16 @@ final class SessionPersistenceTests: XCTestCase {
         forkSession: Bool? = nil,
         fromPR: String? = nil,
         enableBrief: Bool? = nil,
+        manualLaunch: Bool? = nil,
         tmuxMode: Bool? = nil,
         strictMcpConfig: Bool? = nil,
         settingSources: String? = nil,
         settingsFileOrJSON: String? = nil,
         betaHeaders: String? = nil,
         sessionId: String? = nil,
-        fileChanges: [SavedFileChange]? = nil
+        fileChanges: [SavedFileChange]? = nil,
+        chatHistory: [SavedChatBlock]? = nil,
+        tabOrder: Int? = nil
     ) -> SavedSession {
         SavedSession(
             tabId: "saved-tab",
@@ -311,6 +323,7 @@ final class SessionPersistenceTests: XCTestCase {
             enableChrome: enableChrome,
             forkSession: forkSession,
             fromPR: fromPR,
+            manualLaunch: manualLaunch,
             enableBrief: enableBrief,
             tmuxMode: tmuxMode,
             strictMcpConfig: strictMcpConfig,
@@ -318,7 +331,9 @@ final class SessionPersistenceTests: XCTestCase {
             settingsFileOrJSON: settingsFileOrJSON,
             betaHeaders: betaHeaders,
             sessionId: sessionId,
-            fileChanges: fileChanges
+            fileChanges: fileChanges,
+            chatHistory: chatHistory,
+            tabOrder: tabOrder
         )
     }
 }

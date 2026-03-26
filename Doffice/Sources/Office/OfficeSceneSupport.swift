@@ -372,14 +372,16 @@ final class OfficeSceneStore: ObservableObject {
     func advance(with tabs: [TerminalTab], activeTabId: String?, focusMode: Bool, fps: Double = OfficeConstants.fps) {
         let now = Date().timeIntervalSinceReferenceDate
         let effectiveFPS = max(fps, 1)
-        if now - lastAdvanceTime < (0.6 / effectiveFPS) {
+        let elapsed = now - lastAdvanceTime
+        if elapsed < (0.85 / effectiveFPS) {
             return
         }
         lastAdvanceTime = now
         let prevCharacters = controller.characters
         frame += 1
         syncCharactersIfNeeded(with: tabs)
-        controller.tick(deltaTime: 1.0 / effectiveFPS)
+        let dt = min(elapsed, 0.25)  // cap delta to prevent physics jumps after long pauses
+        controller.tick(deltaTime: dt)
         updateCamera(activeTabId: activeTabId, focusMode: focusMode)
         // Mark redraw needed if any character state actually changed
         let changed = prevCharacters.count != controller.characters.count ||

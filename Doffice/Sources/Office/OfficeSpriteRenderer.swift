@@ -14,9 +14,33 @@ struct OfficeSpriteRenderer {
     let selectedTabId: String?
     let selectedFurnitureId: String?
     var chromeScreenshots: [String: CGImage] = [:]  // tabId → chrome screenshot
+    /// Pre-built tab lookup table — avoids O(n) tabs.first(where:) per character
+    private let tabLookup: [String: TerminalTab]
+
+    init(map: OfficeMap, characters: [String: OfficeCharacter], tabs: [TerminalTab],
+         frame: Int, dark: Bool, theme: BackgroundTheme,
+         selectedTabId: String?, selectedFurnitureId: String?) {
+        self.map = map
+        self.characters = characters
+        self.tabs = tabs
+        self.frame = frame
+        self.dark = dark
+        self.theme = theme
+        self.selectedTabId = selectedTabId
+        self.selectedFurnitureId = selectedFurnitureId
+        self.palette = OfficeScenePalette(theme: theme, dark: dark)
+        // Build O(1) tab lookup once instead of O(n) per character
+        var lookup: [String: TerminalTab] = [:]
+        lookup.reserveCapacity(tabs.count)
+        for tab in tabs { lookup[tab.id] = tab }
+        self.tabLookup = lookup
+    }
 
     // Sprite cache: keyed by color combination string → CharacterSpriteSet
     private static var spriteCache: [String: CharacterSpriteSet] = [:]
+
+    // Reusable Z-sort buffer — avoids per-frame heap allocation
+    private static var zBuffer: [ZDrawable] = []
 
     // Pre-allocated bubble text arrays to avoid per-frame allocation
     private static let greetTexts0 = ["(ᵔᴥᵔ)", "ヾ(＾∇＾)", "(◕‿◕)", "\\(^o^)/"]
@@ -38,15 +62,16 @@ struct OfficeSpriteRenderer {
     private static let thinkingReactions = ["(·_·)", "🤔...", "φ(._.)", "(ᵕ≀ᵕ)"]
     private static let celebratingReactions = ["🎉✧", "\\(ᵔᵕᵔ)/", "٩(◕‿◕)۶", "★彡"]
     private static let idleReactions = ["(¬_¬)", "(-_-) zzZ", "(˘ω˘)", "( ˙꒳˙ )"]
-    private let windowColumns: Set<Int> = [3, 4, 5, 9, 10, 11, 15, 16, 17, 21, 22, 23, 31, 32, 33, 37, 38, 39]
-    private var palette: OfficeScenePalette { OfficeScenePalette(theme: theme, dark: dark) }
+    private static let windowColumns: Set<Int> = [3, 4, 5, 9, 10, 11, 15, 16, 17, 21, 22, 23, 31, 32, 33, 37, 38, 39]
+    /// Computed once per renderer creation, not per property access
+    let palette: OfficeScenePalette
 
     // Static background cache: avoids redrawing ~8000 floor/wall draw calls every frame
     private static var cachedBackgroundImage: CGImage?
     private static var cachedBackgroundKey: String = ""
+    private static let staticCachedTypes: Set<FurnitureType> = [.rug, .bookshelf, .whiteboard, .pictureFrame, .clock]
     static func usesStaticBackgroundCache(for type: FurnitureType) -> Bool {
-        let cachedTypes: Set<FurnitureType> = [.rug, .bookshelf, .whiteboard, .pictureFrame, .clock]
-        return cachedTypes.contains(type)
+        staticCachedTypes.contains(type)
     }
 
     // MARK: - Main Render
@@ -554,7 +579,7 @@ struct OfficeSpriteRenderer {
                 guard map.tiles[r][c] == .wall else { continue }
                 let x = CGFloat(c) * ts, y = CGFloat(r) * ts
                 let isTopOuterWall = r <= 1 && c > 0 && c < map.cols - 1
-                let hasWindow = isTopOuterWall && windowColumns.contains(c)
+                let hasWindow = isTopOuterWall && Self.windowColumns.contains(c)
 
                 // Main wall body
                 let wallBase = palette.wallBase
@@ -664,8 +689,7 @@ struct OfficeSpriteRenderer {
     }
 
     private func drawZSortedScene(_ ctx: GraphicsContext) {
-        var drawables: [ZDrawable] = []
-        drawables.reserveCapacity(map.furniture.count + characters.count)
+        Self.zBuffer.removeAll(keepingCapacity: true)
 
         // Furniture
         for f in map.furniture {
@@ -674,59 +698,65 @@ struct OfficeSpriteRenderer {
             let fy = CGFloat(f.position.row) * 16
             let fw = CGFloat(f.size.w) * 16
             let fh = CGFloat(f.size.h) * 16
-            let zY = f.zY
-            let fType = f.type
-            let d = self.dark
-            let frm = self.frame
 
             // 모니터의 경우 연결된 탭의 크롬 스크린샷 확인
             var chromeImg: CGImage? = nil
-            if fType == .monitor {
-                // 이 모니터의 deskId를 찾고 → 해당 좌석의 탭 → 크롬 스크린샷
+            if f.type == .monitor {
                 let monId = f.id.replacingOccurrences(of: "mon_", with: "seat_")
                 if let seat = map.seats.first(where: { $0.id == monId }),
                    let tabId = seat.assignedTabId {
                     chromeImg = chromeScreenshots[tabId]
                 }
             }
-            let capturedImg = chromeImg
 
-            drawables.append(ZDrawable(zY: zY) { c in
-                Self.drawDetailedFurniture(c, type: fType, x: fx, y: fy, w: fw, h: fh, dark: d, frame: frm)
-                // 크롬 스크린샷을 모니터 화면에 오버레이
-                if fType == .monitor, let img = capturedImg {
-                    let screenX = fx + 2.5
-                    let screenY = fy + 1.5
-                    let screenW = fw - 5
-                    let screenH = fh - 7
-                    c.draw(Image(decorative: img, scale: 1),
-                           in: CGRect(x: screenX, y: screenY, width: screenW, height: screenH))
-                }
-            })
+            Self.zBuffer.append(ZDrawable(
+                zY: f.zY,
+                kind: .furniture(ZFurnitureInfo(
+                    type: f.type, x: fx, y: fy, w: fw, h: fh,
+                    dark: dark, frame: frame, chromeImage: chromeImg
+                ))
+            ))
         }
 
         // Characters
         for (_, char) in characters {
-            let tab = char.tabId.flatMap { tabId in tabs.first(where: { $0.id == tabId }) }
-            let charCopy = char
+            let tab = char.tabId.flatMap { tabLookup[$0] }
             let rosterCharacter = CharacterRegistry.shared.character(with: char.rosterCharacterId)
             let workerColor = tab?.workerColor ?? Color(hex: Self.normalizedHex(char.accentColorHex))
             let hashSeed = tab?.id ?? char.rosterCharacterId ?? char.displayName
             let hashVal = hashSeed.hashValue
-            let charDir = char.dir
-            let charState = char.state
-            let charFrame = char.frame
-            let d = self.dark
 
-            drawables.append(ZDrawable(zY: char.zY) { c in
-                Self.drawCharacterSprite(c, char: charCopy, workerColor: workerColor,
-                                         hashVal: hashVal, dir: charDir, state: charState,
-                                         frame: charFrame, dark: d, rosterCharacter: rosterCharacter)
-            })
+            Self.zBuffer.append(ZDrawable(
+                zY: char.zY,
+                kind: .character(ZCharacterInfo(
+                    char: char, workerColor: workerColor, hashVal: hashVal,
+                    dir: char.dir, state: char.state, frame: char.frame,
+                    dark: dark, rosterCharacter: rosterCharacter
+                ))
+            ))
         }
 
-        drawables.sort { $0.zY < $1.zY }
-        for d in drawables { d.draw(ctx) }
+        Self.zBuffer.sort { $0.zY < $1.zY }
+
+        for drawable in Self.zBuffer {
+            switch drawable.kind {
+            case .furniture(let info):
+                Self.drawDetailedFurniture(ctx, type: info.type, x: info.x, y: info.y,
+                                           w: info.w, h: info.h, dark: info.dark, frame: info.frame)
+                if info.type == .monitor, let img = info.chromeImage {
+                    let screenX = info.x + 2.5
+                    let screenY = info.y + 1.5
+                    let screenW = info.w - 5
+                    let screenH = info.h - 7
+                    ctx.draw(Image(decorative: img, scale: 1),
+                             in: CGRect(x: screenX, y: screenY, width: screenW, height: screenH))
+                }
+            case .character(let info):
+                Self.drawCharacterSprite(ctx, char: info.char, workerColor: info.workerColor,
+                                         hashVal: info.hashVal, dir: info.dir, state: info.state,
+                                         frame: info.frame, dark: info.dark, rosterCharacter: info.rosterCharacter)
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════
@@ -1561,8 +1591,11 @@ struct OfficeSpriteRenderer {
         if let cached = Self.spriteCache[cacheKey] {
             sprites = cached
         } else {
-            // 캐시 크기 제한 (최대 50개 — 초과 시 전체 클리어)
-            if Self.spriteCache.count > 50 { Self.spriteCache.removeAll() }
+            // 캐시 크기 제한 — 절반 제거 (전체 클리어보다 안정적)
+            if Self.spriteCache.count > 50 {
+                let keysToRemove = Array(Self.spriteCache.keys.prefix(Self.spriteCache.count / 2))
+                for key in keysToRemove { Self.spriteCache.removeValue(forKey: key) }
+            }
             let built = SpriteCatalog.buildCharacterSprites(skin: skinHex, hair: hairHex, shirt: shirtHex, pants: pantsHex)
             Self.spriteCache[cacheKey] = built
             sprites = built
@@ -1645,7 +1678,7 @@ struct OfficeSpriteRenderer {
             with: .color(Color.black.opacity(dark ? 0.18 : 0.10))
         )
 
-        // Pixel render
+        // Pixel render — batch contiguous same-color pixels into single rects per row
         for y in 0..<sprite.count {
             let rowShiftX: CGFloat
             let rowShiftY: CGFloat
@@ -1666,16 +1699,34 @@ struct OfficeSpriteRenderer {
                 rowShiftY = 0
             }
 
-            for x in 0..<sprite[y].count {
-                let hex = sprite[y][x]
-                guard !hex.isEmpty else { continue }
+            let row = sprite[y]
+            let rowY = snappedPixel(drawY + CGFloat(y) + rowShiftY)
+            var runStart = -1
+            var runHex = ""
+
+            for x in 0..<row.count {
+                let hex = row[x]
+                if hex == runHex && !hex.isEmpty {
+                    continue  // extend current run
+                }
+                // Flush previous run
+                if !runHex.isEmpty && runStart >= 0 {
+                    let runLen = CGFloat(x - runStart)
+                    ctx.fill(Path(CGRect(
+                        x: snappedPixel(drawX + CGFloat(runStart) + rowShiftX),
+                        y: rowY, width: runLen * 1.15, height: 1.15
+                    )), with: .color(Color(hex: runHex)))
+                }
+                runStart = x
+                runHex = hex
+            }
+            // Flush last run
+            if !runHex.isEmpty && runStart >= 0 {
+                let runLen = CGFloat(row.count - runStart)
                 ctx.fill(Path(CGRect(
-                    x: snappedPixel(drawX + CGFloat(x) + rowShiftX),
-                    y: snappedPixel(drawY + CGFloat(y) + rowShiftY),
-                    width: 1.15,
-                    height: 1.15
-                )),
-                         with: .color(Color(hex: hex)))
+                    x: snappedPixel(drawX + CGFloat(runStart) + rowShiftX),
+                    y: rowY, width: runLen * 1.15, height: 1.15
+                )), with: .color(Color(hex: runHex)))
             }
         }
 
@@ -2238,7 +2289,7 @@ struct OfficeSpriteRenderer {
 
         for char in projectLeads {
             guard let tabId = char.tabId,
-                  let tab = tabs.first(where: { $0.id == tabId }) else { continue }
+                  let tab = tabLookup[tabId] else { continue }
             guard tab.automationSourceTabId == nil else { continue }
             let hasBubbleText = socialBubble(for: char) != nil || hasPrimaryBubble(for: char.state)
             let label = String(tab.projectName.prefix(10))
@@ -2288,7 +2339,7 @@ struct OfficeSpriteRenderer {
 
         for (_, char) in characters {
             guard let tabId = char.tabId,
-                  let tab = tabs.first(where: { $0.id == tabId }) else {
+                  let tab = tabLookup[tabId] else {
                 if !char.displayName.isEmpty {
                     let idleColor = Color(hex: Self.normalizedHex(char.accentColorHex))
                     ctx.draw(

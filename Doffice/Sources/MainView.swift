@@ -21,6 +21,7 @@ struct MainView: View {
     @State private var billingAlertMessage = ""
     @ObservedObject private var updater = UpdateChecker.shared
     @ObservedObject private var pluginHost = PluginHost.shared
+    @ObservedObject private var effectEngine = PluginEffectEngine.shared
     @State private var activePluginPanelId: String?
     @ObservedObject private var sessionNotifications = SessionNotificationManager.shared
     @Environment(\.openWindow) private var openWindow
@@ -95,6 +96,8 @@ struct MainView: View {
 
     private var bodyWithOverlays: some View {
         mainLayout
+        .offset(effectEngine.shakeOffset)
+        .overlay { PluginEffectOverlay().zIndex(9) }
         .overlay(alignment: .topTrailing) {
             VStack(alignment: .trailing, spacing: 8) {
                 if let ach = achievementManager.recentUnlock {
@@ -143,7 +146,7 @@ struct MainView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "arrow.clockwise.circle.fill")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(Theme.accent)
+                        .foregroundStyle(Theme.accentBackground)
                     Text(NSLocalizedString("main.settings.changed", comment: ""))
                         .font(Theme.mono(11, weight: .medium))
                         .foregroundColor(Theme.textPrimary)
@@ -153,9 +156,9 @@ struct MainView: View {
                         manager.refresh()
                     }
                     .font(Theme.mono(10, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(Theme.textOnAccent)
                     .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accentBackground))
                     .buttonStyle(.plain)
                     Button(action: { settings.pendingRefresh = false }) {
                         Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
@@ -256,8 +259,15 @@ struct MainView: View {
         .onAppear {
             settings.ensureCoffeeSupportPreset()
             if manager.userVisibleTabs.isEmpty {
-                manager.restoreSessions()
-                manager.autoDetectAndConnect()
+                // Let the first frame render before session restoration work kicks in.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    manager.restoreSessions()
+                }
+                // Runtime session scanning can still start automatically, but keep it
+                // behind restoration so launch feels responsive even with shell probes.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    manager.autoDetectAndConnect()
+                }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 if !ClaudeInstallChecker.shared.isInstalled {
@@ -265,7 +275,9 @@ struct MainView: View {
                 }
             }
             // 플러그인 확장 포인트 로드
-            PluginHost.shared.reload()
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.6) {
+                PluginHost.shared.reload()
+            }
             // Daily login reward
             if let reward = AchievementManager.shared.claimDailyReward() {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
@@ -698,7 +710,7 @@ struct MainView: View {
         HStack(spacing: 8) {
             Image(systemName: panel.icon)
                 .font(.system(size: Theme.iconSize(12), weight: .bold))
-                .foregroundColor(Theme.accent)
+                .foregroundStyle(Theme.accentBackground)
             Text(panel.title)
                 .font(Theme.mono(11, weight: .bold))
                 .foregroundColor(Theme.textPrimary)
@@ -805,7 +817,7 @@ struct BillingAlertOverlay: View {
                     Button(action: onDismiss) {
                         Text(NSLocalizedString("main.billing.confirm", comment: ""))
                             .font(Theme.mono(11, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(Theme.textOnAccent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .background(RoundedRectangle(cornerRadius: 8).fill(Theme.orange))
@@ -836,7 +848,7 @@ struct BillingAlertOverlay: View {
             .frame(width: 320)
             .background(
                 RoundedRectangle(cornerRadius: 18)
-                    .fill(AppSettings.shared.isDarkMode ? Color(hex: "1a1810") : Color(hex: "fffcf5"))
+                    .fill(Theme.bgCard)
                     .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.orange.opacity(0.2), lineWidth: 1))
             )
             .scaleEffect(appeared ? 1.0 : 0.85)
@@ -950,7 +962,7 @@ struct DailyRewardOverlay: View {
                 Button(action: onDismiss) {
                     Text(NSLocalizedString("confirm", comment: ""))
                         .font(Theme.mono(12, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(Theme.textOnAccent)
                         .frame(width: 120)
                         .padding(.vertical, 10)
                         .background(
@@ -963,7 +975,7 @@ struct DailyRewardOverlay: View {
             .padding(28)
             .background(
                 RoundedRectangle(cornerRadius: 20)
-                    .fill(AppSettings.shared.isDarkMode ? Color(hex: "161a24") : Color(hex: "ffffff"))
+                    .fill(Theme.bgCard)
                     .overlay(
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(streakColor.opacity(0.2), lineWidth: 1)
@@ -1059,8 +1071,8 @@ struct SessionLockOverlay: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 20).padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accent))
-                    .foregroundColor(.white)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accentBackground))
+                    .foregroundColor(Theme.textOnAccent)
                     .font(Theme.mono(11, weight: .bold))
                 }
             }

@@ -122,7 +122,7 @@ struct MenuBarPopoverView: View {
 
                     if manager.userVisibleTabs.isEmpty {
                         VStack(spacing: 8) {
-                            Image(systemName: "hammer.fill").font(.system(size: Theme.iconSize(16), weight: .medium)).foregroundColor(Theme.accent)
+                            Image(systemName: "hammer.fill").font(.system(size: Theme.iconSize(16), weight: .medium)).foregroundStyle(Theme.accentBackground)
                             Text(NSLocalizedString("menubar.no.sessions", comment: "")).font(Theme.mono(10)).foregroundColor(Theme.textDim)
                             Text(AppSettings.shared.appDisplayName).font(Theme.mono(8)).foregroundColor(Theme.textDim.opacity(0.5))
                         }
@@ -145,9 +145,9 @@ struct MenuBarPopoverView: View {
 
     private var headerSection: some View {
         HStack(spacing: 8) {
-            Image(systemName: "hammer.fill").font(.system(size: Theme.iconSize(11), weight: .medium)).foregroundColor(Theme.accent)
+            Image(systemName: "hammer.fill").font(.system(size: Theme.iconSize(11), weight: .medium)).foregroundStyle(Theme.accentBackground)
             VStack(alignment: .leading, spacing: 1) {
-                Text(AppSettings.shared.appDisplayName).font(Theme.mono(12, weight: .bold)).foregroundColor(Theme.accent)
+                Text(AppSettings.shared.appDisplayName).font(Theme.mono(12, weight: .bold)).foregroundStyle(Theme.accentBackground)
                 Text(AppSettings.shared.companyName.isEmpty ? "Claude Code Manager" : AppSettings.shared.companyName)
                     .font(Theme.mono(7)).foregroundColor(Theme.textDim)
             }
@@ -268,7 +268,7 @@ struct MenuBarPopoverView: View {
                     Image(systemName: "macwindow").font(.system(size: Theme.iconSize(9)))
                     Text(String(format: NSLocalizedString("menubar.open.app", comment: ""), AppSettings.shared.appDisplayName)).font(Theme.mono(9, weight: .medium))
                 }
-                .foregroundColor(Theme.accent)
+                .foregroundStyle(Theme.accentBackground)
                 .frame(maxWidth: .infinity).padding(.vertical, 6)
                 .background(RoundedRectangle(cornerRadius: 5).fill(Theme.accent.opacity(0.08)))
             }.buttonStyle(.plain)

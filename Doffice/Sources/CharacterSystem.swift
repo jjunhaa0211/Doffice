@@ -108,7 +108,7 @@ enum WorkerJob: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-struct WorkerCharacter: Identifiable, Codable {
+struct WorkerCharacter: Identifiable, Codable, Equatable {
     let id: String
     var name: String
     var archetype: String
@@ -130,6 +130,9 @@ struct WorkerCharacter: Identifiable, Codable {
         let localized = NSLocalizedString(key, comment: "")
         return localized == key ? archetype : localized
     }
+
+    var isPluginCharacter: Bool { id.hasPrefix("plugin_") }
+    var isFleaMarketHiddenCharacter: Bool { id.hasPrefix("plugin_flea-market-hidden-pack_") }
 
     enum HatType: String, Codable, CaseIterable {
         case none, beanie, cap, hardhat, wizard, crown, headphones, beret
@@ -624,6 +627,7 @@ class CharacterRegistry: ObservableObject {
     func loadPluginCharacters() {
         let pluginPaths = PluginManager.shared.activePluginPaths
         var newCharacters: [WorkerCharacter] = []
+        var didChange = false
 
         for pluginPath in pluginPaths {
             let jsonURL = URL(fileURLWithPath: pluginPath).appendingPathComponent("characters.json")
@@ -635,12 +639,18 @@ class CharacterRegistry: ObservableObject {
             // ID 충돌 방지: "plugin_" 접두사 추가
             let pluginName = URL(fileURLWithPath: pluginPath).lastPathComponent
             for var char in chars {
+                let originalID = char.id
                 let prefixedId = "plugin_\(pluginName)_\(char.id)"
-                // 이미 존재하면 스킵
-                if allCharacters.contains(where: { $0.id == prefixedId }) { continue }
+                let existingIndex = allCharacters.firstIndex(where: { $0.id == prefixedId })
+                let existingCharacter = existingIndex.flatMap { allCharacters[$0] }
                 char = WorkerCharacter(
                     id: prefixedId,
-                    name: char.name,
+                    name: Self.syncedPluginCharacterName(
+                        pluginName: pluginName,
+                        originalID: originalID,
+                        bundledName: char.name,
+                        existingName: existingCharacter?.name
+                    ),
                     archetype: char.archetype,
                     hairColor: char.hairColor,
                     skinTone: char.skinTone,
@@ -649,18 +659,28 @@ class CharacterRegistry: ObservableObject {
                     hatType: char.hatType,
                     accessory: char.accessory,
                     species: char.species,
-                    isHired: false,
+                    isHired: existingCharacter?.isHired ?? false,
+                    hiredAt: existingCharacter?.hiredAt,
                     requiredAchievement: char.requiredAchievement,
-                    jobRole: char.jobRole
+                    jobRole: existingCharacter?.jobRole ?? char.jobRole,
+                    isOnVacation: existingCharacter?.isOnVacation ?? false
                 )
-                newCharacters.append(char)
+                if let existingIndex {
+                    if allCharacters[existingIndex] != char {
+                        allCharacters[existingIndex] = char
+                        didChange = true
+                    }
+                } else {
+                    newCharacters.append(char)
+                    didChange = true
+                }
             }
         }
 
         if !newCharacters.isEmpty {
             allCharacters.append(contentsOf: newCharacters)
-            save()
         }
+        if didChange { save() }
     }
 
     /// 비활성 플러그인의 캐릭터 제거
@@ -678,6 +698,47 @@ class CharacterRegistry: ObservableObject {
             return !activePaths.contains(pluginName)
         }
         if allCharacters.count != before { save() }
+    }
+
+    static func syncedPluginCharacterName(
+        pluginName: String,
+        originalID: String,
+        bundledName: String,
+        existingName: String?
+    ) -> String {
+        let trimmedExisting = existingName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard pluginName == "flea-market-hidden-pack" else {
+            if let trimmedExisting, !trimmedExisting.isEmpty {
+                return trimmedExisting
+            }
+            return bundledName
+        }
+
+        let preferredName = preferredFleaMarketHiddenCharacterName(for: originalID, fallback: bundledName)
+        guard let trimmedExisting, !trimmedExisting.isEmpty else { return preferredName }
+        let legacyNames = legacyFleaMarketHiddenCharacterNames(for: originalID)
+        if legacyNames.contains(trimmedExisting) || trimmedExisting == bundledName {
+            return preferredName
+        }
+        return trimmedExisting
+    }
+
+    private static func preferredFleaMarketHiddenCharacterName(for originalID: String, fallback: String) -> String {
+        switch originalID {
+        case "night_vendor": return "히든 야시장"
+        case "lucky_tag": return "히든 럭키태그"
+        case "ghost_dealer": return "히든 고스트딜러"
+        default: return fallback
+        }
+    }
+
+    private static func legacyFleaMarketHiddenCharacterNames(for originalID: String) -> Set<String> {
+        switch originalID {
+        case "night_vendor": return ["야시장", "히든 야시장"]
+        case "lucky_tag": return ["럭키태그", "히든 럭키태그"]
+        case "ghost_dealer": return ["고스트딜러", "히든 고스트딜러"]
+        default: return []
+        }
     }
 
     static let defaultCharacters: [WorkerCharacter] = [
@@ -857,20 +918,20 @@ struct CharacterCollectionView: View {
 
     private var filteredHired: [WorkerCharacter] {
         let chars = registry.hiredCharacters
-        guard let sp = selectedSpecies else { return chars }
-        return chars.filter { $0.species == sp }
+        guard let sp = selectedSpecies else { return sortedCharacters(chars) }
+        return sortedCharacters(chars.filter { $0.species == sp })
     }
 
     private var filteredAvailable: [WorkerCharacter] {
         let chars = registry.availableCharacters.filter { registry.isUnlocked($0) }
-        guard let sp = selectedSpecies else { return chars }
-        return chars.filter { $0.species == sp }
+        guard let sp = selectedSpecies else { return sortedCharacters(chars) }
+        return sortedCharacters(chars.filter { $0.species == sp })
     }
 
     private var filteredLocked: [WorkerCharacter] {
         let chars = registry.availableCharacters.filter { !registry.isUnlocked($0) }
-        guard let sp = selectedSpecies else { return chars }
-        return chars.filter { $0.species == sp }
+        guard let sp = selectedSpecies else { return sortedCharacters(chars) }
+        return sortedCharacters(chars.filter { $0.species == sp })
     }
 
     var body: some View {
@@ -1049,6 +1110,26 @@ struct CharacterCollectionView: View {
         }
     }
 
+    private func sortedCharacters(_ characters: [WorkerCharacter]) -> [WorkerCharacter] {
+        characters.sorted { lhs, rhs in
+            let lhsPriority = characterSortPriority(lhs)
+            let rhsPriority = characterSortPriority(rhs)
+            if lhsPriority != rhsPriority { return lhsPriority < rhsPriority }
+
+            let nameOrder = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+            if nameOrder != .orderedSame {
+                return nameOrder == .orderedAscending
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    private func characterSortPriority(_ character: WorkerCharacter) -> Int {
+        if character.isFleaMarketHiddenCharacter { return 0 }
+        if character.isPluginCharacter { return 1 }
+        return 2
+    }
+
     private func sectionHeader(_ title: String, count: Int, color: Color, icon: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon).font(Theme.monoSmall).foregroundColor(color)
@@ -1173,14 +1254,26 @@ struct CharacterCard: View {
                                 editingId = nil
                             }
                     } else {
-                        Text(character.name)
-                            .font(Theme.mono(12, weight: .black))
-                            .foregroundColor(shirtColor)
-                            .lineLimit(1)
-                            .onTapGesture(count: 2) {
-                                editName = character.name
-                                editingId = character.id
+                        HStack(spacing: 4) {
+                            Text(character.name)
+                                .font(Theme.mono(12, weight: .black))
+                                .foregroundColor(shirtColor)
+                                .lineLimit(1)
+
+                            if character.isFleaMarketHiddenCharacter {
+                                Text("히든")
+                                    .font(Theme.mono(7, weight: .bold))
+                                    .foregroundColor(Theme.yellow)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 2)
+                                    .background(Theme.yellow.opacity(0.12))
+                                    .cornerRadius(4)
                             }
+                        }
+                        .onTapGesture(count: 2) {
+                            editName = character.name
+                            editingId = character.id
+                        }
                     }
 
                     Text(character.localizedArchetype)
@@ -1700,7 +1793,9 @@ struct LockedCharacterCard: View {
             }
             .frame(width: 52, height: 68)
 
-            Text("???").font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.textDim.opacity(0.4))
+            Text(character.isFleaMarketHiddenCharacter ? "히든" : "???")
+                .font(Theme.mono(10, weight: .bold))
+                .foregroundColor(Theme.textDim.opacity(0.4))
             Text(character.species.localizedName).font(Theme.mono(7)).foregroundColor(Theme.textDim.opacity(0.3))
 
             Spacer(minLength: 0).frame(height: 12)

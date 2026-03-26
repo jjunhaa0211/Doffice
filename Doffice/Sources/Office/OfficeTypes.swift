@@ -134,13 +134,10 @@ struct FurniturePlacement: Identifiable, Codable, Hashable {
 
     /// Z-sort용 하단 Y값 (픽셀)
     var zY: CGFloat {
-        let flatTypes: Set<FurnitureType> = [.rug]
-        let wallMountedTypes: Set<FurnitureType> = [.pictureFrame, .clock, .whiteboard]
-
-        if flatTypes.contains(type) {
+        if type == .rug {
             return CGFloat(position.row) * OfficeConstants.tileSize + 1
         }
-        if wallMountedTypes.contains(type) {
+        if type == .pictureFrame || type == .clock || type == .whiteboard {
             return CGFloat(position.row) * OfficeConstants.tileSize + 2
         }
         return CGFloat(position.row + size.h) * OfficeConstants.tileSize
@@ -244,11 +241,38 @@ struct OfficeCharacter {
     var zY: CGFloat { pixelY + OfficeConstants.tileSize / 2 }
 }
 
-// MARK: - Z-Sortable Drawable
+// MARK: - Z-Sortable Drawable (value-type, no closure heap allocation)
 
 struct ZDrawable {
     let zY: CGFloat
-    let draw: (GraphicsContext) -> Void
+    let kind: ZDrawableKind
+}
+
+enum ZDrawableKind {
+    case furniture(ZFurnitureInfo)
+    case character(ZCharacterInfo)
+}
+
+struct ZFurnitureInfo {
+    let type: FurnitureType
+    let x: CGFloat
+    let y: CGFloat
+    let w: CGFloat
+    let h: CGFloat
+    let dark: Bool
+    let frame: Int
+    let chromeImage: CGImage?
+}
+
+struct ZCharacterInfo {
+    let char: OfficeCharacter
+    let workerColor: Color
+    let hashVal: Int
+    let dir: Direction
+    let state: OfficeCharacterState
+    let frame: Int
+    let dark: Bool
+    let rosterCharacter: WorkerCharacter?
 }
 
 // MARK: - Constants
@@ -276,7 +300,7 @@ enum OfficeConstants {
     static let socialCooldownMax: Double = 8.5
     static let socialEventCooldownMin: Double = 1.4
     static let socialEventCooldownMax: Double = 3.2
-    static let socialScanInterval: Double = 0.75
+    static let socialScanInterval: Double = 1.5
     static let recentBreakTargetLimit: Int = 3
     static let fps: Double = 24.0
     static let charSittingOffset: CGFloat = 3    // 앉을 때 Y 오프셋

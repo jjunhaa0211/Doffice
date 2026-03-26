@@ -75,6 +75,7 @@ extension Notification.Name {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBarManager = MenuBarManager()
+    private var recoveryWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 번들 ID 변경 시 이전 데이터 마이그레이션
@@ -104,33 +105,152 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // 윈도우 복원 실패 시 새 창 강제 생성
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.ensureMainWindowVisible()
+        // SwiftUI 상태 복원이 비정상일 때도 바로 보이는 메인 창을 하나 확보한다.
+        DispatchQueue.main.async { [weak self] in
+            self?.presentFallbackMainWindow()
         }
+
+        // 윈도우 복원 실패 시 여러 번 재시도 후 최종적으로 안전 창을 띄운다.
+        scheduleMainWindowRecovery()
     }
 
     /// 보이는 창이 하나도 없으면 메인 창을 강제로 생성/표시
     private func ensureMainWindowVisible() {
         NSApp.activate(ignoringOtherApps: true)
 
-        let hasVisibleWindow = NSApp.windows.contains { $0.isVisible && !$0.isMiniaturized }
-        if hasVisibleWindow { return }
-
-        // 기존 창이 있으면 보이게 만들기
-        for window in NSApp.windows where window.contentView != nil {
-            window.makeKeyAndOrderFront(nil)
+        if revealExistingWindows() {
+            return
         }
 
-        // 그래도 보이는 창이 없으면 새 창 요청
-        if !NSApp.windows.contains(where: { $0.isVisible }) {
-            if NSApp.sendAction(Selector(("newWindowForTab:")), to: nil, from: nil) {
-                // 새 창이 생성됨
-            } else {
-                // fallback: 직접 창 열기 시도
-                NSApp.sendAction(#selector(NSDocumentController.newDocument(_:)), to: nil, from: nil)
+        var requestedWindowOpen = false
+        let openSelectors = [
+            #selector(NSResponder.newWindowForTab(_:)),
+            Selector(("newWindow:"))
+        ]
+        for selector in openSelectors where NSApp.sendAction(selector, to: nil, from: nil) {
+            requestedWindowOpen = true
+            break
+        }
+
+        if !requestedWindowOpen {
+            requestedWindowOpen = NSApp.sendAction(#selector(NSDocumentController.newDocument(_:)), to: nil, from: nil)
+        }
+
+        if requestedWindowOpen {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                guard let self else { return }
+                if !self.revealExistingWindows() {
+                    self.presentFallbackMainWindow()
+                }
+            }
+        } else {
+            presentFallbackMainWindow()
+        }
+    }
+
+    private func scheduleMainWindowRecovery() {
+        let recoveryDelays: [TimeInterval] = [0.35, 1.0, 2.0]
+        for delay in recoveryDelays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.ensureMainWindowVisible()
             }
         }
+    }
+
+    @discardableResult
+    private func revealExistingWindows() -> Bool {
+        var restoredWindow = false
+        for window in NSApp.windows where window.contentView != nil || window.contentViewController != nil {
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
+            moveWindowOnScreenIfNeeded(window)
+            window.orderFrontRegardless()
+            window.makeKeyAndOrderFront(nil)
+            restoredWindow = restoredWindow || isUsableWindow(window)
+        }
+        if restoredWindow {
+            dismissFallbackWindowIfNeeded()
+        }
+        return restoredWindow
+    }
+
+    private func moveWindowOnScreenIfNeeded(_ window: NSWindow) {
+        let needsResize = window.frame.width < 320 || window.frame.height < 240
+        let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+        let isOffscreen = !visibleFrames.contains(where: { $0.intersects(window.frame) })
+        guard needsResize || isOffscreen else { return }
+        guard let targetFrame = NSScreen.main?.visibleFrame ?? visibleFrames.first else { return }
+
+        let preferredWidth = needsResize ? 1200 : window.frame.width
+        let preferredHeight = needsResize ? 800 : window.frame.height
+        let width = min(preferredWidth, max(900, targetFrame.width - 40))
+        let height = min(preferredHeight, max(620, targetFrame.height - 40))
+        let origin = NSPoint(
+            x: targetFrame.midX - (width / 2),
+            y: targetFrame.midY - (height / 2)
+        )
+        let safeFrame = NSRect(origin: origin, size: NSSize(width: width, height: height))
+        window.setFrame(safeFrame, display: false, animate: false)
+    }
+
+    private func isUsableWindow(_ window: NSWindow) -> Bool {
+        window.isVisible &&
+        !window.isMiniaturized &&
+        window.frame.width >= 320 &&
+        window.frame.height >= 240
+    }
+
+    private func presentFallbackMainWindow() {
+        if revealExistingWindows() {
+            return
+        }
+
+        if let recoveryWindow {
+            moveWindowOnScreenIfNeeded(recoveryWindow)
+            recoveryWindow.orderFrontRegardless()
+            recoveryWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let rootView = AnyView(
+            MainView()
+                .environmentObject(SessionManager.shared)
+                .environmentObject(AppSettings.shared)
+                .frame(minWidth: 1000, minHeight: 650)
+                .preferredColorScheme(AppSettings.shared.colorScheme)
+        )
+        let hostingController = NSHostingController(rootView: rootView)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.identifier = NSUserInterfaceItemIdentifier("DofficeRecoveryWindow")
+        window.title = AppSettings.shared.appDisplayName
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.isReleasedWhenClosed = false
+        window.contentViewController = hostingController
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+
+        recoveryWindow = window
+    }
+
+    private func dismissFallbackWindowIfNeeded() {
+        guard let recoveryWindow else { return }
+        let hasRegularWindow = NSApp.windows.contains { window in
+            window != recoveryWindow &&
+            isUsableWindow(window) &&
+            (window.contentView != nil || window.contentViewController != nil)
+        }
+        guard hasRegularWindow else { return }
+        recoveryWindow.close()
+        self.recoveryWindow = nil
     }
 
     /// 이전 번들 ID (com.junha.workman)의 UserDefaults 데이터를 현재 앱으로 마이그레이션
@@ -253,6 +373,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         SessionManager.shared.saveSessions(immediately: true)
     }
 
+    func applicationDidBecomeActive(_ notification: Notification) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.ensureMainWindowVisible()
+        }
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let manager = SessionManager.shared
         let runningTabs = manager.tabs.filter { $0.isProcessing }
@@ -294,7 +420,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // Feature 3: 메뉴바에서 창 다시 열기
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
-            ensureMainWindowVisible()
+            scheduleMainWindowRecovery()
         }
         return true
     }

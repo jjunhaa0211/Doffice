@@ -126,7 +126,7 @@ struct FavoritesPanelView: View {
                 Button(action: { showAddSheet = true }) {
                     Image(systemName: "plus.circle.fill")
                         .font(.system(size: Theme.iconSize(12)))
-                        .foregroundColor(Theme.accent)
+                        .foregroundStyle(Theme.accentBackground)
                 }.buttonStyle(.plain).help(NSLocalizedString("fav.add.help", comment: ""))
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
@@ -167,7 +167,7 @@ struct FavoritesPanelView: View {
             VStack(spacing: 4) {
                 Image(systemName: fav.icon)
                     .font(.system(size: Theme.iconSize(16), weight: .medium))
-                    .foregroundColor(Theme.accent)
+                    .foregroundStyle(Theme.accentBackground)
                 Text(fav.name)
                     .font(Theme.chrome(9, weight: .semibold))
                     .foregroundColor(Theme.textPrimary)

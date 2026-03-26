@@ -2529,3 +2529,5 @@
 "quit.running.message" = "Quitting the app will leave running tasks incomplete.\nNo automatic rollback will occur. A recovery folder will be created for safe interruption.";
 "quit.backup.and.quit" = "Backup & Quit";
 "quit.force" = "Quit Anyway";
+"plugin.error.brew.not.supported" = "Homebrew is not supported on iOS. Use URL or Marketplace instead.";
+"plugin.themes.label" = "Plugin Themes";

@@ -8,6 +8,7 @@ import Combine
 struct ActionCenterView: View {
     @EnvironmentObject var manager: SessionManager
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var settings = AppSettings.shared
 
     private var attentionTabs: [TerminalTab] {
         manager.userVisibleTabs.filter { $0.statusPresentation.category == .attention }
@@ -53,7 +54,7 @@ struct ActionCenterView: View {
                                     dismiss()
                                 }
                                 .font(Theme.mono(8, weight: .bold))
-                                .foregroundColor(Theme.accent)
+                                .foregroundStyle(Theme.accentBackground)
                                 .buttonStyle(.plain)
                             }
                         }
@@ -78,7 +79,7 @@ struct ActionCenterView: View {
                                     dismiss()
                                 }
                                 .font(Theme.mono(8, weight: .bold))
-                                .foregroundColor(Theme.accent)
+                                .foregroundStyle(Theme.accentBackground)
                                 .buttonStyle(.plain)
                             }
                         }
@@ -102,7 +103,7 @@ struct ActionCenterView: View {
                                     dismiss()
                                 }
                                 .font(Theme.mono(8, weight: .bold))
-                                .foregroundColor(Theme.accent)
+                                .foregroundStyle(Theme.accentBackground)
                                 .buttonStyle(.plain)
                             }
                         }
@@ -128,7 +129,7 @@ struct ActionCenterView: View {
                                     dismiss()
                                 }
                                 .font(Theme.mono(8, weight: .bold))
-                                .foregroundColor(Theme.accent)
+                                .foregroundStyle(Theme.accentBackground)
                                 .buttonStyle(.plain)
                             }
                         }
@@ -221,6 +222,7 @@ struct CommandPaletteAction: Identifiable {
 
 struct CommandPaletteView: View {
     @EnvironmentObject var manager: SessionManager
+    @ObservedObject private var settings = AppSettings.shared
     @Binding var isPresented: Bool
     @State private var query = ""
     @FocusState private var isFocused: Bool
@@ -467,6 +469,7 @@ final class CustomPresetStore: ObservableObject {
 
 struct SavePresetSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var store = CustomPresetStore.shared
     @State private var presetName = ""
     @State private var selectedIcon = "star.fill"
@@ -569,7 +572,7 @@ struct SavePresetSheet: View {
                 .font(Theme.mono(10, weight: .bold))
                 .foregroundColor(.white)
                 .padding(.horizontal, 20).padding(.vertical, 8)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accent))
+                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accentBackground))
                 .keyboardShortcut(.return)
                 .disabled(presetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -608,9 +611,35 @@ struct SessionNotification: Identifiable, Equatable {
 final class SessionNotificationManager: ObservableObject {
     static let shared = SessionNotificationManager()
     @Published var notifications: [SessionNotification] = []
+    @Published var unreadCount: Int = 0
+    @Published var history: [SessionNotification] = []
     private var cancellables = Set<AnyCancellable>()
     private var knownCompletedIds = Set<String>()
     private var knownErrorIds = Set<String>()
+
+    /// Number of tabs currently waiting for user input
+    var pendingApprovalCount: Int {
+        SessionManager.shared.userVisibleTabs.filter { $0.pendingApproval != nil }.count
+    }
+
+    /// Total badge count: unread notifications + pending approvals
+    var badgeCount: Int {
+        unreadCount + pendingApprovalCount
+    }
+
+    func markAllRead() {
+        unreadCount = 0
+    }
+
+    /// Navigate to the most recent unread notification's tab
+    func jumpToLatestUnread() -> String? {
+        if let latest = notifications.last(where: { $0.tabId != nil }) {
+            dismiss(latest)
+            return latest.tabId
+        }
+        // Fallback: find first tab with pending approval
+        return SessionManager.shared.userVisibleTabs.first(where: { $0.pendingApproval != nil })?.id
+    }
 
     private init() {
         // 세션 완료 감지
@@ -627,6 +656,10 @@ final class SessionNotificationManager: ObservableObject {
 
     func post(_ notification: SessionNotification) {
         notifications.append(notification)
+        history.append(notification)
+        unreadCount += 1
+        // Keep history manageable
+        if history.count > 100 { history.removeFirst(history.count - 100) }
         // 5초 후 자동 제거
         let id = notification.id
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
@@ -700,6 +733,7 @@ final class SessionNotificationManager: ObservableObject {
 
 struct SessionNotificationBannerStack: View {
     @ObservedObject var notificationManager = SessionNotificationManager.shared
+    @ObservedObject private var settings = AppSettings.shared
     var onTapNotification: ((String) -> Void)?
 
     var body: some View {

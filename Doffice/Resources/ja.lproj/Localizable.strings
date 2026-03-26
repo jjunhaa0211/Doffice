@@ -2529,3 +2529,5 @@
 "quit.running.message" = "アプリを終了すると、実行中のタスクは完了しません。\n自動ロールバックは行わず、リカバリフォルダを作成して安全に中断できます。";
 "quit.backup.and.quit" = "バックアップして終了";
 "quit.force" = "そのまま終了";
+"plugin.error.brew.not.supported" = "iOSではHomebrewはサポートされていません。URLまたはマーケットプレイスをご利用ください。";
+"plugin.themes.label" = "プラグインテーマ";

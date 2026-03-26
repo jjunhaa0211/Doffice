@@ -364,7 +364,7 @@ struct KeyRecorderView: View {
                     if isRecording {
                         Text(NSLocalizedString("shortcut.recording", comment: ""))
                             .font(Theme.mono(9, weight: .medium))
-                            .foregroundColor(Theme.accent)
+                            .foregroundStyle(Theme.accentBackground)
                     } else if let shortcut = currentShortcut {
                         Text(shortcut.displayString)
                             .font(Theme.mono(10, weight: .bold))
@@ -515,7 +515,7 @@ struct ShortcutsSettingsTab: View {
                 HStack(spacing: 5) {
                     Image(systemName: category.icon)
                         .font(.system(size: Theme.iconSize(10), weight: .medium))
-                        .foregroundColor(Theme.accent)
+                        .foregroundStyle(Theme.accentBackground)
                     Text(category.localizedName)
                         .font(Theme.mono(11, weight: .semibold))
                         .foregroundColor(Theme.textPrimary)

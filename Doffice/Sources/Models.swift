@@ -288,19 +288,29 @@ class ClaudeInstallChecker {
     private var _version = ""
     private var _path = ""
     private var _errorInfo = ""
+    private var lastCheckedAt: Date?
+    private let cacheTTL: TimeInterval = 10
 
     var isInstalled: Bool { lock.lock(); defer { lock.unlock() }; return _isInstalled }
     var version: String { lock.lock(); defer { lock.unlock() }; return _version }
     var path: String { lock.lock(); defer { lock.unlock() }; return _path }
     var errorInfo: String { lock.lock(); defer { lock.unlock() }; return _errorInfo }
 
-    func check() {
+    func check(force: Bool = false) {
         lock.lock()
         defer { lock.unlock() }
 
+        if !force,
+           let lastCheckedAt,
+           Date().timeIntervalSince(lastCheckedAt) < cacheTTL {
+            return
+        }
+
+        lastCheckedAt = Date()
+
         // 1) Try `which claude` with our enriched PATH
         if let p = TerminalTab.shellSync("which claude 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines), !p.isEmpty {
-            _isInstalled = true; _path = p
+            _isInstalled = true; _path = p; _errorInfo = ""
             _version = TerminalTab.shellSync("claude --version 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return
         }
@@ -317,7 +327,7 @@ class ClaudeInstallChecker {
 
         for candidate in allCandidates {
             if FileManager.default.isExecutableFile(atPath: candidate) {
-                _isInstalled = true; _path = candidate
+                _isInstalled = true; _path = candidate; _errorInfo = ""
                 _version = TerminalTab.shellSync("\"\(candidate)\" --version 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 return
             }
@@ -325,13 +335,15 @@ class ClaudeInstallChecker {
 
         // 3) Fallback: try login shell with timeout (prevents hang)
         if let p = TerminalTab.shellSyncLoginWithTimeout("which claude 2>/dev/null", timeout: 3)?.trimmingCharacters(in: .whitespacesAndNewlines), !p.isEmpty {
-            _isInstalled = true; _path = p
+            _isInstalled = true; _path = p; _errorInfo = ""
             _version = TerminalTab.shellSyncLoginWithTimeout("\"\(p)\" --version 2>/dev/null", timeout: 3)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return
         }
 
         // Not found
         _isInstalled = false
+        _version = ""
+        _path = ""
         _errorInfo = "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"
     }
 }
@@ -1142,6 +1154,7 @@ class TerminalTab: ObservableObject, Identifiable {
 
     func sendPrompt(_ prompt: String, permissionOverride: PermissionMode? = nil, bypassWorkflowRouting: Bool = false) {
         guard !prompt.isEmpty else { return }
+        PluginHost.shared.fireEvent(.onPromptSubmit)
 
         // Raw terminal mode: PTY에 직접 전송
         if isRawMode {
@@ -1625,6 +1638,7 @@ class TerminalTab: ObservableObject, Identifiable {
 
             if permissionDenials.isEmpty {
                 sendCompletionNotification()
+                PluginHost.shared.fireEvent(.onSessionComplete, context: ["tabId": id])
                 NotificationCenter.default.post(
                     name: .workmanTabCycleCompleted,
                     object: self,
@@ -2270,6 +2284,7 @@ class TerminalTab: ObservableObject, Identifiable {
         currentProcess = nil
         isProcessing = false
         claudeActivity = .error
+        PluginHost.shared.fireEvent(.onSessionError, context: ["tabId": id])
         finalizeParallelTasks(as: .failed)
         appendBlock(.status(message: NSLocalizedString("tab.token.protection.stopped", comment: "")), content: reason)
     }

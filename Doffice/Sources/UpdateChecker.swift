@@ -515,7 +515,7 @@ struct UpdateSheet: View {
                         .font(Theme.mono(9)).foregroundColor(Theme.textDim)
                     Spacer()
                     Text("\(Int(progress * 100))%")
-                        .font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.accent)
+                        .font(Theme.mono(10, weight: .bold)).foregroundStyle(Theme.accentBackground)
                 }
             }
 
@@ -575,7 +575,7 @@ struct UpdateSheet: View {
                         Image(systemName: "safari").font(.system(size: Theme.iconSize(9)))
                         Text(NSLocalizedString("update.manual.download", comment: "")).font(Theme.mono(10))
                     }
-                    .foregroundColor(Theme.accent)
+                    .foregroundStyle(Theme.accentBackground)
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accent.opacity(0.08)))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.accent.opacity(0.3), lineWidth: 1))
@@ -634,7 +634,7 @@ struct UpdateSheet: View {
                         Image(systemName: "safari").font(.system(size: Theme.iconSize(9)))
                         Text(NSLocalizedString("update.manual.download", comment: "")).font(Theme.mono(10))
                     }
-                    .foregroundColor(Theme.accent)
+                    .foregroundStyle(Theme.accentBackground)
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accent.opacity(0.08)))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.accent.opacity(0.3), lineWidth: 1))
@@ -647,7 +647,7 @@ struct UpdateSheet: View {
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 16).padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accent))
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accentBackground))
                 }.buttonStyle(.plain).keyboardShortcut(.return)
             }
 
@@ -655,7 +655,7 @@ struct UpdateSheet: View {
             Button(action: { dismiss() }) {
                 Text(NSLocalizedString("update.ok", comment: "")).font(Theme.mono(10, weight: .bold)).foregroundColor(.white)
                     .padding(.horizontal, 24).padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accent))
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accentBackground))
             }.buttonStyle(.plain).keyboardShortcut(.return)
 
         default:

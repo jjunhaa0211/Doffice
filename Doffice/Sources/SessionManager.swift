@@ -1887,7 +1887,6 @@ class SessionManager: ObservableObject {
                 restoredSession: session
             )
             tab.applySavedSessionConfiguration(session)
-            tab.start()
             tab.restoreSavedSessionSnapshot(session)
             tab.appendRestorationNotice(from: session, recoveryBundleURL: recoveryBundleURL)
         }

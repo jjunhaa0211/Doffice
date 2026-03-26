@@ -7,8 +7,9 @@ import Combine
 
 struct TerminalAreaView: View {
     @EnvironmentObject var manager: SessionManager
+    @ObservedObject private var settings = AppSettings.shared
     @State private var viewMode: ViewMode = .grid
-    enum ViewMode { case grid, single, git }
+    enum ViewMode { case grid, single, git, browser }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,6 +20,7 @@ struct TerminalAreaView: View {
                 if let tab = manager.activeTab { EventStreamView(tab: tab, compact: false) }
                 else { EmptySessionView() }
             case .git: GitPanelView()
+            case .browser: BrowserPanelView()
             }
         }
         .sheet(isPresented: $manager.showNewTabSheet) {
@@ -32,6 +34,7 @@ struct TerminalAreaView: View {
                 modeBtn("square.grid.2x2", .grid); modeBtn("rectangle", .single)
                 Rectangle().fill(Theme.border).frame(width: 1, height: 14)
                 modeBtn("arrow.triangle.branch", .git)
+                modeBtn("globe", .browser)
             }.padding(.horizontal, 8)
             Rectangle().fill(Theme.border).frame(width: 1, height: 18)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -64,7 +67,14 @@ struct TerminalAreaView: View {
     }
 
     private func modeBtn(_ icon: String, _ mode: ViewMode) -> some View {
-        let label: String = { switch mode { case .grid: return "Grid"; case .single: return "Single"; case .git: return "Git" } }()
+        let label: String = {
+            switch mode {
+            case .grid: return "Grid"
+            case .single: return "Single"
+            case .git: return "Git"
+            case .browser: return "Browser"
+            }
+        }()
         let selected = viewMode == mode
         return Button(action: { withAnimation(.easeInOut(duration: 0.2)) { viewMode = mode } }) {
             HStack(spacing: 3) {
@@ -78,7 +88,9 @@ struct TerminalAreaView: View {
     private func singleTabBtn(_ t: TerminalTab) -> some View {
         let a = manager.activeTabId == t.id
         let status = t.statusPresentation
+        let needsInput = t.pendingApproval != nil
         let dotColor: Color = {
+            if needsInput { return Color.blue }
             switch status.category {
             case .processing: return status.tint
             case .attention: return Theme.red
@@ -88,13 +100,35 @@ struct TerminalAreaView: View {
         }()
         return Button(action: { manager.selectTab(t.id) }) {
             HStack(spacing: 4) {
-                Circle().fill(dotColor).frame(width: 5, height: 5)
+                ZStack {
+                    Circle().fill(dotColor).frame(width: 5, height: 5)
+                    if needsInput {
+                        AgentRingView(color: .blue, size: 12)
+                    }
+                }
+                .frame(width: 12, height: 12)
                 Text(t.projectName).font(Theme.chrome(10)).foregroundColor(a ? Theme.textPrimary : Theme.textSecondary).lineLimit(1)
                 if manager.userVisibleTabs.filter({ $0.projectPath == t.projectPath }).count > 1 {
                     Text(t.workerName).font(Theme.chrome(9)).foregroundColor(t.workerColor)
                 }
+                if needsInput {
+                    Text(NSLocalizedString("terminal.waiting", comment: ""))
+                        .font(Theme.mono(7, weight: .bold))
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 4).padding(.vertical, 1)
+                        .background(Capsule().fill(Color.blue.opacity(0.15)))
+                }
             }.padding(.horizontal, Theme.sp2).padding(.vertical, Theme.sp1)
-            .background(RoundedRectangle(cornerRadius: Theme.cornerSmall).fill(a ? Theme.bgSelected : .clear))
+            .background(
+                RoundedRectangle(cornerRadius: Theme.cornerSmall)
+                    .fill(needsInput ? Color.blue.opacity(0.08) : (a ? Theme.bgSelected : .clear))
+            )
+            .overlay(
+                needsInput ?
+                    RoundedRectangle(cornerRadius: Theme.cornerSmall)
+                        .stroke(Color.blue.opacity(0.4), lineWidth: 1.5)
+                : nil
+            )
         }.buttonStyle(.plain)
     }
 
@@ -111,7 +145,7 @@ struct TerminalAreaView: View {
                 if isPinned {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(Theme.accent)
+                        .foregroundStyle(Theme.accentBackground)
                 } else {
                     Circle().fill(t.workerColor.opacity(0.5)).frame(width: 5, height: 5)
                 }
@@ -125,6 +159,90 @@ struct TerminalAreaView: View {
                 .overlay(RoundedRectangle(cornerRadius: Theme.cornerSmall).stroke(isPinned ? Theme.accent.opacity(0.3) : .clear, lineWidth: 1)))
         }.buttonStyle(.plain)
         .help(NSLocalizedString("terminal.help.grid.toggle", comment: ""))
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════
+// MARK: - Agent Notification Ring
+// ═══════════════════════════════════════════════════════
+
+/// Pulsing ring that indicates an AI agent is waiting for user input.
+/// Inspired by cmux's blue ring notification system.
+struct AgentRingView: View {
+    let color: Color
+    let size: CGFloat
+    @State private var isPulsing = false
+
+    var body: some View {
+        ZStack {
+            // Outer pulse ring
+            Circle()
+                .stroke(color.opacity(isPulsing ? 0.0 : 0.6), lineWidth: 1.5)
+                .frame(width: size * (isPulsing ? 1.8 : 1.0), height: size * (isPulsing ? 1.8 : 1.0))
+                .scaleEffect(isPulsing ? 1.3 : 1.0)
+                .opacity(isPulsing ? 0 : 0.8)
+
+            // Inner steady ring
+            Circle()
+                .stroke(color.opacity(0.8), lineWidth: 1.5)
+                .frame(width: size, height: size)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: false)) {
+                isPulsing = true
+            }
+        }
+    }
+}
+
+/// Blue glow border overlay for terminal panes when agent needs input
+struct AgentWaitingOverlay: View {
+    let isWaiting: Bool
+    @State private var glowPhase: CGFloat = 0
+
+    var body: some View {
+        if isWaiting {
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(
+                    AngularGradient(
+                        gradient: Gradient(colors: [
+                            Color.blue.opacity(0.8),
+                            Color.blue.opacity(0.2),
+                            Color.cyan.opacity(0.6),
+                            Color.blue.opacity(0.2),
+                            Color.blue.opacity(0.8)
+                        ]),
+                        center: .center,
+                        startAngle: .degrees(glowPhase),
+                        endAngle: .degrees(glowPhase + 360)
+                    ),
+                    lineWidth: 2.5
+                )
+                .shadow(color: Color.blue.opacity(0.4), radius: 6)
+                .onAppear {
+                    withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
+                        glowPhase = 360
+                    }
+                }
+        }
+    }
+}
+
+/// Notification badge with unread count
+struct NotificationBadge: View {
+    let count: Int
+
+    var body: some View {
+        if count > 0 {
+            Text(count > 99 ? "99+" : "\(count)")
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundColor(.white)
+                .padding(.horizontal, count > 9 ? 4 : 3)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(Color.blue))
+                .fixedSize()
+        }
     }
 }
 
@@ -651,9 +769,11 @@ struct EventStreamView: View {
         if settings.rawTerminalMode {
             rawTerminalBody
                 .id("raw-\(tab.id)")  // 모드 전환 시 뷰 완전 재생성
+                .overlay(AgentWaitingOverlay(isWaiting: tab.pendingApproval != nil))
         } else {
             normalBody
                 .id("normal-\(tab.id)")
+                .overlay(AgentWaitingOverlay(isWaiting: tab.pendingApproval != nil))
         }
     }
 
@@ -667,15 +787,15 @@ struct EventStreamView: View {
                 }.buttonStyle(.plain).help(NSLocalizedString("terminal.help.close.session", comment: ""))
                 Text("claude — \(tab.projectName)")
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundColor(Color(red: 0.45, green: 0.45, blue: 0.5))
+                    .foregroundColor(Theme.textDim)
                 Spacer()
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(Color(red: 0.15, green: 0.15, blue: 0.15))
+            .background(Theme.bgSurface)
 
             CLITerminalView(tab: tab, fontSize: 13 * settings.fontSizeScale)
         }
-        .background(Color(red: 0.1, green: 0.1, blue: 0.1))
+        .background(Theme.bgTerminal)
     }
 
     // MARK: - Normal Body (WorkMan UI)
@@ -943,7 +1063,7 @@ struct EventStreamView: View {
             Spacer()
             if blockFilter.isActive {
                 Button(action: { blockFilter = BlockFilter() }) {
-                    Text("Clear").font(Theme.chrome(8)).foregroundColor(Theme.accent)
+                    Text("Clear").font(Theme.chrome(8)).foregroundStyle(Theme.accentBackground)
                 }.buttonStyle(.plain)
             }
             // Search
@@ -987,11 +1107,11 @@ struct EventStreamView: View {
     private var fileChangePanel: some View {
         VStack(spacing: 0) {
             HStack {
-                Image(systemName: "doc.text").font(Theme.chrome(9)).foregroundColor(Theme.accent)
+                Image(systemName: "doc.text").font(Theme.chrome(9)).foregroundStyle(Theme.accentBackground)
                 Text("FILES").font(Theme.pixel).foregroundColor(Theme.textDim).tracking(1.5)
                 Spacer()
                 Text("\(Set(tab.fileChanges.map(\.fileName)).count)")
-                    .font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.accent)
+                    .font(Theme.chrome(9, weight: .bold)).foregroundStyle(Theme.accentBackground)
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(Theme.bgSurface.opacity(0.5))
@@ -1160,7 +1280,7 @@ struct EventStreamView: View {
                 HStack(spacing: 3) {
                     RoundedRectangle(cornerRadius: 1).fill(tab.workerColor).frame(width: 3, height: 16)
                     Text(tab.projectName).font(Theme.chrome(10)).foregroundColor(Theme.textDim)
-                    Text(">").font(Theme.chrome(12, weight: .semibold)).foregroundColor(Theme.accent)
+                    Text(">").font(Theme.chrome(12, weight: .semibold)).foregroundStyle(Theme.accentBackground)
                 }.padding(.bottom, 4)
 
                 // Auto-growing TextEditor
@@ -1388,8 +1508,8 @@ struct EventStreamView: View {
         return VStack(alignment: .leading, spacing: 0) {
             Rectangle().fill(Theme.border).frame(height: 1)
             HStack(spacing: 4) {
-                Image(systemName: "command").font(Theme.chrome(8)).foregroundColor(Theme.accent)
-                Text(NSLocalizedString("terminal.command.label", comment: "")).font(Theme.chrome(8, weight: .bold)).foregroundColor(Theme.accent)
+                Image(systemName: "command").font(Theme.chrome(8)).foregroundStyle(Theme.accentBackground)
+                Text(NSLocalizedString("terminal.command.label", comment: "")).font(Theme.chrome(8, weight: .bold)).foregroundStyle(Theme.accentBackground)
                 if commands.count < Self.allSlashCommands.count {
                     Text(String(format: NSLocalizedString("terminal.cmd.match.count", comment: ""), commands.count)).font(Theme.chrome(7)).foregroundColor(Theme.textDim)
                 }
@@ -1660,7 +1780,7 @@ struct EventStreamView: View {
             HStack(spacing: 6) {
                 Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
                     .font(Theme.mono(8))
-                    .foregroundColor(Theme.accent)
+                    .foregroundStyle(Theme.accentBackground)
                 Text(NSLocalizedString("terminal.argument.flow", comment: ""))
                     .font(Theme.mono(8, weight: .bold))
                     .foregroundColor(Theme.textDim)
@@ -2026,8 +2146,8 @@ struct EventBlockView: View {
 
     private var userPromptBlock: some View {
         HStack(alignment: .top, spacing: 6) {
-            Text(">").font(Theme.mono(13, weight: .bold)).foregroundColor(Theme.accent)
-            Text(block.content).font(Theme.mono(compact ? 11 : 13)).foregroundColor(Theme.accent)
+            Text(">").font(Theme.mono(13, weight: .bold)).foregroundStyle(Theme.accentBackground)
+            Text(block.content).font(Theme.mono(compact ? 11 : 13)).foregroundStyle(Theme.accentBackground)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 6).padding(.horizontal, 8)
@@ -2242,7 +2362,7 @@ struct MarkdownTextView: View {
                         .textSelection(.enabled)
                 case .bullet(let content):
                     HStack(alignment: .top, spacing: 6) {
-                        Text("•").font(Theme.mono(compact ? 10 : 11)).foregroundColor(Theme.accent)
+                        Text("•").font(Theme.mono(compact ? 10 : 11)).foregroundStyle(Theme.accentBackground)
                             .frame(width: 10)
                         inlineMarkdown(content)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2496,6 +2616,7 @@ struct ProcessingIndicator: View {
 
 struct GridPanelView: View {
     @EnvironmentObject var manager: SessionManager
+    @ObservedObject private var settings = AppSettings.shared
 
     private var hasPinnedTabs: Bool { !manager.pinnedTabIds.isEmpty }
 
@@ -2698,6 +2819,7 @@ struct ApprovalSheet: View {
 // ═══════════════════════════════════════════════════════
 
 struct EmptySessionView: View {
+    @ObservedObject private var settings = AppSettings.shared
     var body: some View {
         VStack {
             Spacer()
@@ -2951,10 +3073,11 @@ struct NewTabSheet: View {
     @State private var tasks: [String] = [""]
 
     // 폴더 신뢰 확인
-    @State private var trustConfirmed = false
+    @State private var trustedProjectPath: String?
     @State private var showTrustPrompt = false
     @State private var didBootstrap = false
     @State private var pathError: String?
+    @State private var isCreatingSessions = false
 
     // 고급 옵션
     @State private var showAdvanced = false
@@ -3021,10 +3144,10 @@ struct NewTabSheet: View {
 
             // 경로 표시
             HStack(spacing: 6) {
-                Image(systemName: "folder.fill").font(.system(size: Theme.iconSize(10))).foregroundColor(Theme.accent)
+                Image(systemName: "folder.fill").font(.system(size: Theme.iconSize(10))).foregroundStyle(Theme.accentBackground)
                 Text(projectPath)
                     .font(Theme.mono(10))
-                    .foregroundColor(Theme.accent).lineLimit(1).truncationMode(.middle)
+                    .foregroundStyle(Theme.accentBackground).lineLimit(1).truncationMode(.middle)
             }
             .padding(.horizontal, 16).padding(.vertical, 8)
             .frame(maxWidth: .infinity)
@@ -3056,12 +3179,7 @@ struct NewTabSheet: View {
             // 선택 버튼
             VStack(spacing: 6) {
                 Button(action: {
-                    withAnimation(sheetAnimation) {
-                        trustConfirmed = true
-                        showTrustPrompt = false
-                    }
-                    createSessions()
-                    dismiss()
+                    approveFolderTrustAndLaunch()
                 }) {
                     HStack(spacing: 8) {
                         Text("❯").font(Theme.mono(12, weight: .bold)).foregroundColor(Theme.green)
@@ -3076,6 +3194,7 @@ struct NewTabSheet: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.return)
+                .disabled(isCreatingSessions)
                 .accessibilityLabel(NSLocalizedString("terminal.trust.yes.a11y", comment: ""))
                 .accessibilityHint(NSLocalizedString("terminal.trust.yes.a11y.hint", comment: ""))
 
@@ -3097,6 +3216,7 @@ struct NewTabSheet: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.escape)
+                .disabled(isCreatingSessions)
                 .accessibilityLabel(NSLocalizedString("terminal.trust.no.a11y", comment: ""))
             }.padding(.horizontal, 24).padding(.bottom, 20)
         }
@@ -3226,7 +3346,7 @@ struct NewTabSheet: View {
                                     Button("Browse") {
                                         let p = NSOpenPanel(); p.canChooseFiles = false; p.canChooseDirectories = true
                                         if p.runModal() == .OK, let u = p.url {
-                                            projectPath = u.path
+                                            projectPath = normalizedProjectPath(u.path)
                                             if projectName.isEmpty { projectName = u.lastPathComponent }
                                         }
                                     }
@@ -3237,6 +3357,10 @@ struct NewTabSheet: View {
                                 }
                                 .onChange(of: projectPath) { _ in
                                     pathError = nil
+                                    let normalized = normalizedProjectPath(projectPath)
+                                    if trustedProjectPath != normalized {
+                                        trustedProjectPath = nil
+                                    }
                                 }
                                 if let error = pathError {
                                     Text(error)
@@ -3315,7 +3439,7 @@ struct NewTabSheet: View {
                                 Spacer()
                                 Text(String(format: NSLocalizedString("terminal.count.items", comment: ""), terminalCount))
                                     .font(Theme.mono(9, weight: .bold))
-                                    .foregroundColor(Theme.accent)
+                                    .foregroundStyle(Theme.accentBackground)
                             }
 
                             HStack(spacing: 8) {
@@ -3441,32 +3565,18 @@ struct NewTabSheet: View {
                 .accessibilityLabel(NSLocalizedString("terminal.save.preset.a11y", comment: ""))
 
                 Spacer()
-                Button(action: {
-                    if !projectPath.isEmpty {
-                        var isDir: ObjCBool = false
-                        if !FileManager.default.fileExists(atPath: projectPath, isDirectory: &isDir) || !isDir.boolValue {
-                            pathError = NSLocalizedString("terminal.path.error", comment: "")
-                            return
-                        }
-                        pathError = nil
-                    }
-                    if !projectPath.isEmpty && !trustConfirmed {
-                        withAnimation(sheetAnimation) {
-                            showTrustPrompt = true
-                        }
-                    } else {
-                        createSessions(); dismiss()
-                    }
-                }) {
+                Button(action: { handleCreateButtonTapped() }) {
                     HStack(spacing: 4) {
                         Image(systemName: "play.fill").font(.system(size: Theme.iconSize(9), weight: .bold))
-                        Text(terminalCount > 1 ? String(format: NSLocalizedString("terminal.create.count", comment: ""), terminalCount) : "Create")
+                        Text(isCreatingSessions
+                             ? NSLocalizedString("status.running", comment: "")
+                             : (terminalCount > 1 ? String(format: NSLocalizedString("terminal.create.count", comment: ""), terminalCount) : "Create"))
                             .font(Theme.mono(10, weight: .bold))
                     }
                     .appButtonSurface(tone: .accent, prominent: true)
                 }
                 .buttonStyle(.plain).keyboardShortcut(.return)
-                .disabled(projectPath.isEmpty && projectName.isEmpty)
+                .disabled((projectPath.isEmpty && projectName.isEmpty) || isCreatingSessions)
                 .accessibilityLabel(terminalCount > 1 ? String(format: NSLocalizedString("terminal.create.sessions.a11y", comment: ""), terminalCount) : NSLocalizedString("terminal.create.session.a11y", comment: ""))
             }.padding(.horizontal, 24).padding(.vertical, 12)
             .background(Theme.bg)
@@ -3564,7 +3674,7 @@ struct NewTabSheet: View {
             // 추가 디렉토리
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
-                    Image(systemName: "folder.badge.plus").font(.system(size: Theme.iconSize(9))).foregroundColor(Theme.accent)
+                    Image(systemName: "folder.badge.plus").font(.system(size: Theme.iconSize(9))).foregroundStyle(Theme.accentBackground)
                     Text(NSLocalizedString("terminal.additional.dirs", comment: "")).font(Theme.mono(9, weight: .medium)).foregroundColor(Theme.textSecondary)
                 }
                 HStack(spacing: 4) {
@@ -3576,7 +3686,7 @@ struct NewTabSheet: View {
                         let p = NSOpenPanel(); p.canChooseFiles = false; p.canChooseDirectories = true
                         if p.runModal() == .OK, let u = p.url { additionalDir = u.path }
                     }) {
-                        Image(systemName: "folder").font(.system(size: Theme.iconSize(10))).foregroundColor(Theme.accent)
+                        Image(systemName: "folder").font(.system(size: Theme.iconSize(10))).foregroundStyle(Theme.accentBackground)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(NSLocalizedString("terminal.additional.dir.select.a11y", comment: ""))
@@ -3897,9 +4007,65 @@ struct NewTabSheet: View {
         while tasks.count > n { tasks.removeLast() }
     }
 
-    private func createSessions() {
-        let name = projectName.isEmpty ? (projectPath as NSString).lastPathComponent : projectName
-        let path = projectPath.isEmpty ? NSHomeDirectory() : projectPath
+    private func normalizedProjectPath(_ rawPath: String) -> String {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let expanded = NSString(string: trimmed).expandingTildeInPath
+        let baseURL = URL(fileURLWithPath: expanded, isDirectory: true)
+        return baseURL.standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    private var isCurrentProjectTrusted: Bool {
+        let normalized = normalizedProjectPath(projectPath)
+        guard !normalized.isEmpty else { return true }
+        return trustedProjectPath == normalized
+    }
+
+    private func validateSelectedProjectPath() -> Bool {
+        let normalized = normalizedProjectPath(projectPath)
+        if !normalized.isEmpty {
+            var isDir: ObjCBool = false
+            if !FileManager.default.fileExists(atPath: normalized, isDirectory: &isDir) || !isDir.boolValue {
+                pathError = NSLocalizedString("terminal.path.error", comment: "")
+                return false
+            }
+        }
+        pathError = nil
+        return true
+    }
+
+    private func handleCreateButtonTapped() {
+        guard !isCreatingSessions else { return }
+        guard validateSelectedProjectPath() else { return }
+
+        if !projectPath.isEmpty && !isCurrentProjectTrusted {
+            withAnimation(sheetAnimation) {
+                showTrustPrompt = true
+            }
+            return
+        }
+
+        launchSessionsAfterConfirmation()
+    }
+
+    private func approveFolderTrustAndLaunch() {
+        guard !isCreatingSessions else { return }
+
+        trustedProjectPath = normalizedProjectPath(projectPath)
+        withAnimation(sheetAnimation) {
+            showTrustPrompt = false
+        }
+
+        launchSessionsAfterConfirmation()
+    }
+
+    private func launchSessionsAfterConfirmation() {
+        guard !isCreatingSessions else { return }
+
+        let normalizedPath = normalizedProjectPath(projectPath)
+        let path = normalizedPath.isEmpty ? NSHomeDirectory() : normalizedPath
+        let name = projectName.isEmpty ? (path as NSString).lastPathComponent : projectName
         let capacity = manager.manualLaunchCapacity
         if capacity <= 0 {
             manager.notifyManualLaunchCapacity(requested: terminalCount)
@@ -3911,32 +4077,62 @@ struct NewTabSheet: View {
             manager.notifyManualLaunchCapacity(requested: terminalCount)
         }
 
-        preferences.rememberLaunch(
-            projectName: name,
-            projectPath: path,
-            draft: currentDraftSnapshot()
-        )
+        let prompts = Array(tasks.prefix(launchCount)).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let draft = currentDraftSnapshot()
+        let selectedModel = self.selectedModel
+        let effortLevel = self.effortLevel
+        let permissionMode = self.permissionMode
+        let systemPrompt = self.systemPrompt
+        let maxBudget = self.maxBudget
+        let allowedTools = self.allowedTools
+        let disallowedTools = self.disallowedTools
+        let additionalDirs = self.additionalDirs
+        let continueSession = self.continueSession
+        let useWorktree = self.useWorktree
 
-        for i in 0..<launchCount {
-            let prompt = i < tasks.count ? tasks[i].trimmingCharacters(in: .whitespaces) : ""
-            let tab = manager.addTab(
+        isCreatingSessions = true
+        dismiss()
+
+        DispatchQueue.main.async {
+            preferences.rememberLaunch(
                 projectName: name,
                 projectPath: path,
-                initialPrompt: prompt.isEmpty ? nil : prompt,
-                manualLaunch: true,
-                autoStart: false
+                draft: draft
             )
-            tab.selectedModel = selectedModel
-            tab.effortLevel = effortLevel
-            tab.permissionMode = permissionMode
-            tab.systemPrompt = systemPrompt
-            tab.maxBudgetUSD = Double(maxBudget) ?? 0
-            tab.allowedTools = allowedTools
-            tab.disallowedTools = disallowedTools
-            tab.additionalDirs = additionalDirs
-            tab.continueSession = continueSession
-            tab.useWorktree = useWorktree
-            tab.start()
+
+            var tabsToStart: [TerminalTab] = []
+            tabsToStart.reserveCapacity(launchCount)
+
+            for i in 0..<launchCount {
+                let prompt = i < prompts.count ? prompts[i] : ""
+                let tab = manager.addTab(
+                    projectName: name,
+                    projectPath: path,
+                    initialPrompt: prompt.isEmpty ? nil : prompt,
+                    manualLaunch: true,
+                    autoStart: false
+                )
+                tab.selectedModel = selectedModel
+                tab.effortLevel = effortLevel
+                tab.permissionMode = permissionMode
+                tab.systemPrompt = systemPrompt
+                tab.maxBudgetUSD = Double(maxBudget) ?? 0
+                tab.allowedTools = allowedTools
+                tab.disallowedTools = disallowedTools
+                tab.additionalDirs = additionalDirs
+                tab.continueSession = continueSession
+                tab.useWorktree = useWorktree
+                tabsToStart.append(tab)
+            }
+
+            for (index, tab) in tabsToStart.enumerated() {
+                let delay = min(Double(index) * 0.18, 0.72)
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    autoreleasepool {
+                        tab.start()
+                    }
+                }
+            }
         }
     }
 }
@@ -4008,7 +4204,7 @@ struct SleepWorkSetupSheet: View {
                         Image(systemName: "moon.zzz.fill").font(.system(size: 12))
                         Text(NSLocalizedString("terminal.sleepwork.start", comment: "")).font(Theme.mono(11, weight: .bold))
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(Theme.textOnAccent)
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Theme.purple))
                 }

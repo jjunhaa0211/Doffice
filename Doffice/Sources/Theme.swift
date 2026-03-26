@@ -13,6 +13,31 @@ struct CustomThemeConfig: Codable, Equatable {
     var fontName: String?           // nil = 시스템 폰트
     var fontSize: Double?           // nil = 기존 scale 시스템 사용
 
+    // Background colors
+    var bgHex: String?
+    var bgCardHex: String?
+    var bgSurfaceHex: String?
+    var bgTertiaryHex: String?
+
+    // Text colors
+    var textPrimaryHex: String?
+    var textSecondaryHex: String?
+    var textDimHex: String?
+    var textMutedHex: String?
+
+    // Border colors
+    var borderHex: String?
+    var borderStrongHex: String?
+
+    // Semantic colors
+    var greenHex: String?
+    var redHex: String?
+    var yellowHex: String?
+    var purpleHex: String?
+    var orangeHex: String?
+    var cyanHex: String?
+    var pinkHex: String?
+
     static let `default` = CustomThemeConfig()
 }
 
@@ -25,6 +50,20 @@ class AppSettings: ObservableObject {
 
     @AppStorage("isDarkMode") var isDarkMode: Bool = false {
         didSet { objectWillChange.send() }
+    }
+
+    // themeMode: "light" | "dark" | "custom"
+    // 빈 문자열이면 isDarkMode에서 파생 (기존 사용자 마이그레이션)
+    @AppStorage("themeMode") private var _themeMode: String = ""
+
+    var themeMode: String {
+        get { _themeMode.isEmpty ? (isDarkMode ? "dark" : "light") : _themeMode }
+        set {
+            _themeMode = newValue
+            if newValue == "light" { isDarkMode = false }
+            else if newValue == "dark" { isDarkMode = true }
+            objectWillChange.send()
+        }
     }
     @AppStorage("fontSizeScale") var fontSizeScale: Double = 1.5 {
         didSet { objectWillChange.send() }
@@ -1124,6 +1163,8 @@ enum Theme {
         return _cachedDark
     }
     private static var scale: CGFloat { CGFloat(AppSettings.shared.fontSizeScale) }
+    /// 커스텀 모드일 때만 커스텀 hex 적용
+    static var isCustomMode: Bool { AppSettings.shared.themeMode == "custom" }
     /// UI 크롬(툴바, 사이드바, 필터 등)용 완화된 스케일 — 콘텐츠보다 덜 커짐
     private static var chromeScale: CGFloat { 1 + (scale - 1) * 0.5 }
 
@@ -1144,16 +1185,31 @@ enum Theme {
 
     // ── Background Surfaces (4-layer depth system) ──
     // Layer 0: App background (deepest)
-    static var bg: Color { dark ? Color(hex: "000000") : Color(hex: "fafafa") }
+    static var bg: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.bgHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "000000") : Color(hex: "fafafa")
+    }
     // Layer 1: Card / elevated panel
-    static var bgCard: Color { dark ? Color(hex: "0a0a0a") : Color(hex: "ffffff") }
+    static var bgCard: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.bgCardHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "0a0a0a") : Color(hex: "ffffff")
+    }
     // Layer 2: Raised surface / nested element
-    static var bgSurface: Color { dark ? Color(hex: "111111") : Color(hex: "f5f5f5") }
+    static var bgSurface: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.bgSurfaceHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "111111") : Color(hex: "f5f5f5")
+    }
     // Layer 3: Tertiary surface (badges, code blocks)
-    static var bgTertiary: Color { dark ? Color(hex: "1a1a1a") : Color(hex: "ebebeb") }
+    static var bgTertiary: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.bgTertiaryHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "1a1a1a") : Color(hex: "ebebeb")
+    }
 
     // ── Functional backgrounds ──
-    static var bgTerminal: Color { dark ? Color(hex: "0a0a0a") : Color(hex: "fafafa") }
+    static var bgTerminal: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.bgHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "0a0a0a") : Color(hex: "fafafa")
+    }
     static var bgInput: Color { dark ? Color(hex: "000000") : Color(hex: "ffffff") }
     static var bgHover: Color { dark ? Color(hex: "1a1a1a") : Color(hex: "f0f0f0") }
     static var bgSelected: Color { dark ? Color(hex: "1a1a1a") : Color(hex: "eaeaea") }
@@ -1162,22 +1218,40 @@ enum Theme {
     static var bgOverlay: Color { dark ? Color(hex: "000000").opacity(0.7) : Color(hex: "000000").opacity(0.4) }
 
     // ── Borders (single-weight system: always 1px, vary opacity) ──
-    static var border: Color { dark ? Color(hex: "282828") : Color(hex: "e5e5e5") }
-    static var borderStrong: Color { dark ? Color(hex: "3e3e3e") : Color(hex: "d0d0d0") }
+    static var border: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.borderHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "282828") : Color(hex: "e5e5e5")
+    }
+    static var borderStrong: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.borderStrongHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "3e3e3e") : Color(hex: "d0d0d0")
+    }
     static var borderActive: Color { dark ? Color(hex: "555555") : Color(hex: "999999") }
     static var borderSubtle: Color { dark ? Color(hex: "1e1e1e") : Color(hex: "eeeeee") }
     static var focusRing: Color { Color(hex: "0070f3").opacity(0.5) }
 
     // ── Text (5-step hierarchy) ──
-    static var textPrimary: Color { dark ? Color(hex: "ededed") : Color(hex: "171717") }
-    static var textSecondary: Color { dark ? Color(hex: "a1a1a1") : Color(hex: "636363") }
-    static var textDim: Color { dark ? Color(hex: "707070") : Color(hex: "8f8f8f") }
-    static var textMuted: Color { dark ? Color(hex: "484848") : Color(hex: "b0b0b0") }
+    static var textPrimary: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.textPrimaryHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "ededed") : Color(hex: "171717")
+    }
+    static var textSecondary: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.textSecondaryHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "a1a1a1") : Color(hex: "636363")
+    }
+    static var textDim: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.textDimHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "707070") : Color(hex: "8f8f8f")
+    }
+    static var textMuted: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.textMutedHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "484848") : Color(hex: "b0b0b0")
+    }
     static var textTerminal: Color { dark ? Color(hex: "ededed") : Color(hex: "171717") }
 
     // ── System ──
     static var textOnAccent: Color {
-        if AppSettings.shared.customTheme.accentHex != nil {
+        if isCustomMode && AppSettings.shared.customTheme.accentHex != nil {
             return accent.contrastingTextColor
         }
         return .white
@@ -1187,37 +1261,79 @@ enum Theme {
 
     // ── Semantic Accents ──
     static var accent: Color {
-        if let hex = AppSettings.shared.customTheme.accentHex, !hex.isEmpty {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.accentHex, !hex.isEmpty {
             return Color(hex: hex)
         }
         return dark ? Color(hex: "3291ff") : Color(hex: "0070f3")
     }
-    static var green: Color { dark ? Color(hex: "3ecf8e") : Color(hex: "18a058") }
-    static var red: Color { dark ? Color(hex: "f14c4c") : Color(hex: "e5484d") }
-    static var yellow: Color { dark ? Color(hex: "f5a623") : Color(hex: "ca8a04") }
-    static var purple: Color { dark ? Color(hex: "8e4ec6") : Color(hex: "6e56cf") }
-    static var orange: Color { dark ? Color(hex: "f97316") : Color(hex: "e5560a") }
-    static var cyan: Color { dark ? Color(hex: "06b6d4") : Color(hex: "0891b2") }
-    static var pink: Color { dark ? Color(hex: "e54d9e") : Color(hex: "d23197") }
+    static var green: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.greenHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "3ecf8e") : Color(hex: "18a058")
+    }
+    static var red: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.redHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "f14c4c") : Color(hex: "e5484d")
+    }
+    static var yellow: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.yellowHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "f5a623") : Color(hex: "ca8a04")
+    }
+    static var purple: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.purpleHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "8e4ec6") : Color(hex: "6e56cf")
+    }
+    static var orange: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.orangeHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "f97316") : Color(hex: "e5560a")
+    }
+    static var cyan: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.cyanHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "06b6d4") : Color(hex: "0891b2")
+    }
+    static var pink: Color {
+        if isCustomMode, let hex = AppSettings.shared.customTheme.pinkHex, !hex.isEmpty { return Color(hex: hex) }
+        return dark ? Color(hex: "e54d9e") : Color(hex: "d23197")
+    }
 
     // ── Semantic accent backgrounds (soft fills for badges/indicators) ──
     static func accentBg(_ color: Color) -> Color { color.opacity(dark ? 0.12 : 0.08) }
     static func accentBorder(_ color: Color) -> Color { color.opacity(dark ? 0.25 : 0.2) }
 
-    /// 그라데이션 또는 단색 accent 배경 (AnyShapeStyle)
+    /// 그라데이션 또는 단색 accent 배경 (AnyShapeStyle) — Custom 모드에서만 그라데이션 적용
     static var accentBackground: AnyShapeStyle {
-        let config = AppSettings.shared.customTheme
-        if config.useGradient,
-           let startHex = config.gradientStartHex, !startHex.isEmpty,
-           let endHex = config.gradientEndHex, !endHex.isEmpty {
-            return AnyShapeStyle(
-                LinearGradient(
-                    colors: [Color(hex: startHex), Color(hex: endHex)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
+        if isCustomMode {
+            let config = AppSettings.shared.customTheme
+            if config.useGradient,
+               let startHex = config.gradientStartHex, !startHex.isEmpty,
+               let endHex = config.gradientEndHex, !endHex.isEmpty {
+                return AnyShapeStyle(
+                    LinearGradient(
+                        colors: [Color(hex: startHex), Color(hex: endHex)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
                 )
-            )
+            }
         }
         return AnyShapeStyle(accent)
+    }
+
+    /// 소프트 그라데이션 배경 (낮은 opacity) — 비 prominent accent 버튼 등에 사용
+    static var accentSoftBackground: AnyShapeStyle {
+        if isCustomMode {
+            let config = AppSettings.shared.customTheme
+            if config.useGradient,
+               let startHex = config.gradientStartHex, !startHex.isEmpty,
+               let endHex = config.gradientEndHex, !endHex.isEmpty {
+                let opacity = dark ? 0.14 : 0.10
+                return AnyShapeStyle(
+                    LinearGradient(
+                        colors: [Color(hex: startHex).opacity(opacity), Color(hex: endHex).opacity(opacity)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                )
+            }
+        }
+        return AnyShapeStyle(accentBg(accent))
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1395,6 +1511,7 @@ enum AppChromeTone: Equatable {
 // MARK: - Panel Modifier (카드, 섹션, 패널)
 
 private struct AppPanelModifier: ViewModifier {
+    @ObservedObject private var settings = AppSettings.shared
     let padding: CGFloat
     let radius: CGFloat
     let fill: Color
@@ -1412,6 +1529,7 @@ private struct AppPanelModifier: ViewModifier {
 // MARK: - Field Modifier (텍스트 입력, 셀렉트)
 
 private struct AppFieldModifier: ViewModifier {
+    @ObservedObject private var settings = AppSettings.shared
     let emphasized: Bool
     let radius: CGFloat
 
@@ -1427,26 +1545,45 @@ private struct AppFieldModifier: ViewModifier {
 // MARK: - Button Surface Modifier
 
 private struct AppButtonSurfaceModifier: ViewModifier {
+    @ObservedObject private var settings = AppSettings.shared
     let tone: AppChromeTone
     let prominent: Bool
     let compact: Bool
 
+    @ViewBuilder
     func body(content: Content) -> some View {
         let tint = tone.color
         let r: CGFloat = Theme.cornerMedium
-
-        content
-            .foregroundColor(prominent ? Theme.textOnAccent : (tone == .neutral ? Theme.textSecondary : tint))
+        let bgFill: AnyShapeStyle = {
+            if prominent {
+                return tone == .accent ? Theme.accentBackground : AnyShapeStyle(tint)
+            }
+            return tone == .neutral ? AnyShapeStyle(Color.clear) :
+                   (tone == .accent ? Theme.accentSoftBackground : AnyShapeStyle(Theme.accentBg(tint)))
+        }()
+        let base = content
             .padding(.horizontal, compact ? Theme.sp2 : Theme.sp3)
             .padding(.vertical, compact ? Theme.sp1 + 1 : Theme.sp2 - 1)
-            .background(
-                RoundedRectangle(cornerRadius: r)
-                    .fill(prominent ? tint : (tone == .neutral ? .clear : Theme.accentBg(tint)))
+            .background(RoundedRectangle(cornerRadius: r).fill(bgFill))
+            .overlay(RoundedRectangle(cornerRadius: r).stroke(prominent ? tint.opacity(0.2) : Theme.border, lineWidth: 1))
+
+        // 구체 타입으로 foreground 적용 — AnyShapeStyle 타입 소거는 macOS 버튼에서 전파 안 됨
+        let ct = AppSettings.shared.customTheme
+        if !prominent, tone == .accent, Theme.isCustomMode, ct.useGradient,
+           let s = ct.gradientStartHex, !s.isEmpty,
+           let e = ct.gradientEndHex, !e.isEmpty {
+            base.foregroundStyle(
+                LinearGradient(colors: [Color(hex: s), Color(hex: e)], startPoint: .topLeading, endPoint: .bottomTrailing)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: r)
-                    .stroke(prominent ? tint.opacity(0.2) : Theme.border, lineWidth: 1)
-            )
+        } else if prominent {
+            base.foregroundColor(Theme.textOnAccent)
+        } else if tone == .neutral {
+            base.foregroundColor(Theme.textSecondary)
+        } else if tone == .accent {
+            base.foregroundColor(Theme.accent)
+        } else {
+            base.foregroundColor(tint)
+        }
     }
 }
 
@@ -1497,6 +1634,7 @@ extension View {
 // MARK: - Status Badge (Vercel-style: tight, border-accented)
 
 struct AppStatusBadge: View {
+    @ObservedObject private var settings = AppSettings.shared
     let title: String
     let symbol: String
     let tint: Color
@@ -1538,6 +1676,7 @@ struct AppStatusDot: View {
 // MARK: - Section Header (Vercel panel headers)
 
 struct AppSectionHeader: View {
+    @ObservedObject private var settings = AppSettings.shared
     let title: String
     var count: Int? = nil
     var action: (() -> Void)? = nil
@@ -1575,6 +1714,7 @@ struct AppSectionHeader: View {
 // MARK: - Empty State (Vercel: minimal, informative)
 
 struct AppEmptyStateView: View {
+    @ObservedObject private var settings = AppSettings.shared
     let title: String
     let message: String
     let symbol: String
@@ -1604,6 +1744,7 @@ struct AppEmptyStateView: View {
 // MARK: - Key-Value Row (for stats, metadata display)
 
 struct AppKeyValueRow: View {
+    @ObservedObject private var settings = AppSettings.shared
     let key: String
     let value: String
     var valueColor: Color = Theme.textPrimary
@@ -1626,6 +1767,7 @@ struct AppKeyValueRow: View {
 // MARK: - Inline Code Block
 
 struct AppInlineCode: View {
+    @ObservedObject private var settings = AppSettings.shared
     let text: String
 
     var body: some View {
@@ -1651,6 +1793,7 @@ struct AppInlineCode: View {
 
 /// 모달 전체 컨테이너
 struct DSModalShell<Content: View>: View {
+    @ObservedObject private var settings = AppSettings.shared
     let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -1667,6 +1810,7 @@ struct DSModalShell<Content: View>: View {
 
 /// 통합 모달 헤더
 struct DSModalHeader: View {
+    @ObservedObject private var settings = AppSettings.shared
     let icon: String
     let iconColor: Color
     let title: String
@@ -1725,6 +1869,7 @@ struct DSModalHeader: View {
 
 /// 모달 푸터 (액션 바)
 struct DSModalFooter<Leading: View, Trailing: View>: View {
+    @ObservedObject private var settings = AppSettings.shared
     let leading: Leading
     let trailing: Trailing
 
@@ -1748,6 +1893,7 @@ struct DSModalFooter<Leading: View, Trailing: View>: View {
 
 /// 모달 내부 섹션 (통합 settingsSection 대체)
 struct DSSection<Content: View>: View {
+    @ObservedObject private var settings = AppSettings.shared
     let title: String
     var subtitle: String = ""
     let content: Content
@@ -1780,6 +1926,7 @@ struct DSSection<Content: View>: View {
 
 /// 탭 바 (설정, 필터 등에서 사용)
 struct DSTabBar: View {
+    @ObservedObject private var settings = AppSettings.shared
     let tabs: [(String, String)]  // (icon, label)
     @Binding var selectedIndex: Int
 
@@ -1816,6 +1963,7 @@ struct DSTabBar: View {
 
 /// 통합 필터 칩
 struct DSFilterChip: View {
+    @ObservedObject private var settings = AppSettings.shared
     let label: String
     let isSelected: Bool
     var count: Int? = nil
@@ -1850,6 +1998,7 @@ struct DSFilterChip: View {
 
 /// 통합 리스트 행 컴포넌트
 struct DSListRow<Leading: View, Trailing: View>: View {
+    @ObservedObject private var settings = AppSettings.shared
     let leading: Leading
     let title: String
     var subtitle: String = ""
@@ -1898,6 +2047,7 @@ struct DSListRow<Leading: View, Trailing: View>: View {
 
 /// 통합 stat/metric 카드
 struct DSStatCard: View {
+    @ObservedObject private var settings = AppSettings.shared
     let title: String
     let value: String
     var subtitle: String = ""
@@ -1934,6 +2084,7 @@ struct DSStatCard: View {
 
 /// 통합 프로그레스 바
 struct DSProgressBar: View {
+    @ObservedObject private var settings = AppSettings.shared
     let value: Double  // 0.0 ~ 1.0
     var tint: Color = Theme.accent
     var height: CGFloat = 4
@@ -1983,6 +2134,33 @@ struct SettingsView: View {
     @State private var customFontName: String = ""
     @State private var customFontSize: Double = 11.0
     @State private var showImportError = false
+
+    // Custom Theme - Background colors
+    @State private var customBgColor: Color = Color(hex: "000000")
+    @State private var customBgCardColor: Color = Color(hex: "0a0a0a")
+    @State private var customBgSurfaceColor: Color = Color(hex: "111111")
+    @State private var customBgTertiaryColor: Color = Color(hex: "1a1a1a")
+    // Custom Theme - Text colors
+    @State private var customTextPrimaryColor: Color = Color(hex: "ededed")
+    @State private var customTextSecondaryColor: Color = Color(hex: "a1a1a1")
+    @State private var customTextDimColor: Color = Color(hex: "707070")
+    @State private var customTextMutedColor: Color = Color(hex: "484848")
+    // Custom Theme - Border colors
+    @State private var customBorderColor: Color = Color(hex: "282828")
+    @State private var customBorderStrongColor: Color = Color(hex: "3e3e3e")
+    // Custom Theme - Semantic colors
+    @State private var customGreenColor: Color = Color(hex: "3ecf8e")
+    @State private var customRedColor: Color = Color(hex: "f14c4c")
+    @State private var customYellowColor: Color = Color(hex: "f5a623")
+    @State private var customPurpleColor: Color = Color(hex: "8e4ec6")
+    @State private var customOrangeColor: Color = Color(hex: "f97316")
+    @State private var customCyanColor: Color = Color(hex: "06b6d4")
+    @State private var customPinkColor: Color = Color(hex: "e54d9e")
+    // Expanded state for color groups
+    @State private var showBgColors: Bool = false
+    @State private var showTextColors: Bool = false
+    @State private var showBorderColors: Bool = false
+    @State private var showSemanticColors: Bool = false
 
     // Plugin
     @ObservedObject private var pluginManager = PluginManager.shared
@@ -2054,6 +2232,65 @@ struct SettingsView: View {
             customUseGradient = ct.useGradient
             customFontName = ct.fontName ?? ""
             customFontSize = ct.fontSize ?? 11.0
+            // Background
+            if let hex = ct.bgHex, !hex.isEmpty { customBgColor = Color(hex: hex) }
+            else { customBgColor = settings.isDarkMode ? Color(hex: "000000") : Color(hex: "fafafa") }
+            if let hex = ct.bgCardHex, !hex.isEmpty { customBgCardColor = Color(hex: hex) }
+            else { customBgCardColor = settings.isDarkMode ? Color(hex: "0a0a0a") : Color(hex: "ffffff") }
+            if let hex = ct.bgSurfaceHex, !hex.isEmpty { customBgSurfaceColor = Color(hex: hex) }
+            else { customBgSurfaceColor = settings.isDarkMode ? Color(hex: "111111") : Color(hex: "f5f5f5") }
+            if let hex = ct.bgTertiaryHex, !hex.isEmpty { customBgTertiaryColor = Color(hex: hex) }
+            else { customBgTertiaryColor = settings.isDarkMode ? Color(hex: "1a1a1a") : Color(hex: "ebebeb") }
+            // Text
+            if let hex = ct.textPrimaryHex, !hex.isEmpty { customTextPrimaryColor = Color(hex: hex) }
+            else { customTextPrimaryColor = settings.isDarkMode ? Color(hex: "ededed") : Color(hex: "171717") }
+            if let hex = ct.textSecondaryHex, !hex.isEmpty { customTextSecondaryColor = Color(hex: hex) }
+            else { customTextSecondaryColor = settings.isDarkMode ? Color(hex: "a1a1a1") : Color(hex: "636363") }
+            if let hex = ct.textDimHex, !hex.isEmpty { customTextDimColor = Color(hex: hex) }
+            else { customTextDimColor = settings.isDarkMode ? Color(hex: "707070") : Color(hex: "8f8f8f") }
+            if let hex = ct.textMutedHex, !hex.isEmpty { customTextMutedColor = Color(hex: hex) }
+            else { customTextMutedColor = settings.isDarkMode ? Color(hex: "484848") : Color(hex: "b0b0b0") }
+            // Border
+            if let hex = ct.borderHex, !hex.isEmpty { customBorderColor = Color(hex: hex) }
+            else { customBorderColor = settings.isDarkMode ? Color(hex: "282828") : Color(hex: "e5e5e5") }
+            if let hex = ct.borderStrongHex, !hex.isEmpty { customBorderStrongColor = Color(hex: hex) }
+            else { customBorderStrongColor = settings.isDarkMode ? Color(hex: "3e3e3e") : Color(hex: "d0d0d0") }
+            // Semantic
+            if let hex = ct.greenHex, !hex.isEmpty { customGreenColor = Color(hex: hex) }
+            else { customGreenColor = settings.isDarkMode ? Color(hex: "3ecf8e") : Color(hex: "18a058") }
+            if let hex = ct.redHex, !hex.isEmpty { customRedColor = Color(hex: hex) }
+            else { customRedColor = settings.isDarkMode ? Color(hex: "f14c4c") : Color(hex: "e5484d") }
+            if let hex = ct.yellowHex, !hex.isEmpty { customYellowColor = Color(hex: hex) }
+            else { customYellowColor = settings.isDarkMode ? Color(hex: "f5a623") : Color(hex: "ca8a04") }
+            if let hex = ct.purpleHex, !hex.isEmpty { customPurpleColor = Color(hex: hex) }
+            else { customPurpleColor = settings.isDarkMode ? Color(hex: "8e4ec6") : Color(hex: "6e56cf") }
+            if let hex = ct.orangeHex, !hex.isEmpty { customOrangeColor = Color(hex: hex) }
+            else { customOrangeColor = settings.isDarkMode ? Color(hex: "f97316") : Color(hex: "e5560a") }
+            if let hex = ct.cyanHex, !hex.isEmpty { customCyanColor = Color(hex: hex) }
+            else { customCyanColor = settings.isDarkMode ? Color(hex: "06b6d4") : Color(hex: "0891b2") }
+            if let hex = ct.pinkHex, !hex.isEmpty { customPinkColor = Color(hex: hex) }
+            else { customPinkColor = settings.isDarkMode ? Color(hex: "e54d9e") : Color(hex: "d23197") }
+        }
+        .onChange(of: settings.isDarkMode) { dark in
+            // 커스텀 hex가 없는 색상만 다크/라이트 모드 기본값으로 자동 업데이트
+            let ct = settings.customTheme
+            if ct.bgHex == nil || ct.bgHex!.isEmpty { customBgColor = dark ? Color(hex: "000000") : Color(hex: "fafafa") }
+            if ct.bgCardHex == nil || ct.bgCardHex!.isEmpty { customBgCardColor = dark ? Color(hex: "0a0a0a") : Color(hex: "ffffff") }
+            if ct.bgSurfaceHex == nil || ct.bgSurfaceHex!.isEmpty { customBgSurfaceColor = dark ? Color(hex: "111111") : Color(hex: "f5f5f5") }
+            if ct.bgTertiaryHex == nil || ct.bgTertiaryHex!.isEmpty { customBgTertiaryColor = dark ? Color(hex: "1a1a1a") : Color(hex: "ebebeb") }
+            if ct.textPrimaryHex == nil || ct.textPrimaryHex!.isEmpty { customTextPrimaryColor = dark ? Color(hex: "ededed") : Color(hex: "171717") }
+            if ct.textSecondaryHex == nil || ct.textSecondaryHex!.isEmpty { customTextSecondaryColor = dark ? Color(hex: "a1a1a1") : Color(hex: "636363") }
+            if ct.textDimHex == nil || ct.textDimHex!.isEmpty { customTextDimColor = dark ? Color(hex: "707070") : Color(hex: "8f8f8f") }
+            if ct.textMutedHex == nil || ct.textMutedHex!.isEmpty { customTextMutedColor = dark ? Color(hex: "484848") : Color(hex: "b0b0b0") }
+            if ct.borderHex == nil || ct.borderHex!.isEmpty { customBorderColor = dark ? Color(hex: "282828") : Color(hex: "e5e5e5") }
+            if ct.borderStrongHex == nil || ct.borderStrongHex!.isEmpty { customBorderStrongColor = dark ? Color(hex: "3e3e3e") : Color(hex: "d0d0d0") }
+            if ct.greenHex == nil || ct.greenHex!.isEmpty { customGreenColor = dark ? Color(hex: "3ecf8e") : Color(hex: "18a058") }
+            if ct.redHex == nil || ct.redHex!.isEmpty { customRedColor = dark ? Color(hex: "f14c4c") : Color(hex: "e5484d") }
+            if ct.yellowHex == nil || ct.yellowHex!.isEmpty { customYellowColor = dark ? Color(hex: "f5a623") : Color(hex: "ca8a04") }
+            if ct.purpleHex == nil || ct.purpleHex!.isEmpty { customPurpleColor = dark ? Color(hex: "8e4ec6") : Color(hex: "6e56cf") }
+            if ct.orangeHex == nil || ct.orangeHex!.isEmpty { customOrangeColor = dark ? Color(hex: "f97316") : Color(hex: "e5560a") }
+            if ct.cyanHex == nil || ct.cyanHex!.isEmpty { customCyanColor = dark ? Color(hex: "06b6d4") : Color(hex: "0891b2") }
+            if ct.pinkHex == nil || ct.pinkHex!.isEmpty { customPinkColor = dark ? Color(hex: "e54d9e") : Color(hex: "d23197") }
         }
         .alert(clearAllMode ? NSLocalizedString("theme.alert.clear.all", comment: "") : NSLocalizedString("theme.alert.clear.old", comment: ""), isPresented: $showClearConfirm) {
             Button(NSLocalizedString("delete", comment: ""), role: .destructive) {
@@ -2196,7 +2433,7 @@ struct SettingsView: View {
                                 .font(Theme.mono(9, weight: .bold))
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 10).padding(.vertical, 6)
-                                .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent))
+                                .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accentBackground))
                                 .buttonStyle(.plain)
                         }
                     }
@@ -2283,9 +2520,44 @@ struct SettingsView: View {
     private var displayTab: some View {
         VStack(spacing: 14) {
             settingsSection(title: NSLocalizedString("settings.theme", comment: ""), subtitle: NSLocalizedString("settings.theme.subtitle", comment: "")) {
-                HStack(spacing: 10) {
-                    themeButton(title: "Light", icon: "sun.max.fill", isDark: false)
-                    themeButton(title: "Dark", icon: "moon.fill", isDark: true)
+                VStack(spacing: 10) {
+                    HStack(spacing: 8) {
+                        themeModeButton(title: "Light", icon: "sun.max.fill", mode: "light")
+                        themeModeButton(title: "Dark", icon: "moon.fill", mode: "dark")
+                        themeModeButton(title: "Custom", icon: "paintpalette.fill", mode: "custom")
+                    }
+
+                    // 플러그인 테마
+                    if !PluginHost.shared.themes.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "puzzlepiece.fill")
+                                    .font(.system(size: Theme.iconSize(8)))
+                                Text(NSLocalizedString("plugin.themes.label", comment: ""))
+                                    .font(Theme.mono(8, weight: .medium))
+                            }.foregroundColor(Theme.textDim)
+
+                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
+                                ForEach(PluginHost.shared.themes) { theme in
+                                    Button(action: { PluginHost.shared.applyTheme(theme) }) {
+                                        VStack(spacing: 4) {
+                                            Circle()
+                                                .fill(Color(hex: theme.decl.accentHex))
+                                                .frame(width: 16, height: 16)
+                                            Text(theme.decl.name)
+                                                .font(Theme.mono(7, weight: .medium))
+                                                .foregroundColor(Theme.textSecondary)
+                                                .lineLimit(1)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 6)
+                                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface))
+                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.border.opacity(0.3), lineWidth: 1))
+                                    }.buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -2316,61 +2588,49 @@ struct SettingsView: View {
                             }.buttonStyle(.plain)
                         }
                     }
-                    settingPreviewCard
                 }
             }
 
-            // ── 커스텀 테마 ──
+            // ── 커스텀 테마 (Custom 모드일 때만 표시) ──
+            if settings.themeMode == "custom" {
             settingsSection(title: NSLocalizedString("settings.customtheme", comment: ""), subtitle: NSLocalizedString("settings.customtheme.subtitle", comment: "")) {
                 VStack(spacing: 12) {
-                    // 강조 색상
-                    HStack {
-                        Text(NSLocalizedString("settings.customtheme.accent", comment: ""))
-                            .font(Theme.mono(10, weight: .medium))
-                            .foregroundColor(Theme.textPrimary)
-                        Spacer()
-                        ColorPicker("", selection: $customAccentColor, supportsOpacity: false)
-                            .labelsHidden()
-                            .onChange(of: customAccentColor) { newColor in
-                                var config = settings.customTheme
-                                config.accentHex = newColor.hexString
-                                settings.saveCustomTheme(config)
-                            }
-                        Button(action: {
-                            var config = settings.customTheme
-                            config.accentHex = nil
-                            settings.saveCustomTheme(config)
-                            customAccentColor = Theme.accent
-                        }) {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 10))
-                                .foregroundColor(Theme.textDim)
-                        }.buttonStyle(.plain)
-                    }
-
-                    // 그라데이션
+                    // ── 강조 색상 / 그라데이션 통합 행 ──
                     VStack(spacing: 8) {
                         HStack {
-                            Text(NSLocalizedString("settings.customtheme.gradient", comment: ""))
+                            Text(NSLocalizedString("settings.customtheme.accent", comment: ""))
                                 .font(Theme.mono(10, weight: .medium))
                                 .foregroundColor(Theme.textPrimary)
                             Spacer()
-                            Toggle("", isOn: $customUseGradient)
-                                .toggleStyle(.switch)
-                                .controlSize(.small)
-                                .onChange(of: customUseGradient) { newVal in
-                                    var config = settings.customTheme
-                                    config.useGradient = newVal
-                                    if newVal {
-                                        config.gradientStartHex = customGradientStart.hexString
-                                        config.gradientEndHex = customGradientEnd.hexString
+                            // 그라데이션 토글
+                            HStack(spacing: 4) {
+                                Text(NSLocalizedString("settings.customtheme.gradient", comment: ""))
+                                    .font(Theme.mono(8)).foregroundColor(Theme.textDim)
+                                Toggle("", isOn: $customUseGradient)
+                                    .toggleStyle(.switch).controlSize(.mini)
+                                    .onChange(of: customUseGradient) { newVal in
+                                        var config = settings.customTheme
+                                        config.useGradient = newVal
+                                        if newVal {
+                                            config.gradientStartHex = customGradientStart.hexString
+                                            config.gradientEndHex = customGradientEnd.hexString
+                                        }
+                                        settings.saveCustomTheme(config)
                                     }
-                                    settings.saveCustomTheme(config)
-                                }
+                            }
                         }
-
                         if customUseGradient {
-                            HStack(spacing: 12) {
+                            // 그라데이션 모드: 그라데이션 바가 accent
+                            RoundedRectangle(cornerRadius: Theme.cornerMedium)
+                                .fill(LinearGradient(colors: [customGradientStart, customGradientEnd], startPoint: .leading, endPoint: .trailing))
+                                .frame(height: 32)
+                                .overlay(
+                                    Text("● Accent Gradient")
+                                        .font(Theme.mono(9, weight: .bold))
+                                        .foregroundColor(customGradientStart.contrastingTextColor)
+                                )
+                                .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(Theme.border, lineWidth: 1))
+                            HStack(spacing: 16) {
                                 HStack(spacing: 6) {
                                     Text(NSLocalizedString("settings.customtheme.gradient.start", comment: ""))
                                         .font(Theme.mono(9)).foregroundColor(Theme.textSecondary)
@@ -2394,16 +2654,163 @@ struct SettingsView: View {
                                         }
                                 }
                             }
-                            // 그라데이션 미리보기
-                            RoundedRectangle(cornerRadius: Theme.cornerMedium)
-                                .fill(LinearGradient(colors: [customGradientStart, customGradientEnd], startPoint: .leading, endPoint: .trailing))
-                                .frame(height: 28)
-                                .overlay(
-                                    Text("Gradient Preview")
-                                        .font(Theme.mono(9, weight: .bold))
-                                        .foregroundColor(customGradientStart.contrastingTextColor)
-                                )
+                        } else {
+                            // 단색 모드: 강조 색상 피커
+                            HStack {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(customAccentColor)
+                                    .frame(width: 28, height: 18)
+                                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.border, lineWidth: 1))
+                                Text("● Accent")
+                                    .font(Theme.mono(9)).foregroundColor(Theme.textSecondary)
+                                Spacer()
+                                ColorPicker("", selection: $customAccentColor, supportsOpacity: false)
+                                    .labelsHidden()
+                                    .onChange(of: customAccentColor) { newColor in
+                                        var config = settings.customTheme
+                                        config.accentHex = newColor.hexString
+                                        settings.saveCustomTheme(config)
+                                    }
+                                Button(action: {
+                                    var config = settings.customTheme
+                                    config.accentHex = nil
+                                    settings.saveCustomTheme(config)
+                                    customAccentColor = settings.isDarkMode ? Color(hex: "3291ff") : Color(hex: "0070f3")
+                                }) {
+                                    Image(systemName: "arrow.counterclockwise")
+                                        .font(.system(size: 9)).foregroundColor(Theme.textDim)
+                                }.buttonStyle(.plain)
+                            }
                         }
+                    }
+
+                    // 배경 색상
+                    DisclosureGroup(isExpanded: $showBgColors) {
+                        VStack(spacing: 8) {
+                            colorPickerRow(label: "배경 (bg)", color: $customBgColor,
+                                savedHex: settings.customTheme.bgHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "000000") : Color(hex: "fafafa")) { hex in
+                                var c = settings.customTheme; c.bgHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "카드 (bgCard)", color: $customBgCardColor,
+                                savedHex: settings.customTheme.bgCardHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "0a0a0a") : Color(hex: "ffffff")) { hex in
+                                var c = settings.customTheme; c.bgCardHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "서피스 (bgSurface)", color: $customBgSurfaceColor,
+                                savedHex: settings.customTheme.bgSurfaceHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "111111") : Color(hex: "f5f5f5")) { hex in
+                                var c = settings.customTheme; c.bgSurfaceHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "3단계 배경 (bgTertiary)", color: $customBgTertiaryColor,
+                                savedHex: settings.customTheme.bgTertiaryHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "1a1a1a") : Color(hex: "ebebeb")) { hex in
+                                var c = settings.customTheme; c.bgTertiaryHex = hex; settings.saveCustomTheme(c)
+                            }
+                        }
+                        .padding(.top, 6)
+                    } label: {
+                        Text("배경 색상")
+                            .font(Theme.mono(10, weight: .medium))
+                            .foregroundColor(Theme.textPrimary)
+                    }
+
+                    // 텍스트 색상
+                    DisclosureGroup(isExpanded: $showTextColors) {
+                        VStack(spacing: 8) {
+                            colorPickerRow(label: "기본 텍스트", color: $customTextPrimaryColor,
+                                savedHex: settings.customTheme.textPrimaryHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "ededed") : Color(hex: "171717")) { hex in
+                                var c = settings.customTheme; c.textPrimaryHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "보조 텍스트", color: $customTextSecondaryColor,
+                                savedHex: settings.customTheme.textSecondaryHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "a1a1a1") : Color(hex: "636363")) { hex in
+                                var c = settings.customTheme; c.textSecondaryHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "흐린 텍스트 (dim)", color: $customTextDimColor,
+                                savedHex: settings.customTheme.textDimHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "707070") : Color(hex: "8f8f8f")) { hex in
+                                var c = settings.customTheme; c.textDimHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "뮤트 텍스트 (muted)", color: $customTextMutedColor,
+                                savedHex: settings.customTheme.textMutedHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "484848") : Color(hex: "b0b0b0")) { hex in
+                                var c = settings.customTheme; c.textMutedHex = hex; settings.saveCustomTheme(c)
+                            }
+                        }
+                        .padding(.top, 6)
+                    } label: {
+                        Text("텍스트 색상")
+                            .font(Theme.mono(10, weight: .medium))
+                            .foregroundColor(Theme.textPrimary)
+                    }
+
+                    // 테두리 색상
+                    DisclosureGroup(isExpanded: $showBorderColors) {
+                        VStack(spacing: 8) {
+                            colorPickerRow(label: "기본 테두리", color: $customBorderColor,
+                                savedHex: settings.customTheme.borderHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "282828") : Color(hex: "e5e5e5")) { hex in
+                                var c = settings.customTheme; c.borderHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "강조 테두리", color: $customBorderStrongColor,
+                                savedHex: settings.customTheme.borderStrongHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "3e3e3e") : Color(hex: "d0d0d0")) { hex in
+                                var c = settings.customTheme; c.borderStrongHex = hex; settings.saveCustomTheme(c)
+                            }
+                        }
+                        .padding(.top, 6)
+                    } label: {
+                        Text("테두리 색상")
+                            .font(Theme.mono(10, weight: .medium))
+                            .foregroundColor(Theme.textPrimary)
+                    }
+
+                    // 시맨틱 색상
+                    DisclosureGroup(isExpanded: $showSemanticColors) {
+                        VStack(spacing: 8) {
+                            colorPickerRow(label: "초록 (green)", color: $customGreenColor,
+                                savedHex: settings.customTheme.greenHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "3ecf8e") : Color(hex: "18a058")) { hex in
+                                var c = settings.customTheme; c.greenHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "빨강 (red)", color: $customRedColor,
+                                savedHex: settings.customTheme.redHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "f14c4c") : Color(hex: "e5484d")) { hex in
+                                var c = settings.customTheme; c.redHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "노랑 (yellow)", color: $customYellowColor,
+                                savedHex: settings.customTheme.yellowHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "f5a623") : Color(hex: "ca8a04")) { hex in
+                                var c = settings.customTheme; c.yellowHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "보라 (purple)", color: $customPurpleColor,
+                                savedHex: settings.customTheme.purpleHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "8e4ec6") : Color(hex: "6e56cf")) { hex in
+                                var c = settings.customTheme; c.purpleHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "주황 (orange)", color: $customOrangeColor,
+                                savedHex: settings.customTheme.orangeHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "f97316") : Color(hex: "e5560a")) { hex in
+                                var c = settings.customTheme; c.orangeHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "청록 (cyan)", color: $customCyanColor,
+                                savedHex: settings.customTheme.cyanHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "06b6d4") : Color(hex: "0891b2")) { hex in
+                                var c = settings.customTheme; c.cyanHex = hex; settings.saveCustomTheme(c)
+                            }
+                            colorPickerRow(label: "분홍 (pink)", color: $customPinkColor,
+                                savedHex: settings.customTheme.pinkHex,
+                                defaultColor: settings.isDarkMode ? Color(hex: "e54d9e") : Color(hex: "d23197")) { hex in
+                                var c = settings.customTheme; c.pinkHex = hex; settings.saveCustomTheme(c)
+                            }
+                        }
+                        .padding(.top, 6)
+                    } label: {
+                        Text("시맨틱 색상")
+                            .font(Theme.mono(10, weight: .medium))
+                            .foregroundColor(Theme.textPrimary)
                     }
 
                     Rectangle().fill(Theme.border).frame(height: 1)
@@ -2497,11 +2904,29 @@ struct SettingsView: View {
                                 customUseGradient = config.useGradient
                                 customFontName = config.fontName ?? ""
                                 customFontSize = config.fontSize ?? 11.0
+                                let dark = settings.isDarkMode
+                                if let hex = config.bgHex, !hex.isEmpty { customBgColor = Color(hex: hex) } else { customBgColor = dark ? Color(hex: "000000") : Color(hex: "fafafa") }
+                                if let hex = config.bgCardHex, !hex.isEmpty { customBgCardColor = Color(hex: hex) } else { customBgCardColor = dark ? Color(hex: "0a0a0a") : Color(hex: "ffffff") }
+                                if let hex = config.bgSurfaceHex, !hex.isEmpty { customBgSurfaceColor = Color(hex: hex) } else { customBgSurfaceColor = dark ? Color(hex: "111111") : Color(hex: "f5f5f5") }
+                                if let hex = config.bgTertiaryHex, !hex.isEmpty { customBgTertiaryColor = Color(hex: hex) } else { customBgTertiaryColor = dark ? Color(hex: "1a1a1a") : Color(hex: "ebebeb") }
+                                if let hex = config.textPrimaryHex, !hex.isEmpty { customTextPrimaryColor = Color(hex: hex) } else { customTextPrimaryColor = dark ? Color(hex: "ededed") : Color(hex: "171717") }
+                                if let hex = config.textSecondaryHex, !hex.isEmpty { customTextSecondaryColor = Color(hex: hex) } else { customTextSecondaryColor = dark ? Color(hex: "a1a1a1") : Color(hex: "636363") }
+                                if let hex = config.textDimHex, !hex.isEmpty { customTextDimColor = Color(hex: hex) } else { customTextDimColor = dark ? Color(hex: "707070") : Color(hex: "8f8f8f") }
+                                if let hex = config.textMutedHex, !hex.isEmpty { customTextMutedColor = Color(hex: hex) } else { customTextMutedColor = dark ? Color(hex: "484848") : Color(hex: "b0b0b0") }
+                                if let hex = config.borderHex, !hex.isEmpty { customBorderColor = Color(hex: hex) } else { customBorderColor = dark ? Color(hex: "282828") : Color(hex: "e5e5e5") }
+                                if let hex = config.borderStrongHex, !hex.isEmpty { customBorderStrongColor = Color(hex: hex) } else { customBorderStrongColor = dark ? Color(hex: "3e3e3e") : Color(hex: "d0d0d0") }
+                                if let hex = config.greenHex, !hex.isEmpty { customGreenColor = Color(hex: hex) } else { customGreenColor = dark ? Color(hex: "3ecf8e") : Color(hex: "18a058") }
+                                if let hex = config.redHex, !hex.isEmpty { customRedColor = Color(hex: hex) } else { customRedColor = dark ? Color(hex: "f14c4c") : Color(hex: "e5484d") }
+                                if let hex = config.yellowHex, !hex.isEmpty { customYellowColor = Color(hex: hex) } else { customYellowColor = dark ? Color(hex: "f5a623") : Color(hex: "ca8a04") }
+                                if let hex = config.purpleHex, !hex.isEmpty { customPurpleColor = Color(hex: hex) } else { customPurpleColor = dark ? Color(hex: "8e4ec6") : Color(hex: "6e56cf") }
+                                if let hex = config.orangeHex, !hex.isEmpty { customOrangeColor = Color(hex: hex) } else { customOrangeColor = dark ? Color(hex: "f97316") : Color(hex: "e5560a") }
+                                if let hex = config.cyanHex, !hex.isEmpty { customCyanColor = Color(hex: hex) } else { customCyanColor = dark ? Color(hex: "06b6d4") : Color(hex: "0891b2") }
+                                if let hex = config.pinkHex, !hex.isEmpty { customPinkColor = Color(hex: hex) } else { customPinkColor = dark ? Color(hex: "e54d9e") : Color(hex: "d23197") }
                             }
                         }) {
                             Label(NSLocalizedString("settings.customtheme.import", comment: ""), systemImage: "square.and.arrow.down")
                                 .font(Theme.mono(9, weight: .bold))
-                                .foregroundColor(Theme.accent)
+                                .foregroundStyle(Theme.accentBackground)
                                 .padding(.horizontal, 10).padding(.vertical, 6)
                                 .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent.opacity(0.1)))
                                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.accent.opacity(0.25), lineWidth: 1))
@@ -2517,6 +2942,24 @@ struct SettingsView: View {
                             customUseGradient = false
                             customFontName = ""
                             customFontSize = 11.0
+                            let dark = settings.isDarkMode
+                            customBgColor = dark ? Color(hex: "000000") : Color(hex: "fafafa")
+                            customBgCardColor = dark ? Color(hex: "0a0a0a") : Color(hex: "ffffff")
+                            customBgSurfaceColor = dark ? Color(hex: "111111") : Color(hex: "f5f5f5")
+                            customBgTertiaryColor = dark ? Color(hex: "1a1a1a") : Color(hex: "ebebeb")
+                            customTextPrimaryColor = dark ? Color(hex: "ededed") : Color(hex: "171717")
+                            customTextSecondaryColor = dark ? Color(hex: "a1a1a1") : Color(hex: "636363")
+                            customTextDimColor = dark ? Color(hex: "707070") : Color(hex: "8f8f8f")
+                            customTextMutedColor = dark ? Color(hex: "484848") : Color(hex: "b0b0b0")
+                            customBorderColor = dark ? Color(hex: "282828") : Color(hex: "e5e5e5")
+                            customBorderStrongColor = dark ? Color(hex: "3e3e3e") : Color(hex: "d0d0d0")
+                            customGreenColor = dark ? Color(hex: "3ecf8e") : Color(hex: "18a058")
+                            customRedColor = dark ? Color(hex: "f14c4c") : Color(hex: "e5484d")
+                            customYellowColor = dark ? Color(hex: "f5a623") : Color(hex: "ca8a04")
+                            customPurpleColor = dark ? Color(hex: "8e4ec6") : Color(hex: "6e56cf")
+                            customOrangeColor = dark ? Color(hex: "f97316") : Color(hex: "e5560a")
+                            customCyanColor = dark ? Color(hex: "06b6d4") : Color(hex: "0891b2")
+                            customPinkColor = dark ? Color(hex: "e54d9e") : Color(hex: "d23197")
                         }) {
                             Text(NSLocalizedString("settings.customtheme.reset", comment: ""))
                                 .font(Theme.mono(9, weight: .bold))
@@ -2528,6 +2971,7 @@ struct SettingsView: View {
                     }
                 }
             }
+            } // end if themeMode == "custom"
         }
     }
 
@@ -2967,7 +3411,7 @@ struct SettingsView: View {
                                 Text(NSLocalizedString("plugin.marketplace.refresh", comment: ""))
                                     .font(Theme.mono(9, weight: .medium))
                             }
-                            .foregroundColor(Theme.accent)
+                            .foregroundStyle(Theme.accentBackground)
                             .padding(.horizontal, 10).padding(.vertical, 6)
                             .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent.opacity(0.08)))
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.accent.opacity(0.2), lineWidth: 1))
@@ -3023,12 +3467,17 @@ struct SettingsView: View {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "info.circle.fill")
                         .font(.system(size: Theme.iconSize(11), weight: .bold))
-                        .foregroundColor(Theme.accent)
+                        .foregroundStyle(Theme.accentBackground)
                     Text(NSLocalizedString("plugin.info.desc", comment: ""))
                         .font(Theme.mono(8))
                         .foregroundColor(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+        }
+        .onAppear {
+            if pluginManager.registryPlugins.isEmpty && !pluginManager.isLoadingRegistry {
+                pluginManager.fetchRegistry()
             }
         }
         .alert(NSLocalizedString("plugin.confirm.uninstall", comment: ""), isPresented: $showPluginUninstallConfirm) {
@@ -3112,6 +3561,7 @@ struct SettingsView: View {
     }
 
     private func pickLocalPluginFolder() {
+        #if os(macOS)
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -3121,12 +3571,14 @@ struct SettingsView: View {
         if panel.runModal() == .OK, let url = panel.url {
             pluginManager.install(source: url.path)
         }
+        #endif
     }
 
     private func scaffoldNewPlugin() {
         let name = scaffoldName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
 
+        #if os(macOS)
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -3135,12 +3587,11 @@ struct SettingsView: View {
         panel.prompt = NSLocalizedString("plugin.scaffold.pick.prompt", comment: "")
         if panel.runModal() == .OK, let url = panel.url {
             if let pluginPath = pluginManager.scaffold(name: name, at: url.path) {
-                // 생성된 플러그인을 바로 등록
                 pluginManager.install(source: pluginPath)
-                // Finder에서 열기
                 NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: pluginPath)
             }
         }
+        #endif
         scaffoldName = ""
         showPluginScaffold = false
     }
@@ -3289,7 +3740,7 @@ struct SettingsView: View {
                         .font(Theme.mono(9, weight: .bold))
                         .foregroundColor(.white)
                         .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent))
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accentBackground))
                 }
                 .buttonStyle(.plain)
                 .disabled(pluginManager.isInstalling)
@@ -3392,7 +3843,7 @@ struct SettingsView: View {
                                 Image(systemName: "arrow.down.doc").font(.system(size: 10))
                                 Text(NSLocalizedString("settings.security.log.export", comment: "")).font(Theme.mono(9, weight: .medium))
                             }
-                            .foregroundColor(Theme.accent)
+                            .foregroundStyle(Theme.accentBackground)
                             .padding(.horizontal, 10).padding(.vertical, 6)
                             .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent.opacity(0.08)))
                         }.buttonStyle(.plain)
@@ -3566,7 +4017,7 @@ struct SettingsView: View {
                     Spacer()
                     Image(systemName: "slider.horizontal.3")
                         .font(.system(size: Theme.iconSize(15), weight: .bold))
-                        .foregroundColor(Theme.accent)
+                        .foregroundStyle(Theme.accentBackground)
                         .padding(10)
                         .background(Circle().fill(Theme.accent.opacity(0.12)))
                 }
@@ -3633,38 +4084,75 @@ struct SettingsView: View {
         }
     }
 
-    private var settingPreviewCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(NSLocalizedString("settings.preview", comment: ""))
-                .font(Theme.mono(9, weight: .bold))
-                .foregroundColor(Theme.textDim)
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Circle().fill(Theme.green).frame(width: 6, height: 6)
-                    Text("EDIT")
-                        .font(Theme.mono(10, weight: .bold))
-                        .foregroundColor(Theme.green)
-                    Text("(OfficeSceneView.swift)")
-                        .font(Theme.mono(10))
-                        .foregroundColor(Theme.textSecondary)
-                }
-
-                Text(NSLocalizedString("settings.preview.desc", comment: ""))
-                    .font(Theme.monoNormal)
-                    .foregroundColor(Theme.textPrimary)
+    @ViewBuilder
+    private func colorPickerRow(
+        label: String,
+        color: Binding<Color>,
+        savedHex: String?,
+        defaultColor: Color,
+        onChange: @escaping (String?) -> Void
+    ) -> some View {
+        let isCustomized = savedHex != nil && !savedHex!.isEmpty
+        HStack(spacing: 6) {
+            Circle()
+                .fill(isCustomized ? color.wrappedValue : Color.clear)
+                .frame(width: 7, height: 7)
+                .overlay(Circle().stroke(Theme.border, lineWidth: 1))
+            Text(label)
+                .font(Theme.mono(9))
+                .foregroundColor(isCustomized ? Theme.textPrimary : Theme.textSecondary)
+            if isCustomized {
+                Text("custom")
+                    .font(Theme.mono(7, weight: .bold))
+                    .foregroundStyle(Theme.accentBackground)
+                    .padding(.horizontal, 4).padding(.vertical, 1)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(Theme.accent.opacity(0.1)))
+                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.accent.opacity(0.2), lineWidth: 1))
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Theme.bgTerminal)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.border.opacity(0.45), lineWidth: 1)
-            )
+            Spacer()
+            ColorPicker("", selection: color, supportsOpacity: false)
+                .labelsHidden()
+                .onChange(of: color.wrappedValue) { newColor in
+                    onChange(newColor.hexString)
+                }
+            if isCustomized {
+                Button(action: {
+                    color.wrappedValue = defaultColor
+                    onChange(nil)
+                }) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 9))
+                        .foregroundColor(Theme.textDim)
+                }.buttonStyle(.plain)
+            }
         }
+    }
+
+    private func themeModeButton(title: String, icon: String, mode: String) -> some View {
+        let selected = settings.themeMode == mode
+        let tint: Color = mode == "dark" ? Theme.yellow : (mode == "custom" ? Theme.purple : Theme.orange)
+        return Button(action: {
+            withAnimation(.easeInOut(duration: 0.2)) { settings.themeMode = mode }
+            settings.requestRefreshIfNeeded()
+        }) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: Theme.iconSize(12)))
+                    .foregroundColor(selected ? tint : Theme.textDim)
+                Text(title)
+                    .font(Theme.mono(10, weight: selected ? .bold : .regular))
+                    .foregroundColor(selected ? Theme.textPrimary : Theme.textSecondary)
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: Theme.iconSize(10)))
+                        .foregroundColor(tint)
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(selected ? tint.opacity(0.1) : Theme.bgSurface.opacity(0.5)))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(selected ? tint.opacity(Theme.borderActiveOpacity) : Theme.border.opacity(Theme.borderLight), lineWidth: 1))
+        }.buttonStyle(.plain)
     }
 
     private func themeButton(title: String, icon: String, isDark: Bool) -> some View {

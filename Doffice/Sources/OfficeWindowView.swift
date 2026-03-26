@@ -16,7 +16,7 @@ struct OfficeWindowView: View {
                 Text("⛏").font(Theme.scaled(12))
                 Text(settings.appDisplayName)
                     .font(Theme.mono(12, weight: .bold))
-                    .foregroundColor(Theme.accent)
+                    .foregroundStyle(Theme.accentBackground)
                 Text("OFFICE")
                     .font(Theme.mono(8, weight: .heavy))
                     .foregroundColor(Theme.textDim).tracking(2)

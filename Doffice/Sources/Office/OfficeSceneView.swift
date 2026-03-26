@@ -16,10 +16,10 @@ struct OfficeSceneView: View {
     @State private var currentFPS: Double = OfficeConstants.fps
 
     private let map: OfficeMap
-    /// Base timer fires at max FPS; advance() internally throttles based on currentFPS
+    /// Single consolidated timer — fires at max FPS, advance() throttles internally
     let timer = Timer.publish(every: 1.0 / OfficeConstants.fps, on: .main, in: .common).autoconnect()
-    let chromeTimer = Timer.publish(every: 5.0, on: .main, in: .common).autoconnect()
-    let fpsCheckTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
+    /// Chrome screenshots & FPS check on slower cadence
+    let slowTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
 
     private static func computeAdaptiveFPS() -> Double {
         if AppSettings.shared.effectivePerformanceMode {
@@ -168,13 +168,11 @@ struct OfficeSceneView: View {
         .onReceive(timer) { _ in
             store.advance(with: manager.userVisibleTabs, activeTabId: manager.activeTab?.id, focusMode: isFocusMode, fps: currentFPS)
         }
-        .onReceive(fpsCheckTimer) { _ in
+        .onReceive(slowTimer) { _ in
+            // FPS check
             let newFPS = Self.computeAdaptiveFPS()
-            if newFPS != currentFPS {
-                currentFPS = newFPS
-            }
-        }
-        .onReceive(chromeTimer) { _ in
+            if newFPS != currentFPS { currentFPS = newFPS }
+            // Chrome refresh
             Task { @MainActor in
                 store.prepareBackgroundSnapshot(theme: sceneTheme, dark: settings.isDarkMode)
                 await store.refreshChromeScreenshots(for: manager.userVisibleTabs, activeTabId: manager.activeTab?.id)

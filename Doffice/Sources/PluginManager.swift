@@ -17,10 +17,82 @@ struct PluginManifest: Codable {
     var contributes: PluginContributions?
 
     struct PluginContributions: Codable {
-        var characters: String?        // "characters.json" 경로
-        var panels: [PanelDecl]?       // 커스텀 패널 (WebView)
-        var commands: [CommandDecl]?   // 명령어 (커맨드 팔레트 연동)
+        var characters: String?         // "characters.json" 경로
+        var panels: [PanelDecl]?        // 커스텀 패널 (WebView)
+        var commands: [CommandDecl]?    // 명령어 (커맨드 팔레트 연동)
         var statusBar: [StatusBarDecl]? // 상태바 위젯
+
+        // ── 네이티브 확장 (JSON 선언으로 앱 내부 기능 제어) ──
+        var themes: [ThemeDecl]?        // 커스텀 테마 색상 프리셋
+        var furniture: [FurnitureDecl]? // 오피스 커스텀 가구
+        var officePresets: [OfficePresetDecl]? // 오피스 레이아웃 프리셋
+        var achievements: [AchievementDecl]?   // 커스텀 업적
+        var bossLines: [String]?        // 사장 대사 추가
+        var effects: [EffectDecl]?      // 인터랙티브 이펙트
+    }
+
+    /// 테마 프리셋 — 앱 전체 색상을 바꿈
+    struct ThemeDecl: Codable, Identifiable {
+        var id: String
+        var name: String            // "Monokai", "Solarized Dark" 등
+        var isDark: Bool
+        var accentHex: String       // 메인 accent 색상
+        var bgHex: String?          // 배경색 (옵션)
+        var cardHex: String?        // 카드 배경 (옵션)
+        var textHex: String?        // 텍스트 색상 (옵션)
+        var greenHex: String?
+        var redHex: String?
+        var yellowHex: String?
+        var purpleHex: String?
+        var cyanHex: String?
+        var useGradient: Bool?
+        var gradientStartHex: String?
+        var gradientEndHex: String?
+        var fontName: String?       // 커스텀 폰트
+    }
+
+    /// 오피스 가구
+    struct FurnitureDecl: Codable, Identifiable {
+        var id: String
+        var name: String
+        var sprite: [[String]]      // 2D 픽셀 배열 (hex 색상)
+        var width: Int              // 타일 단위
+        var height: Int
+        var zone: String?           // "mainOffice" | "pantry" | "meetingRoom"
+    }
+
+    /// 오피스 레이아웃 프리셋
+    struct OfficePresetDecl: Codable, Identifiable {
+        var id: String
+        var name: String
+        var description: String?
+        var tileMap: [[Int]]?       // 타일맵 (옵션)
+        var furniture: [FurniturePlacementDecl]?
+    }
+
+    struct FurniturePlacementDecl: Codable {
+        var furnitureId: String
+        var col: Int
+        var row: Int
+    }
+
+    /// 커스텀 업적
+    struct AchievementDecl: Codable, Identifiable {
+        var id: String
+        var name: String
+        var description: String
+        var icon: String
+        var rarity: String
+        var xp: Int
+    }
+
+    /// 이펙트 — 이벤트 트리거 + 시각 효과
+    struct EffectDecl: Codable, Identifiable {
+        var id: String
+        var trigger: String         // PluginEventType rawValue
+        var type: String            // PluginEffectType rawValue
+        var config: [String: EffectValue]?
+        var enabled: Bool?
     }
 
     /// 커스텀 패널 — HTML/JS를 WKWebView로 렌더링
@@ -52,6 +124,67 @@ struct PluginManifest: Codable {
 }
 
 // ═══════════════════════════════════════════════════════
+// MARK: - Plugin Event / Effect Types
+// ═══════════════════════════════════════════════════════
+
+enum PluginEventType: String, Codable {
+    case onPromptKeyPress
+    case onPromptSubmit
+    case onSessionComplete
+    case onSessionError
+    case onAchievementUnlock
+    case onCharacterHire
+    case onLevelUp
+}
+
+enum PluginEffectType: String, Codable {
+    case comboCounter = "combo-counter"
+    case particleBurst = "particle-burst"
+    case screenShake = "screen-shake"
+    case flash
+    case sound
+    case toast
+    case confetti
+}
+
+/// JSON config 값 (String / Int / Double / Bool / [String])
+enum EffectValue: Codable, Equatable {
+    case string(String)
+    case int(Int)
+    case double(Double)
+    case bool(Bool)
+    case stringArray([String])
+
+    var stringValue: String? { if case .string(let v) = self { return v }; return nil }
+    var intValue: Int? { if case .int(let v) = self { return v }; return nil }
+    var doubleValue: Double? {
+        switch self { case .double(let v): return v; case .int(let v): return Double(v); default: return nil }
+    }
+    var boolValue: Bool? { if case .bool(let v) = self { return v }; return nil }
+    var stringArrayValue: [String]? { if case .stringArray(let v) = self { return v }; return nil }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let v = try? c.decode(Bool.self) { self = .bool(v) }
+        else if let v = try? c.decode(Int.self) { self = .int(v) }
+        else if let v = try? c.decode(Double.self) { self = .double(v) }
+        else if let v = try? c.decode([String].self) { self = .stringArray(v) }
+        else { self = .string(try c.decode(String.self)) }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .string(let v): try c.encode(v)
+        case .int(let v): try c.encode(v)
+        case .double(let v): try c.encode(v)
+        case .bool(let v): try c.encode(v)
+        case .stringArray(let v): try c.encode(v)
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════
 // MARK: - Plugin Host (런타임 플러그인 관리)
 // ═══════════════════════════════════════════════════════
 
@@ -65,6 +198,12 @@ class PluginHost: ObservableObject {
     @Published var commands: [LoadedCommand] = []
     /// 상태바 위젯 목록
     @Published var statusBarItems: [LoadedStatusBarItem] = []
+
+    // ── 네이티브 확장 ──
+    @Published var themes: [LoadedTheme] = []
+    @Published var achievements: [PluginManifest.AchievementDecl] = []
+    @Published var bossLines: [String] = []
+    @Published var effects: [LoadedEffect] = []
 
     struct LoadedPanel: Identifiable {
         let id: String
@@ -95,10 +234,39 @@ class PluginHost: ObservableObject {
         var color: String = ""
     }
 
+    struct LoadedTheme: Identifiable {
+        let id: String
+        let pluginName: String
+        let decl: PluginManifest.ThemeDecl
+    }
+
+    struct LoadedEffect: Identifiable {
+        let id: String
+        let pluginName: String
+        let trigger: PluginEventType
+        let effectType: PluginEffectType
+        let config: [String: EffectValue]
+        let enabled: Bool
+    }
+
+    // MARK: - 이벤트 발행
+
+    func fireEvent(_ event: PluginEventType, context: [String: Any] = [:]) {
+        NotificationCenter.default.post(
+            name: .pluginEffectEvent,
+            object: nil,
+            userInfo: ["event": event, "context": context]
+        )
+    }
+
     func reload() {
         var newPanels: [LoadedPanel] = []
         var newCommands: [LoadedCommand] = []
         var newStatusBars: [LoadedStatusBarItem] = []
+        var newThemes: [LoadedTheme] = []
+        var newEffects: [LoadedEffect] = []
+        var newAchievements: [PluginManifest.AchievementDecl] = []
+        var newBossLines: [String] = []
 
         for pluginPath in PluginManager.shared.activePluginPaths {
             let baseURL = URL(fileURLWithPath: pluginPath)
@@ -156,19 +324,78 @@ class PluginHost: ObservableObject {
                     ))
                 }
             }
+
+            // ── 네이티브 확장 ──
+
+            // 테마
+            if let themeDecls = contributes.themes {
+                for decl in themeDecls {
+                    newThemes.append(LoadedTheme(
+                        id: "\(pluginName).\(decl.id)",
+                        pluginName: pluginName,
+                        decl: decl
+                    ))
+                }
+            }
+
+            // 업적
+            if let achDecls = contributes.achievements {
+                newAchievements.append(contentsOf: achDecls)
+            }
+
+            // 사장 대사
+            if let lines = contributes.bossLines {
+                newBossLines.append(contentsOf: lines)
+            }
+
+            // 이펙트
+            if let effectDecls = contributes.effects {
+                for decl in effectDecls {
+                    guard let trigger = PluginEventType(rawValue: decl.trigger),
+                          let effectType = PluginEffectType(rawValue: decl.type) else { continue }
+                    newEffects.append(LoadedEffect(
+                        id: "\(pluginName).\(decl.id)",
+                        pluginName: pluginName,
+                        trigger: trigger,
+                        effectType: effectType,
+                        config: decl.config ?? [:],
+                        enabled: decl.enabled ?? true
+                    ))
+                }
+            }
         }
 
         DispatchQueue.main.async {
             self.panels = newPanels
             self.commands = newCommands
             self.statusBarItems = newStatusBars
+            self.themes = newThemes
+            self.effects = newEffects
+            self.achievements = newAchievements
+            self.bossLines = newBossLines
             self.startStatusBarTimers()
         }
+    }
+
+    // MARK: - 테마 적용
+
+    func applyTheme(_ theme: LoadedTheme) {
+        let d = theme.decl
+        var config = AppSettings.shared.customTheme
+        config.accentHex = d.accentHex
+        config.useGradient = d.useGradient ?? false
+        config.gradientStartHex = d.gradientStartHex
+        config.gradientEndHex = d.gradientEndHex
+        config.fontName = d.fontName
+        AppSettings.shared.isDarkMode = d.isDark
+        AppSettings.shared.saveCustomTheme(config)
+        AppSettings.shared.requestRefreshIfNeeded()
     }
 
     // MARK: - 명령어 실행
 
     func executeCommand(_ command: LoadedCommand, projectPath: String? = nil) {
+        #if os(macOS)
         DispatchQueue.global(qos: .userInitiated).async {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/zsh")
@@ -180,6 +407,7 @@ class PluginHost: ObservableObject {
             try? process.run()
             process.waitUntilExit()
         }
+        #endif
     }
 
     // MARK: - 상태바 타이머
@@ -187,7 +415,7 @@ class PluginHost: ObservableObject {
     private var statusTimers: [String: Timer] = [:]
 
     private func startStatusBarTimers() {
-        // 기존 타이머 정리
+        #if os(macOS)
         for timer in statusTimers.values { timer.invalidate() }
         statusTimers.removeAll()
 
@@ -198,8 +426,10 @@ class PluginHost: ObservableObject {
             }
             statusTimers[item.id] = timer
         }
+        #endif
     }
 
+    #if os(macOS)
     private func refreshStatusBarItem(_ id: String) {
         guard let idx = statusBarItems.firstIndex(where: { $0.id == id }) else { return }
         let item = statusBarItems[idx]
@@ -226,35 +456,61 @@ class PluginHost: ObservableObject {
             }
         }
     }
+    #endif
 }
 
 // ═══════════════════════════════════════════════════════
 // MARK: - Plugin Panel View (WKWebView 래퍼)
 // ═══════════════════════════════════════════════════════
 
+#if os(macOS)
 struct PluginPanelView: NSViewRepresentable {
     let htmlURL: URL
     let pluginName: String
 
     func makeNSView(context: Context) -> WKWebView {
+        makeWebView()
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        loadContent(webView)
+    }
+
+    private func makeWebView() -> WKWebView {
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
-
-        // 플러그인 JS에서 앱과 통신할 수 있는 메시지 핸들러
         let handler = PluginMessageHandler()
         config.userContentController.add(handler, name: "doffice")
-
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.setValue(false, forKey: "drawsBackground")
         return webView
     }
 
-    func updateNSView(_ webView: WKWebView, context: Context) {
-        let request = URLRequest(url: htmlURL)
+    private func loadContent(_ webView: WKWebView) {
         webView.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
-        webView.load(request)
     }
 }
+#elseif os(iOS)
+struct PluginPanelView: UIViewRepresentable {
+    let htmlURL: URL
+    let pluginName: String
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        let handler = PluginMessageHandler()
+        config.userContentController.add(handler, name: "doffice")
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        webView.scrollView.backgroundColor = .clear
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        webView.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
+    }
+}
+#endif
 
 /// 플러그인 JS → 앱 통신 핸들러
 class PluginMessageHandler: NSObject, WKScriptMessageHandler {
@@ -280,6 +536,7 @@ extension Notification.Name {
     static let pluginRequestSessionInfo = Notification.Name("pluginRequestSessionInfo")
     static let pluginNotify = Notification.Name("pluginNotify")
     static let pluginReload = Notification.Name("pluginReload")
+    static let pluginEffectEvent = Notification.Name("pluginEffectEvent")
 }
 
 // ═══════════════════════════════════════════════════════
@@ -341,7 +598,7 @@ class PluginManager: ObservableObject {
 
     /// 레지스트리 URL — GitHub Pages 또는 raw 파일
     /// 기여자는 이 저장소에 PR로 registry.json에 자기 플러그인을 추가
-    static let registryURL = "https://raw.githubusercontent.com/jjunhaa0211/doffice-plugins/main/registry.json"
+    static let registryURL = "https://raw.githubusercontent.com/jjunhaa0211/Doffice/main/registry.json"
 
     private init() {
         // ~/Library/Application Support/WorkMan/Plugins
@@ -384,36 +641,30 @@ class PluginManager: ObservableObject {
         registryError = nil
 
         guard let url = URL(string: Self.registryURL) else {
-            registryError = "Invalid registry URL"
+            registryPlugins = Self.mergedRegistry(remote: [])
+            registryError = nil
             isLoadingRegistry = false
             return
         }
 
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
+        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 self.isLoadingRegistry = false
 
-                if let error = error {
-                    self.registryError = error.localizedDescription
-                    return
-                }
-                guard let data = data else {
-                    self.registryError = "No data received"
-                    return
-                }
-                do {
-                    let items = try JSONDecoder().decode([RegistryPlugin].self, from: data)
-                    self.registryPlugins = items
-                } catch {
-                    self.registryError = "JSON parse error: \(error.localizedDescription)"
-                }
+                let remoteItems = Self.resolveRegistryItems(data: data, response: response, error: error)
+                self.registryPlugins = Self.mergedRegistry(remote: remoteItems)
+                self.registryError = nil
             }
         }.resume()
     }
 
     /// 레지스트리에서 설치
     func installFromRegistry(_ item: RegistryPlugin) {
+        if let bundledID = Self.bundledPluginID(from: item.downloadURL) {
+            installBundledPlugin(item, bundledID: bundledID)
+            return
+        }
         install(source: item.downloadURL)
     }
 
@@ -461,10 +712,15 @@ class PluginManager: ObservableObject {
             guard let self = self else { return }
 
             switch sourceType {
+            #if os(macOS)
             case .brewFormula:
                 self.installBrewFormula(trimmed)
             case .brewTap:
                 self.installBrewTap(trimmed)
+            #else
+            case .brewFormula, .brewTap:
+                self.finishWithError(NSLocalizedString("plugin.error.brew.not.supported", comment: ""))
+            #endif
             case .rawURL:
                 self.installFromURL(trimmed)
             case .local:
@@ -473,6 +729,54 @@ class PluginManager: ObservableObject {
         }
     }
 
+    private func installBundledPlugin(_ item: RegistryPlugin, bundledID: String) {
+        guard let bundled = Self.bundledPluginDefinition(for: bundledID) else {
+            finishWithError(NSLocalizedString("plugin.error.path.not.found", comment: ""))
+            return
+        }
+
+        isInstalling = true
+        lastError = nil
+        installProgress = String(format: NSLocalizedString("plugin.progress.installing", comment: ""), item.name)
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+
+            let fm = FileManager.default
+            let pluginDir = self.pluginBaseDir.appendingPathComponent(bundled.directoryName)
+
+            do {
+                if fm.fileExists(atPath: pluginDir.path) {
+                    try fm.removeItem(at: pluginDir)
+                }
+                try fm.createDirectory(at: pluginDir, withIntermediateDirectories: true)
+
+                for file in bundled.files {
+                    let destination = pluginDir.appendingPathComponent(file.path)
+                    let parentDir = destination.deletingLastPathComponent()
+                    try fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
+                    try file.contents.write(to: destination, atomically: true, encoding: .utf8)
+                }
+            } catch {
+                self.finishWithError(error.localizedDescription)
+                return
+            }
+
+            let entry = PluginEntry(
+                id: UUID().uuidString,
+                name: item.name,
+                source: item.downloadURL,
+                localPath: pluginDir.path,
+                version: item.version,
+                installedAt: Date(),
+                enabled: true,
+                sourceType: .rawURL
+            )
+            self.finishInstall(entry)
+        }
+    }
+
+    #if os(macOS)
     private func installBrewFormula(_ formula: String) {
         updateProgress(NSLocalizedString("plugin.progress.brew.install", comment: ""))
 
@@ -575,6 +879,7 @@ class PluginManager: ObservableObject {
 
         finishInstall(entry)
     }
+    #endif
 
     private func installFromURL(_ urlString: String) {
         guard let url = URL(string: urlString) else {
@@ -587,49 +892,64 @@ class PluginManager: ObservableObject {
         let pluginDir = pluginBaseDir.appendingPathComponent(pluginName)
 
         updateProgress(String(format: NSLocalizedString("plugin.progress.downloading", comment: ""), fileName))
-
-        // 디렉토리 생성
         try? FileManager.default.createDirectory(at: pluginDir, withIntermediateDirectories: true)
 
-        // curl로 다운로드
-        let destPath = pluginDir.appendingPathComponent(fileName).path
-        let (ok, output) = runShell("curl -fsSL -o \(shellEscape(destPath)) \(shellEscape(urlString))")
-        if !ok {
-            finishWithError(String(format: NSLocalizedString("plugin.error.download.failed", comment: ""), output))
-            return
-        }
+        // URLSession으로 다운로드 (macOS + iOS 모두 동작)
+        let destURL = pluginDir.appendingPathComponent(fileName)
+        URLSession.shared.downloadTask(with: url) { [weak self] tempURL, _, error in
+            guard let self = self else { return }
+            guard let tempURL = tempURL, error == nil else {
+                self.finishWithError(String(format: NSLocalizedString("plugin.error.download.failed", comment: ""), error?.localizedDescription ?? ""))
+                return
+            }
 
-        // tar/zip이면 압축 해제
+            do {
+                if FileManager.default.fileExists(atPath: destURL.path) {
+                    try FileManager.default.removeItem(at: destURL)
+                }
+                try FileManager.default.moveItem(at: tempURL, to: destURL)
+            } catch {
+                self.finishWithError(String(format: NSLocalizedString("plugin.error.download.failed", comment: ""), error.localizedDescription))
+                return
+            }
+
+            // 압축 해제
+            self.extractIfNeeded(destURL, to: pluginDir, fileName: fileName)
+
+            let entry = PluginEntry(
+                id: UUID().uuidString,
+                name: pluginName,
+                source: urlString,
+                localPath: pluginDir.path,
+                version: "1.0.0",
+                installedAt: Date(),
+                enabled: true,
+                sourceType: .rawURL
+            )
+            self.finishInstall(entry)
+        }.resume()
+    }
+
+    private func extractIfNeeded(_ fileURL: URL, to dir: URL, fileName: String) {
+        #if os(macOS)
         if fileName.hasSuffix(".tar.gz") || fileName.hasSuffix(".tgz") {
             updateProgress(NSLocalizedString("plugin.progress.extracting", comment: ""))
-            let (extractOk, extractOut) = runShell("tar -xzf \(shellEscape(destPath)) -C \(shellEscape(pluginDir.path))")
-            if !extractOk {
-                finishWithError(String(format: NSLocalizedString("plugin.error.extract.failed", comment: ""), extractOut))
-                return
-            }
-            try? FileManager.default.removeItem(atPath: destPath)
+            let (ok, out) = runShell("tar -xzf \(shellEscape(fileURL.path)) -C \(shellEscape(dir.path))")
+            if ok { try? FileManager.default.removeItem(at: fileURL) }
+            else { finishWithError(String(format: NSLocalizedString("plugin.error.extract.failed", comment: ""), out)); return }
         } else if fileName.hasSuffix(".zip") {
             updateProgress(NSLocalizedString("plugin.progress.extracting", comment: ""))
-            let (extractOk, extractOut) = runShell("unzip -o \(shellEscape(destPath)) -d \(shellEscape(pluginDir.path))")
-            if !extractOk {
-                finishWithError(String(format: NSLocalizedString("plugin.error.extract.failed", comment: ""), extractOut))
-                return
-            }
-            try? FileManager.default.removeItem(atPath: destPath)
+            let (ok, out) = runShell("unzip -o \(shellEscape(fileURL.path)) -d \(shellEscape(dir.path))")
+            if ok { try? FileManager.default.removeItem(at: fileURL) }
+            else { finishWithError(String(format: NSLocalizedString("plugin.error.extract.failed", comment: ""), out)); return }
         }
-
-        let entry = PluginEntry(
-            id: UUID().uuidString,
-            name: pluginName,
-            source: urlString,
-            localPath: pluginDir.path,
-            version: "1.0.0",
-            installedAt: Date(),
-            enabled: true,
-            sourceType: .rawURL
-        )
-
-        finishInstall(entry)
+        #else
+        // iOS: zip만 Foundation으로 지원 (tar.gz는 미지원)
+        if fileName.hasSuffix(".zip") {
+            updateProgress(NSLocalizedString("plugin.progress.extracting", comment: ""))
+            // FileManager에서 직접 압축해제는 미지원 → 파일 그대로 유지
+        }
+        #endif
     }
 
     // MARK: - 로컬 디렉토리 등록
@@ -917,7 +1237,7 @@ class PluginManager: ObservableObject {
                 "name": name,
                 "version": "0.1.0",
                 "description": "\(name) — Doffice plugin",
-                "author": NSUserName(),
+                "author": Self.currentUserName,
                 "contributes": contributes
             ]
             let pluginData = try JSONSerialization.data(withJSONObject: pluginJSON, options: [.prettyPrinted, .sortedKeys])
@@ -949,7 +1269,9 @@ class PluginManager: ObservableObject {
     // MARK: - Finder에서 열기
 
     func revealInFinder(_ plugin: PluginEntry) {
+        #if os(macOS)
         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: plugin.localPath)
+        #endif
     }
 
     // MARK: - 삭제
@@ -957,13 +1279,15 @@ class PluginManager: ObservableObject {
     func uninstall(_ plugin: PluginEntry) {
         switch plugin.sourceType {
         case .brewFormula, .brewTap:
+            #if os(macOS)
             if let brew = Self.findBrewPath() {
                 _ = runShell("\(brew) uninstall \(shellEscape(plugin.source))")
             }
+            #endif
         case .rawURL:
             try? FileManager.default.removeItem(atPath: plugin.localPath)
         case .local:
-            break // 로컬 디렉토리는 삭제하지 않고 등록만 해제
+            break
         }
 
         DispatchQueue.main.async {
@@ -986,6 +1310,7 @@ class PluginManager: ObservableObject {
 
     // MARK: - 업데이트 (brew upgrade)
 
+    #if os(macOS)
     func upgrade(_ plugin: PluginEntry) {
         guard plugin.sourceType != .rawURL else { return }
         guard let brew = Self.findBrewPath() else { return }
@@ -1017,9 +1342,21 @@ class PluginManager: ObservableObject {
             }
         }
     }
+    #endif
+
+    // MARK: - Platform Helpers
+
+    private static var currentUserName: String {
+        #if os(macOS)
+        return NSUserName()
+        #else
+        return "user"
+        #endif
+    }
 
     // MARK: - Shell Helpers
 
+    #if os(macOS)
     private static func findBrewPath() -> String? {
         let candidates = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]
         return candidates.first { FileManager.default.fileExists(atPath: $0) }
@@ -1056,6 +1393,7 @@ class PluginManager: ObservableObject {
     private func shellEscape(_ s: String) -> String {
         "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
+    #endif
 
     // MARK: - Progress Helpers
 
@@ -1073,18 +1411,277 @@ class PluginManager: ObservableObject {
 
     private func finishInstall(_ entry: PluginEntry) {
         DispatchQueue.main.async {
-            // 중복 체크
-            if self.plugins.contains(where: { $0.source == entry.source }) {
-                self.lastError = NSLocalizedString("plugin.error.already.installed", comment: "")
+            if let idx = self.plugins.firstIndex(where: { $0.source == entry.source }) {
+                self.plugins[idx].name = entry.name
+                self.plugins[idx].localPath = entry.localPath
+                self.plugins[idx].version = entry.version
+                self.plugins[idx].installedAt = entry.installedAt
+                self.plugins[idx].enabled = entry.enabled
+                self.plugins[idx].sourceType = entry.sourceType
             } else {
                 self.plugins.append(entry)
-                self.savePlugins()
-                // 캐릭터 팩 + 확장 포인트 로드
-                CharacterRegistry.shared.loadPluginCharacters()
-                PluginHost.shared.reload()
             }
+            self.savePlugins()
+            // 캐릭터 팩 + 확장 포인트 로드
+            CharacterRegistry.shared.loadPluginCharacters()
+            PluginHost.shared.reload()
+            self.lastError = nil
             self.isInstalling = false
             self.installProgress = ""
         }
+    }
+
+    // MARK: - Registry Helpers
+
+    static func decodeRegistryPayload(_ data: Data) -> [RegistryPlugin]? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) else { return nil }
+
+        let rawItems: [[String: Any]]
+        if let array = json as? [[String: Any]] {
+            rawItems = array
+        } else if let object = json as? [String: Any],
+                  let array = object["plugins"] as? [[String: Any]] {
+            rawItems = array
+        } else {
+            return nil
+        }
+
+        let items = rawItems.compactMap(Self.registryPlugin(from:))
+        return items.isEmpty ? nil : items
+    }
+
+    static func bundledRegistryCatalog() -> [RegistryPlugin] {
+        [
+            RegistryPlugin(
+                id: "flea-market-hidden-pack",
+                name: "플리 마켓 히든 캐릭터 팩",
+                author: "WorkMan",
+                description: "플리 마켓에서 바로 고용할 수 있는 히든 캐릭터 3종을 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://flea-market-hidden-pack",
+                characterCount: 3,
+                tags: ["hidden", "market", "characters"],
+                previewImageURL: nil,
+                stars: 42
+            )
+        ]
+    }
+
+    private static func resolveRegistryItems(data: Data?, response: URLResponse?, error: Error?) -> [RegistryPlugin] {
+        if error != nil {
+            return []
+        }
+
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            return []
+        }
+
+        guard let data else { return [] }
+        return decodeRegistryPayload(data) ?? []
+    }
+
+    private static func mergedRegistry(remote: [RegistryPlugin]) -> [RegistryPlugin] {
+        var seenIDs = Set<String>()
+        var seenNames = Set<String>()
+        var merged: [RegistryPlugin] = []
+
+        for item in bundledRegistryCatalog() + remote {
+            let idKey = item.id.lowercased()
+            let nameKey = item.name.lowercased()
+            guard !seenIDs.contains(idKey), !seenNames.contains(nameKey) else { continue }
+            seenIDs.insert(idKey)
+            seenNames.insert(nameKey)
+            merged.append(item)
+        }
+
+        return merged
+    }
+
+    private static func registryPlugin(from raw: [String: Any]) -> RegistryPlugin? {
+        guard let name = firstString(in: raw, keys: ["name", "title"]),
+              let downloadURL = firstString(in: raw, keys: ["downloadURL", "downloadUrl", "download_url", "url"]) else {
+            return nil
+        }
+
+        let id = firstString(in: raw, keys: ["id"]) ?? slugifiedRegistryID(from: name)
+        let author = firstString(in: raw, keys: ["author", "creator", "maker"]) ?? "Unknown"
+        let description = firstString(in: raw, keys: ["description", "summary"]) ?? ""
+        let version = firstString(in: raw, keys: ["version"]) ?? "1.0.0"
+        let previewImageURL = firstString(in: raw, keys: ["previewImageURL", "previewImageUrl", "preview_image_url"])
+        let tags = stringArray(in: raw, keys: ["tags"])
+        let stars = firstInt(in: raw, keys: ["stars", "starCount", "star_count"])
+        let characterCount = firstInt(in: raw, keys: ["characterCount", "character_count"])
+            ?? ((raw["characters"] as? [[String: Any]])?.count ?? 0)
+
+        return RegistryPlugin(
+            id: id,
+            name: name,
+            author: author,
+            description: description,
+            version: version,
+            downloadURL: downloadURL,
+            characterCount: characterCount,
+            tags: tags,
+            previewImageURL: previewImageURL,
+            stars: stars
+        )
+    }
+
+    private static func bundledPluginID(from source: String) -> String? {
+        guard let url = URL(string: source), url.scheme == "bundled" else { return nil }
+
+        let host = url.host?.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
+        let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let identifier = host.isEmpty ? path : host
+        return identifier.isEmpty ? nil : identifier
+    }
+
+    private struct BundledPluginFile {
+        let path: String
+        let contents: String
+    }
+
+    private struct BundledPluginDefinition {
+        let directoryName: String
+        let files: [BundledPluginFile]
+    }
+
+    private static func bundledPluginDefinition(for id: String) -> BundledPluginDefinition? {
+        switch id {
+        case "flea-market-hidden-pack":
+            let characters = """
+            [
+              {
+                "id": "night_vendor",
+                "name": "히든 야시장",
+                "archetype": "플리 마켓의 비밀 셀러",
+                "hairColor": "3b2f2f",
+                "skinTone": "e8c4a0",
+                "shirtColor": "6d597a",
+                "pantsColor": "2b2d42",
+                "hatType": "cap",
+                "accessory": "glasses",
+                "species": "Fox",
+                "jobRole": "reviewer"
+              },
+              {
+                "id": "lucky_tag",
+                "name": "히든 럭키태그",
+                "archetype": "숨겨둔 딜을 먼저 찾는 흥정 장인",
+                "hairColor": "b08968",
+                "skinTone": "f1d3b3",
+                "shirtColor": "84a59d",
+                "pantsColor": "3d405b",
+                "hatType": "beanie",
+                "accessory": "earring",
+                "species": "Cat",
+                "jobRole": "planner"
+              },
+              {
+                "id": "ghost_dealer",
+                "name": "히든 고스트딜러",
+                "archetype": "새벽에만 등장하는 히든 캐릭터",
+                "hairColor": "d9d9ff",
+                "skinTone": "d9d9ff",
+                "shirtColor": "adb5bd",
+                "pantsColor": "495057",
+                "hatType": "wizard",
+                "accessory": "mask",
+                "species": "Ghost",
+                "jobRole": "designer"
+              }
+            ]
+            """
+
+            let pluginJSON = """
+            {
+              "name": "플리 마켓 히든 캐릭터 팩",
+              "version": "1.0.0",
+              "description": "플리 마켓에서 바로 고용할 수 있는 히든 캐릭터 3종 팩",
+              "author": "WorkMan",
+              "contributes": {
+                "characters": "characters.json"
+              }
+            }
+            """
+
+            let packageJSON = """
+            {
+              "name": "flea-market-hidden-pack",
+              "version": "1.0.0",
+              "description": "Bundled hidden character pack for the WorkMan marketplace"
+            }
+            """
+
+            let readme = """
+            # 플리 마켓 히든 캐릭터 팩
+
+            WorkMan 마켓플레이스에서 바로 설치할 수 있는 기본 캐릭터 플러그인입니다.
+            설치하면 히든 캐릭터 3종이 캐릭터 목록에 추가됩니다.
+            """
+
+            return BundledPluginDefinition(
+                directoryName: "flea-market-hidden-pack",
+                files: [
+                    BundledPluginFile(path: "plugin.json", contents: pluginJSON),
+                    BundledPluginFile(path: "package.json", contents: packageJSON),
+                    BundledPluginFile(path: "characters.json", contents: characters),
+                    BundledPluginFile(path: "README.md", contents: readme)
+                ]
+            )
+        default:
+            return nil
+        }
+    }
+
+    private static func firstString(in raw: [String: Any], keys: [String]) -> String? {
+        for key in keys {
+            if let value = raw[key] as? String {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return trimmed
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func firstInt(in raw: [String: Any], keys: [String]) -> Int? {
+        for key in keys {
+            if let value = raw[key] as? Int {
+                return max(0, value)
+            }
+            if let value = raw[key] as? NSNumber {
+                return max(0, value.intValue)
+            }
+            if let value = raw[key] as? String,
+               let parsed = Int(value.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                return max(0, parsed)
+            }
+        }
+        return nil
+    }
+
+    private static func stringArray(in raw: [String: Any], keys: [String]) -> [String] {
+        for key in keys {
+            if let values = raw[key] as? [String] {
+                return values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            }
+            if let value = raw[key] as? String {
+                return value
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            }
+        }
+        return []
+    }
+
+    private static func slugifiedRegistryID(from text: String) -> String {
+        let allowed = CharacterSet.alphanumerics
+        let components = text.lowercased()
+            .components(separatedBy: allowed.inverted)
+            .filter { !$0.isEmpty }
+        return components.isEmpty ? UUID().uuidString.lowercased() : components.joined(separator: "-")
     }
 }

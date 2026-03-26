@@ -140,24 +140,24 @@ struct WorkerCharacter: Identifiable, Codable {
     }
 
     enum Species: String, Codable, CaseIterable {
-        case human = "사람"
-        case cat = "고양이"
-        case dog = "강아지"
-        case rabbit = "토끼"
-        case bear = "곰"
-        case penguin = "펭귄"
-        case fox = "여우"
-        case robot = "로봇"
+        case human = "Human"
+        case cat = "Cat"
+        case dog = "Dog"
+        case rabbit = "Rabbit"
+        case bear = "Bear"
+        case penguin = "Penguin"
+        case fox = "Fox"
+        case robot = "Robot"
         case claude = "Claude"
-        case alien = "외계인"
-        case ghost = "유령"
-        case dragon = "드래곤"
-        case chicken = "닭"
-        case owl = "부엉이"
-        case frog = "개구리"
-        case panda = "판다"
-        case unicorn = "유니콘"
-        case skeleton = "해골"
+        case alien = "Alien"
+        case ghost = "Ghost"
+        case dragon = "Dragon"
+        case chicken = "Chicken"
+        case owl = "Owl"
+        case frog = "Frog"
+        case panda = "Panda"
+        case unicorn = "Unicorn"
+        case skeleton = "Skeleton"
 
         var localizationKey: String {
             switch self {
@@ -407,6 +407,9 @@ class CharacterRegistry: ObservableObject {
             allCharacters = Self.defaultCharacters
         }
         loadManualUnlocks()
+        // 플러그인 캐릭터 로드
+        removeInactivePluginCharacters()
+        loadPluginCharacters()
     }
 
     func save() {
@@ -615,6 +618,68 @@ class CharacterRegistry: ObservableObject {
         "에너지 드링크", "자리 이탈 중", "코딩하다 잠든 자", "런치 히어로",
     ]
 
+    // MARK: - 플러그인 캐릭터 로드
+
+    /// 플러그인에서 characters.json 읽어서 캐릭터 추가
+    func loadPluginCharacters() {
+        let pluginPaths = PluginManager.shared.activePluginPaths
+        var newCharacters: [WorkerCharacter] = []
+
+        for pluginPath in pluginPaths {
+            let jsonURL = URL(fileURLWithPath: pluginPath).appendingPathComponent("characters.json")
+            guard FileManager.default.fileExists(atPath: jsonURL.path),
+                  let data = try? Data(contentsOf: jsonURL),
+                  let chars = try? JSONDecoder().decode([WorkerCharacter].self, from: data) else {
+                continue
+            }
+            // ID 충돌 방지: "plugin_" 접두사 추가
+            let pluginName = URL(fileURLWithPath: pluginPath).lastPathComponent
+            for var char in chars {
+                let prefixedId = "plugin_\(pluginName)_\(char.id)"
+                // 이미 존재하면 스킵
+                if allCharacters.contains(where: { $0.id == prefixedId }) { continue }
+                char = WorkerCharacter(
+                    id: prefixedId,
+                    name: char.name,
+                    archetype: char.archetype,
+                    hairColor: char.hairColor,
+                    skinTone: char.skinTone,
+                    shirtColor: char.shirtColor,
+                    pantsColor: char.pantsColor,
+                    hatType: char.hatType,
+                    accessory: char.accessory,
+                    species: char.species,
+                    isHired: false,
+                    requiredAchievement: char.requiredAchievement,
+                    jobRole: char.jobRole
+                )
+                newCharacters.append(char)
+            }
+        }
+
+        if !newCharacters.isEmpty {
+            allCharacters.append(contentsOf: newCharacters)
+            save()
+        }
+    }
+
+    /// 비활성 플러그인의 캐릭터 제거
+    func removeInactivePluginCharacters() {
+        let activePaths = Set(PluginManager.shared.activePluginPaths.map {
+            URL(fileURLWithPath: $0).lastPathComponent
+        })
+        let before = allCharacters.count
+        allCharacters.removeAll { char in
+            guard char.id.hasPrefix("plugin_") else { return false }
+            // "plugin_<pluginName>_<originalId>" → pluginName 추출
+            let parts = char.id.dropFirst("plugin_".count)
+            guard let underscoreIdx = parts.firstIndex(of: "_") else { return true }
+            let pluginName = String(parts[parts.startIndex..<underscoreIdx])
+            return !activePaths.contains(pluginName)
+        }
+        if allCharacters.count != before { save() }
+    }
+
     static let defaultCharacters: [WorkerCharacter] = [
         // 🧑 사람
         WorkerCharacter(id: "pixel", name: "Pixel", archetype: "커피머신 ☕", hairColor: "4a3728", skinTone: "ffd5b8", shirtColor: "f08080", pantsColor: "3a4050", hatType: .none, accessory: .glasses, species: .human, isHired: true),
@@ -734,7 +799,7 @@ class CharacterRegistry: ObservableObject {
         WorkerCharacter(id: "frost", name: "Frost", archetype: "서버 냉각기", hairColor: "80c0f0", skinTone: "a0d0f0", shirtColor: "4080c0", pantsColor: "205080", hatType: .crown, accessory: .none, species: .dragon, requiredAchievement: "session_streak_7"),
 
         // 🐔 닭 추가
-        WorkerCharacter(id: "egg", name: "알", archetype: "신입 (부화 전)", hairColor: "f0e8d0", skinTone: "f8f0e0", shirtColor: "f0e0c0", pantsColor: "e0d0b0", hatType: .none, accessory: .none, species: .chicken),
+        WorkerCharacter(id: "egg", name: "알", archetype: NSLocalizedString("char.egg.archetype", comment: ""), hairColor: "f0e8d0", skinTone: "f8f0e0", shirtColor: "f0e0c0", pantsColor: "e0d0b0", hatType: .none, accessory: .none, species: .chicken),
 
         // 🦉 부엉이 추가
         WorkerCharacter(id: "wise", name: "Wise", archetype: "시니어 코드 리뷰어", hairColor: "c0b0a0", skinTone: "d0c0b0", shirtColor: "605040", pantsColor: "403020", hatType: .wizard, accessory: .glasses, species: .owl, requiredAchievement: "git_master_25"),
@@ -1097,7 +1162,7 @@ struct CharacterCard: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     if editingId == character.id {
-                        TextField("이름", text: $editName)
+                        TextField(NSLocalizedString("character.name.placeholder", comment: ""), text: $editName)
                             .textFieldStyle(.plain)
                             .font(Theme.mono(11, weight: .bold))
                             .foregroundColor(shirtColor)
@@ -1662,13 +1727,13 @@ struct LockedCharacterCard: View {
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .onHover { isHovered = $0 }
         .onTapGesture { showAlert = true }
-        .alert("잠금 해제 필요", isPresented: $showAlert) {
-            Button("확인", role: .cancel) {}
+        .alert(NSLocalizedString("character.unlock.required", comment: ""), isPresented: $showAlert) {
+            Button(NSLocalizedString("confirm", comment: ""), role: .cancel) {}
         } message: {
             if let name = registry.requiredAchievementName(character) {
-                Text("도전과제 「\(name)」을(를) 달성하면\n이 캐릭터를 고용할 수 있습니다!")
+                Text(String(format: NSLocalizedString("character.unlock.achievement", comment: ""), name))
             } else {
-                Text("도전과제를 달성하면 잠금이 해제됩니다.")
+                Text(NSLocalizedString("character.unlock.generic", comment: ""))
             }
         }
     }

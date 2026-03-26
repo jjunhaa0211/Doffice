@@ -120,14 +120,14 @@ struct FavoritesPanelView: View {
             Rectangle().fill(Theme.border).frame(height: 1)
             HStack(spacing: 6) {
                 Image(systemName: "star.fill").font(.system(size: Theme.iconSize(9), weight: .bold)).foregroundColor(Theme.yellow)
-                Text("프롬프트 즐겨찾기").font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.textPrimary)
+                Text(NSLocalizedString("fav.title", comment: "")).font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.textPrimary)
                 Spacer()
-                Text("Cmd+P 토글").font(Theme.chrome(7)).foregroundColor(Theme.textDim)
+                Text(NSLocalizedString("fav.toggle.hint", comment: "")).font(Theme.chrome(7)).foregroundColor(Theme.textDim)
                 Button(action: { showAddSheet = true }) {
                     Image(systemName: "plus.circle.fill")
                         .font(.system(size: Theme.iconSize(12)))
                         .foregroundColor(Theme.accent)
-                }.buttonStyle(.plain).help("새 즐겨찾기 추가")
+                }.buttonStyle(.plain).help(NSLocalizedString("fav.add.help", comment: ""))
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: Theme.iconSize(10)))
@@ -188,10 +188,10 @@ struct FavoritesPanelView: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button(action: { editingFavorite = fav }) {
-                Label("편집", systemImage: "pencil")
+                Label(NSLocalizedString("fav.edit", comment: ""), systemImage: "pencil")
             }
             Button(role: .destructive, action: { store.delete(fav) }) {
-                Label("삭제", systemImage: "trash")
+                Label(NSLocalizedString("delete", comment: ""), systemImage: "trash")
             }
         }
     }
@@ -221,27 +221,27 @@ struct FavoriteEditSheet: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Text(favorite == nil ? "새 즐겨찾기" : "즐겨찾기 편집")
+            Text(favorite == nil ? NSLocalizedString("fav.new", comment: "") : NSLocalizedString("fav.edit.title", comment: ""))
                 .font(Theme.chrome(13, weight: .bold)).foregroundColor(Theme.textPrimary)
 
             VStack(alignment: .leading, spacing: 8) {
-                fieldLabel("이름")
-                TextField("예: 코드 리뷰", text: $name)
+                fieldLabel(NSLocalizedString("fav.field.name", comment: ""))
+                TextField(NSLocalizedString("fav.field.name.placeholder", comment: ""), text: $name)
                     .textFieldStyle(.roundedBorder)
                     .font(Theme.mono(11))
 
-                fieldLabel("프롬프트")
+                fieldLabel(NSLocalizedString("fav.field.prompt", comment: ""))
                 TextEditor(text: $prompt)
                     .font(Theme.mono(11))
                     .frame(minHeight: 60, maxHeight: 120)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.border, lineWidth: 1))
 
-                fieldLabel("단축어 (선택)")
-                TextField("예: review", text: $shortcut)
+                fieldLabel(NSLocalizedString("fav.field.shortcut", comment: ""))
+                TextField(NSLocalizedString("fav.field.shortcut.placeholder", comment: ""), text: $shortcut)
                     .textFieldStyle(.roundedBorder)
                     .font(Theme.mono(11))
 
-                fieldLabel("아이콘")
+                fieldLabel(NSLocalizedString("fav.field.icon", comment: ""))
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(iconOptions, id: \.self) { ic in
@@ -261,10 +261,10 @@ struct FavoriteEditSheet: View {
             }
 
             HStack {
-                Button("취소") { dismiss() }
+                Button(NSLocalizedString("cancel", comment: "")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("저장") {
+                Button(NSLocalizedString("action.save", comment: "")) {
                     let result = PromptFavorites.Favorite(
                         id: favorite?.id ?? UUID(),
                         name: name,

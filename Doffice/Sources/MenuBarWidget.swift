@@ -13,7 +13,7 @@ class MenuBarManager: ObservableObject {
 
         if let button = statusItem?.button {
             // SF Symbol 아이콘으로 메뉴바 표시
-            if let img = NSImage(systemSymbolName: "hammer.fill", accessibilityDescription: "도피스") {
+            if let img = NSImage(systemSymbolName: "hammer.fill", accessibilityDescription: NSLocalizedString("menubar.a11y", comment: "")) {
                 let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
                 button.image = img.withSymbolConfiguration(config)
                 button.imagePosition = .imageLeading
@@ -106,24 +106,24 @@ struct MenuBarPopoverView: View {
             ScrollView {
                 VStack(spacing: 8) {
                     if !activeTabs.isEmpty {
-                        sectionHeader("작업 중", icon: "play.circle.fill", color: Theme.green, count: activeTabs.count)
+                        sectionHeader(NSLocalizedString("menubar.working", comment: ""), icon: "play.circle.fill", color: Theme.green, count: activeTabs.count)
                         ForEach(activeTabs) { tab in MenuBarSessionRow(tab: tab, now: now) }
                     }
 
                     if !completedTabs.isEmpty {
-                        sectionHeader("완료", icon: "checkmark.circle.fill", color: Theme.accent, count: completedTabs.count)
+                        sectionHeader(NSLocalizedString("menubar.completed", comment: ""), icon: "checkmark.circle.fill", color: Theme.accent, count: completedTabs.count)
                         ForEach(completedTabs) { tab in MenuBarSessionRow(tab: tab, now: now) }
                     }
 
                     if !idleTabs.isEmpty {
-                        sectionHeader("대기", icon: "pause.circle.fill", color: Theme.textDim, count: idleTabs.count)
+                        sectionHeader(NSLocalizedString("menubar.waiting", comment: ""), icon: "pause.circle.fill", color: Theme.textDim, count: idleTabs.count)
                         ForEach(idleTabs) { tab in MenuBarSessionRow(tab: tab, now: now) }
                     }
 
                     if manager.userVisibleTabs.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: "hammer.fill").font(.system(size: Theme.iconSize(16), weight: .medium)).foregroundColor(Theme.accent)
-                            Text("활성 세션 없음").font(Theme.mono(10)).foregroundColor(Theme.textDim)
+                            Text(NSLocalizedString("menubar.no.sessions", comment: "")).font(Theme.mono(10)).foregroundColor(Theme.textDim)
                             Text(AppSettings.shared.appDisplayName).font(Theme.mono(8)).foregroundColor(Theme.textDim.opacity(0.5))
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, 30)
@@ -191,7 +191,7 @@ struct MenuBarPopoverView: View {
                 Rectangle().fill(Theme.border).frame(width: 1, height: 22)
                 statItem(
                     icon: "bolt.fill",
-                    label: "오늘",
+                    label: NSLocalizedString("menubar.today", comment: ""),
                     value: fmtTokens(tracker.todayTokens),
                     color: tracker.todayTokens > 0 ? Theme.yellow : Theme.textDim
                 )
@@ -216,10 +216,10 @@ struct MenuBarPopoverView: View {
                         }
                     }.frame(height: 3).padding(.horizontal, 12)
                     HStack {
-                        Text("남은 양: \(fmtTokens(tracker.dailyRemaining))")
+                        Text(String(format: NSLocalizedString("menubar.remaining", comment: ""), fmtTokens(tracker.dailyRemaining)))
                             .font(Theme.mono(7)).foregroundColor(Theme.textDim)
                         Spacer()
-                        Text("주간: \(fmtTokens(tracker.weekTokens))/\(fmtTokens(tracker.weeklyTokenLimit))")
+                        Text(String(format: NSLocalizedString("menubar.weekly", comment: ""), fmtTokens(tracker.weekTokens), fmtTokens(tracker.weeklyTokenLimit)))
                             .font(Theme.mono(7)).foregroundColor(Theme.textDim)
                     }.padding(.horizontal, 12)
                 }.padding(.top, 2)
@@ -266,7 +266,7 @@ struct MenuBarPopoverView: View {
             }) {
                 HStack(spacing: 4) {
                     Image(systemName: "macwindow").font(.system(size: Theme.iconSize(9)))
-                    Text("\(AppSettings.shared.appDisplayName) 열기").font(Theme.mono(9, weight: .medium))
+                    Text(String(format: NSLocalizedString("menubar.open.app", comment: ""), AppSettings.shared.appDisplayName)).font(Theme.mono(9, weight: .medium))
                 }
                 .foregroundColor(Theme.accent)
                 .frame(maxWidth: .infinity).padding(.vertical, 6)
@@ -276,7 +276,7 @@ struct MenuBarPopoverView: View {
             Button(action: { SessionManager.shared.refresh() }) {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.clockwise").font(.system(size: Theme.iconSize(9)))
-                    Text("새로고침").font(Theme.mono(9, weight: .medium))
+                    Text(NSLocalizedString("menubar.refresh", comment: "")).font(Theme.mono(9, weight: .medium))
                 }
                 .foregroundColor(Theme.textSecondary)
                 .frame(maxWidth: .infinity).padding(.vertical, 6)
@@ -315,16 +315,16 @@ struct MenuBarSessionRow: View {
     }
 
     private var activityLabel: String {
-        if tab.isCompleted { return "완료" }
+        if tab.isCompleted { return NSLocalizedString("menubar.activity.done", comment: "") }
         switch tab.claudeActivity {
-        case .idle: return "대기"
-        case .thinking: return "생각 중"
-        case .reading: return "읽는 중"
-        case .writing: return "작성 중"
-        case .searching: return "검색 중"
-        case .running: return "실행 중"
-        case .done: return "완료"
-        case .error: return "에러"
+        case .idle: return NSLocalizedString("menubar.activity.idle", comment: "")
+        case .thinking: return NSLocalizedString("menubar.activity.thinking", comment: "")
+        case .reading: return NSLocalizedString("menubar.activity.reading", comment: "")
+        case .writing: return NSLocalizedString("menubar.activity.writing", comment: "")
+        case .searching: return NSLocalizedString("menubar.activity.searching", comment: "")
+        case .running: return NSLocalizedString("menubar.activity.running", comment: "")
+        case .done: return NSLocalizedString("menubar.activity.done", comment: "")
+        case .error: return NSLocalizedString("menubar.activity.error", comment: "")
         }
     }
 

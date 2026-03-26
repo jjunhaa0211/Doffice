@@ -42,7 +42,96 @@
 "git.tags" = "태그";
 "git.remotes" = "리모트";
 "git.branch.delete" = "브랜치 삭제";
+"git.branch.deleted" = "브랜치 삭제됨: %@";
+"git.branch.delete.failed" = "브랜치 삭제 실패";
+"git.branch.delete.confirm" = "브랜치 '%@'를 삭제합니다.";
+"git.checkout" = "체크아웃";
+"git.explore" = "탐색";
+"git.search.placeholder" = "커밋 검색 (메시지, 작성자, 해시)...";
+"git.forcepush" = "강제 푸시";
+"git.forcepush.prompt" = "현재 브랜치를 리모트에 force push 해주세요.";
+"git.forcepush.warning.title" = "Force Push 경고";
+"git.forcepush.warning.message" = "Force Push는 리모트의 커밋 히스토리를 덮어씁니다. 다른 협업자의 작업이 손실될 수 있습니다. 정말 진행하시겠습니까?";
 "git.no.git" = "Git이 설치되지 않았습니다";
+"git.select.tab" = "탭을 선택하세요";
+"git.not.installed.detail" = "Git이 설치되지 않았습니다.\n터미널에서 Xcode Command Line Tools를 설치하세요:\nxcode-select --install";
+"git.changes.discarded" = "변경사항 삭제됨: %@";
+"git.discard.confirm" = "'%@'의 변경사항을 되돌립니다. 이 작업은 취소할 수 없습니다.";
+"git.conflict.count" = "%d개 파일 충돌";
+"git.conflict.manual" = "수동 해결";
+"git.conflict.manual.prompt" = "'%@' 파일의 충돌을 수동으로 해결해주세요.";
+"git.conflict.resolve.prompt" = "'%@' 파일의 충돌을 %@ 전략으로 해결해주세요. 그리고 해당 파일을 스테이징해주세요.";
+"git.tag.delete" = "태그 삭제";
+"git.stash.apply" = "적용 (Apply)";
+"git.stash.drop" = "삭제 (Drop)";
+"git.graph" = "그래프";
+"git.message" = "메시지";
+"git.author" = "작성자";
+"git.date" = "날짜";
+"git.commits.shown" = "%d개 커밋 표시됨";
+"git.commits.total" = "(전체 %d개 중)";
+"git.load.more" = "더 불러오기";
+"git.changes.count" = "%d 변경";
+"git.info" = "정보";
+"git.loading.files" = "파일 로딩 중...";
+"git.changed.files" = "변경 파일";
+"git.meta.commit" = "커밋";
+"git.meta.parent" = "부모";
+"git.meta.author" = "작성자";
+"git.meta.date" = "날짜";
+"git.meta.coauthor" = "공동작성";
+"git.meta.refs" = "참조";
+"git.changes.total" = "%d개 변경";
+"git.deselect.all" = "선택 해제";
+"git.select.all" = "전체 선택";
+"git.unstaged.all" = "전체 파일 언스테이지됨";
+"git.unstage.all" = "모두 언스테이지";
+"git.files.selected" = "%d/%d 파일 선택됨";
+"git.unstaged.file" = "언스테이지: %@";
+"git.staged.all" = "전체 파일 스테이지됨";
+"git.stage.all" = "모두 스테이지";
+"git.staged.file" = "스테이지: %@";
+"git.commit.success" = "커밋 완료: %@";
+"git.commit.failed" = "커밋 실패: %@";
+"git.unknown.error" = "알 수 없는 오류";
+"git.commit.selected" = "선택 커밋";
+"git.unified.view" = "통합 뷰";
+"git.binary.file" = "바이너리 파일";
+"git.no.changes" = "변경사항 없음";
+"git.loading.diff" = "Diff 로딩 중...";
+"git.stage.all.short" = "전체 스테이지";
+"git.stash.apply.short" = "적용";
+"git.quick.actions" = "빠른 명령";
+"git.branch.name" = "브랜치 이름";
+"git.stash.message.optional" = "스태시 메시지 (선택)";
+"git.stash.message.placeholder" = "작업 중인 변경사항...";
+"git.merge.branch" = "병합할 브랜치";
+"git.checkout.branch" = "체크아웃할 브랜치";
+"git.ask.claude" = "Claude에게 요청";
+"git.prompt.commit" = "현재 변경사항을 커밋해주세요. 커밋 메시지: \"%@\"";
+"git.prompt.push" = "현재 브랜치를 리모트에 푸시해주세요.";
+"git.prompt.pull" = "리모트에서 최신 변경사항을 풀해주세요.";
+"git.prompt.branch" = "새 브랜치 '%@'를 생성하고 체크아웃해주세요.";
+"git.prompt.stash" = "현재 변경사항을 스태시해주세요.";
+"git.prompt.stash.msg" = "현재 변경사항을 스태시해주세요. 메시지: \"%@\"";
+"git.prompt.merge" = "브랜치 '%@'를 현재 브랜치에 병합해주세요.";
+"git.prompt.checkout" = "브랜치 '%@'로 체크아웃해주세요.";
+"git.toast.push" = "푸시 요청됨";
+"git.toast.pull" = "풀 요청됨";
+"git.toast.commit" = "커밋 요청됨";
+"git.toast.branch" = "브랜치 생성 요청: %@";
+"git.toast.stash" = "스태시 요청됨";
+"git.toast.merge" = "병합 요청: %@";
+"git.toast.checkout" = "체크아웃 요청: %@";
+"git.time.now" = "방금";
+"git.time.minutes" = "%d분 전";
+"git.time.hours" = "%d시간 전";
+"git.time.days" = "%d일 전";
+"git.cherrypick" = "Cherry-pick";
+"git.revert" = "되돌리기";
+"git.blame" = "Blame";
+"git.file.history" = "파일 히스토리";
+"git.file.history.short" = "히스토리";
 
 /* Sidebar & Reports */
 "sidebar.characters" = "캐릭터 관리";
@@ -647,6 +736,23 @@
 "terminal.tools.comma.sep" = "(쉼표 구분)";
 "terminal.git.worktree" = "Git 워크트리 생성";
 
+/* TerminalAreaView - Slash command status messages */
+"terminal.cmd.not.found" = "⚠️ '%@' 관련 명령어를 찾을 수 없습니다";
+"terminal.search.result" = "🔍 검색 결과\n";
+"terminal.log.cleared" = "🗑️ 로그가 초기화되었습니다";
+"terminal.no.running.task" = "ℹ️ 실행 중인 작업이 없습니다";
+"terminal.copied.to.clipboard" = "📋 클립보드에 복사되었습니다 (%d자)";
+"terminal.no.response.to.copy" = "⚠️ 복사할 응답이 없습니다";
+"terminal.log.saved" = "📁 로그 저장: %@";
+"terminal.log.save.failed" = "⚠️ 저장 실패: %@";
+"terminal.model.current" = "🤖 현재 모델: %@ %@\n사용법: /model <opus|sonnet|haiku>";
+"terminal.model.changed" = "🤖 모델 변경: %@ %@";
+"terminal.effort.current" = "💪 현재 노력 수준: %@ %@\n사용법: /effort <low|medium|high|max>";
+"terminal.image.pick.message" = "Claude에 보낼 이미지를 선택하세요";
+"terminal.cmd.match.count" = "%d개 일치";
+"terminal.cmd.suggestion.hint" = "↑↓ 선택  Tab 완성  Enter 실행  Esc 닫기";
+"terminal.lines.omitted" = "    ... %d줄 생략 ...";
+
 /* CharacterSystem - Job descriptions */
 "job.desc.developer" = "실제 구현과 코드 변경을 담당합니다.";
 "job.desc.qa" = "개발 완료 후 코드 변경이 있었을 때 직접 테스트를 수행합니다.";
@@ -1004,6 +1110,22 @@
 "settings.backdrop" = "배경 무드";
 "settings.fontsize" = "글자 크기";
 
+/* Settings - Custom Theme */
+"settings.customtheme" = "커스텀 테마";
+"settings.customtheme.subtitle" = "강조 색상, 그라데이션, 폰트 개인화";
+"settings.customtheme.accent" = "강조 색상";
+"settings.customtheme.gradient" = "그라데이션 사용";
+"settings.customtheme.gradient.start" = "시작";
+"settings.customtheme.gradient.end" = "끝";
+"settings.customtheme.font" = "글꼴";
+"settings.customtheme.font.system" = "시스템 기본";
+"settings.customtheme.fontsize" = "글꼴 크기";
+"settings.customtheme.reset" = "기본값 초기화";
+"settings.customtheme.export" = "테마 내보내기";
+"settings.customtheme.import" = "테마 가져오기";
+"settings.customtheme.import.error" = "불러오기 실패";
+"settings.customtheme.import.error.msg" = "유효하지 않은 테마 파일입니다. JSON 형식을 확인하세요.";
+
 /* Settings - Office */
 "settings.layout" = "레이아웃";
 "settings.camera" = "카메라 시점";
@@ -1140,3 +1262,1268 @@
 "archetype.zero" = "Stack Overflow 의존";
 "archetype.boo" = "보이지 않는 버그";
 "archetype.drako" = "서버 불지르는 자";
+
+/* OverlayComponents - Action Center */
+"overlay.action.center" = "확인 센터";
+"overlay.action.center.subtitle" = "승인 대기, 오류, 완료 상태를 한 곳에서 확인합니다.";
+"overlay.pending.approval" = "승인 대기";
+"overlay.tool.approval" = "도구 승인";
+"overlay.go" = "이동";
+"overlay.needs.attention" = "확인 필요";
+"overlay.error.occurred" = "오류 발생";
+"overlay.in.progress" = "작업 중";
+"overlay.completed" = "완료";
+"overlay.all.normal" = "모든 세션이 정상입니다";
+
+/* OverlayComponents - Command Palette */
+"overlay.new.session" = "새 세션";
+"overlay.refresh.session" = "세션 새로고침";
+"overlay.settings" = "설정";
+"overlay.bug.report" = "버그 신고";
+"overlay.export.log" = "로그 내보내기";
+"overlay.split.view" = "분할 뷰";
+"overlay.office.view" = "오피스 뷰";
+"overlay.strip.view" = "스트립 뷰";
+"overlay.terminal.view" = "터미널 뷰";
+"overlay.go.to.session" = "세션 이동";
+"overlay.search.commands" = "명령어 검색...";
+"overlay.navigate" = "탐색";
+"overlay.execute" = "실행";
+"overlay.close" = "닫기";
+
+/* OverlayComponents - Save Preset */
+"overlay.save.preset" = "프리셋 저장";
+"overlay.label.name" = "이름";
+"overlay.preset.placeholder" = "예: 리뷰용, 병렬 개발용";
+"overlay.label.icon" = "아이콘";
+"overlay.label.color" = "색상";
+"overlay.included.settings" = "포함 설정";
+"overlay.model.prefix" = "모델: %@";
+"overlay.effort.prefix" = "노력: %@";
+"overlay.terminal.prefix" = "터미널: %@";
+"overlay.system.prompt" = "시스템 프롬프트";
+"overlay.cancel" = "취소";
+"overlay.save" = "저장";
+
+/* OverlayComponents - Notifications */
+"overlay.notif.completed" = "%@ 완료";
+"overlay.notif.task.done" = "작업이 완료되었습니다";
+"overlay.notif.error" = "%@ 오류";
+"overlay.notif.approval.needed" = "%@ 승인 필요";
+"overlay.notif.approval.waiting" = "%@ 실행 승인을 기다리고 있습니다";
+
+/* OnboardingView */
+"onboard.skip" = "건너뛰기";
+"onboard.previous" = "이전";
+"onboard.next" = "다음";
+"onboard.start" = "시작하기";
+"onboard.subtitle" = "Claude Code 시각적 관리 도구";
+"onboard.visualization" = "시각화";
+"onboard.automation" = "자동화";
+"onboard.collaboration" = "협업";
+"onboard.session.title" = "세션 관리";
+"onboard.session.subtitle" = "Claude Code를 탭처럼 관리하세요";
+"onboard.session.new.desc" = "새 세션을 만듭니다. 프로젝트 경로, 모델, 권한을 설정할 수 있어요.";
+"onboard.session.switch.desc" = "세션 간 빠른 전환. 여러 프로젝트를 동시에 작업할 때 유용합니다.";
+"onboard.session.palette.desc" = "커맨드 팔레트. 세션 검색, 뷰 전환, 설정 등 모든 기능에 빠르게 접근합니다.";
+"onboard.office.title" = "오피스 뷰";
+"onboard.office.subtitle" = "캐릭터들이 일하는 모습을 지켜보세요";
+"onboard.office.planner" = "기획자";
+"onboard.office.developer" = "개발자";
+"onboard.office.qa" = "QA";
+"onboard.office.reporter" = "보고자";
+"onboard.office.planning" = "계획 정리 중";
+"onboard.office.coding" = "코드 작성 중";
+"onboard.office.testing" = "테스트 중";
+"onboard.office.writing" = "문서 작성";
+"onboard.office.desc" = "각 세션은 직업을 가진 캐릭터로 표현됩니다.\n자동 파이프라인으로 기획 → 개발 → 리뷰 → QA → 보고까지 한 번에!";
+"onboard.shortcuts.title" = "주요 단축키";
+"onboard.shortcuts.subtitle" = "키보드로 빠르게 조작하세요";
+"onboard.shortcut.new" = "새 세션";
+"onboard.shortcut.close" = "세션 닫기";
+"onboard.shortcut.palette" = "커맨드 팔레트";
+"onboard.shortcut.center" = "확인 센터";
+"onboard.shortcut.refresh" = "새로고침";
+"onboard.shortcut.clear" = "터미널 지우기";
+"onboard.shortcut.cancel" = "작업 취소";
+"onboard.shortcut.switch" = "세션 전환";
+"onboard.ready.title" = "준비 완료!";
+"onboard.ready.subtitle" = "Cmd+T로 첫 세션을 만들어보세요";
+"onboard.tip.tutorial" = "설정에서 언제든 이 튜토리얼을 다시 볼 수 있습니다";
+"onboard.tip.theme" = "다크/라이트 모드, 폰트 크기 등을 설정에서 조정하세요";
+"onboard.tip.level" = "작업을 하면 레벨이 오르고 업적을 달성할 수 있어요";
+
+/* UpdateChecker */
+"update.network.error" = "네트워크 오류: %@";
+"update.parse.error" = "GitHub 응답을 파싱할 수 없습니다.";
+"update.no.download.url" = "다운로드 URL을 찾을 수 없습니다. GitHub에서 직접 다운로드해주세요.";
+"update.download.failed" = "다운로드 실패: %@";
+"update.file.not.found" = "다운로드된 파일을 찾을 수 없습니다.";
+"update.extract.failed" = "압축 해제 실패: %@";
+"update.unknown.error" = "알 수 없는 오류";
+"update.no.app.found" = "압축 해제된 파일에서 .app을 찾을 수 없습니다.";
+"update.install.not.found" = "설치할 앱을 찾을 수 없습니다.";
+"update.install.script.failed" = "설치 스크립트 실행 실패: %@";
+"update.state.checking" = "업데이트 확인 중";
+"update.state.latest" = "최신 버전입니다";
+"update.state.available" = "새 버전이 있습니다";
+"update.state.downloading" = "다운로드 중";
+"update.state.extracting" = "압축 해제 중";
+"update.state.ready" = "설치 준비 완료";
+"update.state.installing" = "설치 중...";
+"update.state.failed" = "업데이트 실패";
+"update.label.current" = "현재";
+"update.label.latest" = "최신";
+"update.release.notes" = "변경 사항";
+"update.checking.msg" = "최신 버전을 확인하고 있습니다...";
+"update.downloading.msg" = "다운로드 중...";
+"update.extracting.msg" = "압축을 해제하고 있습니다...";
+"update.ready.msg" = "다운로드가 완료되었습니다. 재시작하면 새 버전이 적용됩니다.";
+"update.installing.msg" = "앱을 교체하고 재시작합니다...";
+"update.later" = "나중에";
+"update.manual.download" = "수동 다운로드";
+"update.now" = "지금 업데이트";
+"update.cancel" = "취소";
+"update.apply.on.quit" = "종료 시 적용";
+"update.restart.now" = "지금 재시작하고 업데이트";
+"update.close" = "닫기";
+"update.retry" = "재시도";
+"update.ok" = "확인";
+
+/* MenuBarWidget */
+"menubar.a11y" = "도피스";
+"menubar.working" = "작업 중";
+"menubar.completed" = "완료";
+"menubar.waiting" = "대기";
+"menubar.no.sessions" = "활성 세션 없음";
+"menubar.today" = "오늘";
+"menubar.remaining" = "남은 양: %@";
+"menubar.weekly" = "주간: %@/%@";
+"menubar.open.app" = "%@ 열기";
+"menubar.refresh" = "새로고침";
+"menubar.activity.done" = "완료";
+"menubar.activity.idle" = "대기";
+"menubar.activity.thinking" = "생각 중";
+"menubar.activity.reading" = "읽는 중";
+"menubar.activity.writing" = "작성 중";
+"menubar.activity.searching" = "검색 중";
+"menubar.activity.running" = "실행 중";
+"menubar.activity.error" = "에러";
+
+/* Models - Token Protection */
+"token.protection.summary" = "오늘 %@/%@, 이번 주 %@/%@ 사용 중입니다.";
+"token.protection.global.block" = "전체 토큰 보호선을 넘겨 새 작업을 잠시 막았습니다. %@ 설정 > 토큰에서 한도를 올리거나 토큰 이력을 초기화하면 바로 다시 입력할 수 있습니다.";
+"token.protection.sub.block" = "자동 보조 작업은 토큰 보호를 위해 잠시 제한되었습니다. %@";
+"token.protection.session.limit" = "세션 토큰 한도에 도달해 자동 중단했습니다.";
+"token.protection.global.stop" = "전체 토큰 보호선을 넘겨 현재 작업을 중단했습니다. %@";
+"token.protection.sub.stop" = "자동 보조 작업 토큰 보호선에 도달해 중단했습니다. %@";
+"token.protection.daily.cost" = "일일 비용 제한($%@)에 도달해 중단했습니다. 오늘 사용: $%@";
+"token.protection.session.cost.warn" = "세션 비용이 제한의 80%%에 도달했습니다: $%@ / $%@";
+"token.protection.daily.cost.warn" = "일일 비용이 제한의 80%%에 도달했습니다: $%@ / $%@";
+"token.protection.mode" = "토큰 보호 모드";
+"token.protection.stopped" = "토큰 보호로 중단";
+
+/* Models - TerminalTab messages */
+"tab.project.path.missing" = "프로젝트 경로 없음";
+"tab.project.path.not.found" = "경로를 찾을 수 없습니다: %@\n디렉토리가 삭제되었거나 외장 드라이브가 분리되었을 수 있습니다.";
+"tab.process.failed" = "프로세스 실행 실패";
+"tab.process.failed.detail" = "Claude Code를 실행할 수 없습니다.\n\n오류: %@\n\nPATH가 올바르게 설정되어 있는지 확인하세요.\n터미널에서 'which claude'를 실행해 경로를 확인할 수 있습니다.";
+"tab.completed" = "완료";
+"tab.task.completed" = "작업 완료";
+"tab.sleepwork.done" = "슬립워크 완료";
+"tab.interrupted" = "중단됨";
+"tab.permission.retry.edit" = "이번 한 번만 수정 권한으로 재시도합니다.";
+"tab.permission.retry.full" = "이번 한 번만 전체 권한으로 재시도합니다.";
+"tab.permission.approved" = "권한 승인됨 · 다시 시도합니다";
+"tab.permission.denied" = "권한 요청이 거부되었습니다";
+"tab.tool.file.edit" = "파일 수정";
+"tab.tool.command" = "명령 실행";
+"tab.tool.web.fetch" = "웹 가져오기";
+"tab.tool.web.search" = "웹 검색";
+"tab.parallel.task" = "병렬 작업";
+"tab.cancelled" = "취소됨";
+"tab.force.stopped" = "강제 중지됨";
+"tab.cancel.backup" = "작업 취소 전 변경사항 백업";
+"tab.cancel.rollback.done" = "작업 취소 및 변경사항 롤백 완료";
+"tab.cancel.rollback.backup" = "백업 폴더: %@";
+"tab.sleepwork.budget.exceeded" = "슬립워크 중단";
+"tab.sleepwork.budget.exceeded.detail" = "토큰 예산의 2배를 초과했습니다. 다음에 이어서 작업할지 확인해주세요.";
+"tab.parallel.progress" = "병렬 %d/%d 완료";
+"tab.parallel.failed" = "병렬 %d개 실패";
+"tab.parallel.done" = "병렬 작업 완료";
+"tab.status.idle" = "대기";
+
+/* Models - Session Recovery */
+"recovery.no.auto" = "자동으로 다시 실행하지 않았습니다.";
+"recovery.last.input" = "마지막 입력: %@";
+"recovery.initial.input" = "초기 입력: %@";
+"recovery.folder" = "복구 폴더: %@";
+"recovery.resume.hint" = "다음 입력부터 이전 대화를 이어서 보낼 수 있습니다.";
+"recovery.interrupted.title" = "중단된 세션 복원";
+"recovery.previous.title" = "이전 세션 복원";
+
+/* Models - Pipeline Status */
+"pipeline.running" = "진행";
+"pipeline.completed" = "완료";
+"pipeline.failed" = "실패";
+"pipeline.queued" = "대기";
+"pipeline.rework" = "재작업";
+"pipeline.skipped" = "건너뜀";
+
+/* Models - Timeline Event Types (rawValues - keep as data) */
+
+/* Models - Sleepwork */
+"sleepwork.budget.unlimited" = "무제한";
+
+/* CharacterSystem - Additional boss lines */
+"boss.line.16" = "세상에서 가장 뜨거운 과일은? 천도복숭아.";
+"boss.line.17" = "가장 야한 채소는? 오이.";
+"boss.line.18" = "가장 억울한 도형은? 원통해.";
+"boss.line.19" = "신이 화가 나면? 신경질.";
+"boss.line.20" = "왕이 넘어지면? 킹콩.";
+"boss.line.21" = "소가 웃으면? 우하하.";
+"boss.line.22" = "소가 계단 오를 때 하는 말은? 소오름.";
+"boss.line.23" = "세상에서 가장 쉬운 숫자는? 십구만. 쉽구만.";
+"boss.line.24" = "가장 지저분한 집은? 돼지우리.";
+"boss.line.25" = "가장 차가운 바다는? 썰렁해.";
+"boss.line.26" = "바나나가 웃으면? 바나나킥.";
+"boss.line.27" = "빵이 화나면? 빵빵.";
+"boss.line.28" = "자동차가 놀라면? 카놀라유.";
+"boss.line.29" = "사과가 웃으면? 풋사과.";
+"boss.line.30" = "도둑이 가장 좋아하는 아이스크림은? 보석바.";
+"boss.line.31" = "아기가 타는 차는? 유모차.";
+"boss.line.32" = "말이 물에 빠지면? 허우적허우적.";
+"boss.line.33" = "개가 사람을 가르치면? 개인지도.";
+"boss.line.34" = "세상에서 가장 긴 음식은? 참기름.";
+"boss.line.35" = "세상에서 가장 가난한 왕은? 최저임금.";
+"boss.line.36" = "가장 무서운 비는? 사이비.";
+"boss.line.37" = "추운 곳에서 하는 욕은? 동상 걸리겠다.";
+"boss.line.38" = "가장 잘생긴 말은? 미남말.";
+"boss.line.39" = "오리가 얼면? 언덕.";
+"boss.line.40" = "신발이 화나면? 신발끈.";
+"boss.line.41" = "눈이 오면 강아지가 하는 말은? 개추워.";
+"boss.line.42" = "닭이 가장 싫어하는 야채는? 도라지. 돌아지.";
+"boss.line.43" = "문이 화나면? 문짝.";
+"boss.line.44" = "토끼가 쓰는 빗은? 래빗.";
+
+/* Achievement Names & Descriptions */
+"achievement.complete_10.name" = "열 번째 성공";
+"achievement.complete_10.desc" = "작업을 10번 완료했다";
+"achievement.session_10.name" = "열 번째 출근";
+"achievement.session_10.desc" = "세션을 10번 시작했다";
+"achievement.token_first_1k.name" = "첫 천 토큰";
+"achievement.token_first_1k.desc" = "누적 1,000 토큰을 사용했다";
+"achievement.read_10.name" = "독서가";
+"achievement.read_10.desc" = "한 세션에서 파일을 10번 읽었다";
+"achievement.cost_first.name" = "첫 지출";
+"achievement.cost_first.desc" = "API 비용이 발생했다";
+"achievement.five_sessions.name" = "다섯 손가락";
+"achievement.five_sessions.desc" = "5개 세션을 동시에 실행했다";
+"achievement.file_edit_5.name" = "다섯 줄 수정";
+"achievement.file_edit_5.desc" = "파일을 5번 수정했다";
+"achievement.monday_blues.name" = "월요병";
+"achievement.monday_blues.desc" = "월요일에 작업했다";
+"achievement.friday_coder.name" = "불금 코더";
+"achievement.friday_coder.desc" = "금요일에 작업했다";
+"achievement.multi_tasker.name" = "멀티태스커";
+"achievement.multi_tasker.desc" = "3개 이상 동시에 작업했다";
+"achievement.pair_programmer.name" = "페어 프로그래머";
+"achievement.pair_programmer.desc" = "같은 프로젝트에 2명을 배정했다";
+"achievement.token_saver.name" = "절약왕";
+"achievement.token_saver.desc" = "1k 토큰 이하로 작업을 완료했다";
+"achievement.command_50.name" = "반백";
+"achievement.command_50.desc" = "명령을 50번 실행했다";
+"achievement.complete_25.name" = "숙련공";
+"achievement.complete_25.desc" = "작업을 25번 완료했다";
+"achievement.session_25.name" = "출근왕";
+"achievement.session_25.desc" = "세션을 25번 시작했다";
+"achievement.lunch_coder.name" = "점심시간 코더";
+"achievement.lunch_coder.desc" = "점심시간(12~13시)에 작업했다";
+"achievement.file_surgeon.name" = "외과의사";
+"achievement.file_surgeon.desc" = "한 세션에서 5개 이상 파일을 수정했다";
+"achievement.cost_1.name" = "첫 달러";
+"achievement.cost_1.desc" = "누적 비용 $1을 넘었다";
+"achievement.focus_30.name" = "집중력";
+"achievement.focus_30.desc" = "30분 이상 연속 작업했다";
+"achievement.error_5.name" = "불굴의 의지";
+"achievement.error_5.desc" = "에러에서 5번 복구했다";
+"achievement.opus_user.name" = "오퍼스 유저";
+"achievement.opus_user.desc" = "Opus 모델을 사용했다";
+"achievement.haiku_user.name" = "하이쿠 유저";
+"achievement.haiku_user.desc" = "Haiku 모델을 사용했다";
+"achievement.token_10k_total.name" = "만 토큰 클럽";
+"achievement.token_10k_total.desc" = "누적 10,000 토큰을 사용했다";
+"achievement.git_first_branch.name" = "가지치기";
+"achievement.git_first_branch.desc" = "Git 브랜치에서 작업했다";
+"achievement.session_streak_3.name" = "3일 연속";
+"achievement.session_streak_3.desc" = "3일 연속으로 작업했다";
+"achievement.night_complete.name" = "달빛 코더";
+"achievement.night_complete.desc" = "밤 10시 이후에 작업을 완료했다";
+"achievement.morning_complete.name" = "아침형 인간";
+"achievement.morning_complete.desc" = "오전 9시 전에 작업을 완료했다";
+"achievement.file_edit_25.name" = "정리의 달인";
+"achievement.file_edit_25.desc" = "파일을 25번 수정했다";
+"achievement.file_edit_50.name" = "리팩토링 장인";
+"achievement.file_edit_50.desc" = "파일을 50번 수정했다";
+"achievement.cost_5.name" = "구독자";
+"achievement.cost_5.desc" = "누적 비용 $5를 넘었다";
+"achievement.read_50.name" = "탐정";
+"achievement.read_50.desc" = "파일을 50번 읽었다";
+"achievement.dawn_warrior.name" = "새벽 전사";
+"achievement.dawn_warrior.desc" = "새벽 3시에 작업 중이었다";
+"achievement.token_5k_session.name" = "알찬 세션";
+"achievement.token_5k_session.desc" = "한 세션에서 5k 이상 토큰을 사용했다";
+"achievement.git_master.name" = "Git 마스터";
+"achievement.git_master.desc" = "한 세션에서 10개 이상 파일을 변경했다";
+"achievement.complete_50.name" = "베테랑";
+"achievement.complete_50.desc" = "작업을 50번 완료했다";
+"achievement.complete_100.name" = "백전백승";
+"achievement.complete_100.desc" = "작업을 100번 완료했다";
+"achievement.command_500.name" = "오백장군";
+"achievement.command_500.desc" = "명령을 500번 실행했다";
+"achievement.session_50.name" = "근속상";
+"achievement.session_50.desc" = "세션을 50번 시작했다";
+"achievement.ultra_marathon.name" = "울트라 마라톤";
+"achievement.ultra_marathon.desc" = "3시간 이상 연속으로 작업했다";
+"achievement.cost_10.name" = "큰손";
+"achievement.cost_10.desc" = "누적 비용 $10을 넘었다";
+"achievement.token_100k_total.name" = "토큰 부자";
+"achievement.token_100k_total.desc" = "누적 100,000 토큰을 사용했다";
+"achievement.git_master_25.name" = "Git 장인";
+"achievement.git_master_25.desc" = "한 세션에서 25개 이상 파일을 변경했다";
+"achievement.multi_5.name" = "오케스트라 지휘자";
+"achievement.multi_5.desc" = "5개 이상 동시에 작업했다";
+"achievement.error_10.name" = "불사조";
+"achievement.error_10.desc" = "에러에서 10번 복구했다";
+"achievement.speed_2min.name" = "번개";
+"achievement.speed_2min.desc" = "2분 안에 작업을 완료했다";
+"achievement.night_marathon.name" = "야간 마라톤";
+"achievement.night_marathon.desc" = "자정~5시에 1시간 이상 작업했다";
+"achievement.three_models.name" = "삼총사";
+"achievement.three_models.desc" = "세 가지 모델을 모두 사용했다";
+"achievement.session_streak_7.name" = "7일 연속";
+"achievement.session_streak_7.desc" = "7일 연속으로 작업했다";
+"achievement.token_50k_session.name" = "메가 세션";
+"achievement.token_50k_session.desc" = "한 세션에서 50k 이상 토큰을 사용했다";
+"achievement.git_branch_5.name" = "브랜치 달인";
+"achievement.git_branch_5.desc" = "5개 이상 다른 브랜치에서 작업했다";
+"achievement.file_surgeon_10.name" = "집도의";
+"achievement.file_surgeon_10.desc" = "한 세션에서 10개 이상 파일을 수정했다";
+"achievement.complete_200.name" = "프로";
+"achievement.complete_200.desc" = "작업을 200번 완료했다";
+"achievement.file_edit_100.name" = "건축가";
+"achievement.file_edit_100.desc" = "파일을 100번 수정했다";
+"achievement.read_200.name" = "학자";
+"achievement.read_200.desc" = "파일을 200번 읽었다";
+"achievement.error_25.name" = "방패";
+"achievement.error_25.desc" = "에러에서 25번 복구했다";
+"achievement.cost_50.name" = "투자자";
+"achievement.cost_50.desc" = "누적 비용 $50을 넘었다";
+"achievement.session_streak_14.name" = "2주 연속";
+"achievement.session_streak_14.desc" = "14일 연속으로 작업했다";
+"achievement.git_branch_10.name" = "숲의 관리자";
+"achievement.git_branch_10.desc" = "10개 이상 다른 브랜치에서 작업했다";
+"achievement.token_500k_total.name" = "토큰 재벌";
+"achievement.token_500k_total.desc" = "누적 500,000 토큰을 사용했다";
+"achievement.speed_1min.name" = "섬광";
+"achievement.speed_1min.desc" = "1분 안에 작업을 완료했다";
+"achievement.marathon_6h.name" = "캠프파이어";
+"achievement.marathon_6h.desc" = "6시간 이상 연속으로 작업했다";
+"achievement.token_100k_session.name" = "메갈로돈";
+"achievement.token_100k_session.desc" = "한 세션에서 100k 이상 토큰을 사용했다";
+"achievement.git_master_50.name" = "산을 옮기다";
+"achievement.git_master_50.desc" = "한 세션에서 50개 이상 파일을 변경했다";
+"achievement.session_75.name" = "졸업";
+"achievement.session_75.desc" = "세션을 75번 시작했다";
+"achievement.read_500.name" = "브레인";
+"achievement.read_500.desc" = "파일을 500번 읽었다";
+"achievement.file_edit_200.name" = "대장장이";
+"achievement.file_edit_200.desc" = "파일을 200번 수정했다";
+"achievement.complete_300.name" = "등산가";
+"achievement.complete_300.desc" = "작업을 300번 완료했다";
+"achievement.night_owl_10.name" = "박쥐";
+"achievement.night_owl_10.desc" = "심야 작업을 10일 이상 했다";
+"achievement.level_5.name" = "스타 개발자";
+"achievement.level_5.desc" = "레벨 5에 도달했다";
+"achievement.level_8.name" = "전설의 시작";
+"achievement.level_8.desc" = "레벨 8에 도달했다";
+"achievement.level_10.name" = "우주의 끝";
+"achievement.level_10.desc" = "레벨 10에 도달했다";
+"achievement.complete_500.name" = "천하무적";
+"achievement.complete_500.desc" = "작업을 500번 완료했다";
+"achievement.command_1000.name" = "천 번의 손짓";
+"achievement.command_1000.desc" = "명령을 1,000번 실행했다";
+"achievement.command_5000.name" = "만능 해커";
+"achievement.command_5000.desc" = "명령을 5,000번 실행했다";
+"achievement.session_100.name" = "출퇴근 달인";
+"achievement.session_100.desc" = "세션을 100번 시작했다";
+"achievement.token_million.name" = "백만장자";
+"achievement.token_million.desc" = "누적 1,000,000 토큰을 사용했다";
+"achievement.cost_100.name" = "큰 후원자";
+"achievement.cost_100.desc" = "누적 비용 $100을 넘었다";
+"achievement.session_streak_30.name" = "30일 연속";
+"achievement.session_streak_30.desc" = "30일 연속으로 작업했다";
+"achievement.perfectionist.name" = "완벽주의자";
+"achievement.perfectionist.desc" = "전설 등급 외 모든 업적을 달성했다";
+"achievement.complete_1000.name" = "용";
+"achievement.complete_1000.desc" = "작업을 1,000번 완료했다";
+"achievement.command_10000.name" = "별을 헤아리며";
+"achievement.command_10000.desc" = "명령을 10,000번 실행했다";
+"achievement.file_edit_500.name" = "불멸의 조각가";
+"achievement.file_edit_500.desc" = "파일을 500번 수정했다";
+"achievement.error_50.name" = "예언자";
+"achievement.error_50.desc" = "에러에서 50번 복구했다";
+"achievement.session_streak_100.name" = "다이아몬드";
+"achievement.session_streak_100.desc" = "100일 연속으로 작업했다";
+"achievement.session_500.name" = "성을 쌓다";
+"achievement.session_500.desc" = "세션을 500번 시작했다";
+"achievement.cost_500.name" = "은행장";
+"achievement.cost_500.desc" = "누적 비용 $500을 넘었다";
+"achievement.token_5million.name" = "행성";
+"achievement.token_5million.desc" = "누적 5,000,000 토큰을 사용했다";
+"achievement.complete_2000.name" = "태양";
+"achievement.complete_2000.desc" = "작업을 2,000번 완료했다";
+"achievement.session_streak_365.name" = "무한";
+"achievement.session_streak_365.desc" = "365일 연속으로 작업했다";
+"achievement.command_50000.name" = "광부";
+"achievement.command_50000.desc" = "명령을 50,000번 실행했다";
+"achievement.level_15.name" = "별 중의 별";
+"achievement.level_15.desc" = "레벨 15에 도달했다";
+"achievement.level_20.name" = "다이아몬드 코어";
+"achievement.level_20.desc" = "레벨 20에 도달했다";
+"achievement.complete_3000.name" = "만발의 궁수";
+"achievement.complete_3000.desc" = "작업을 3,000번 완료했다";
+"achievement.command_20000.name" = "채굴왕";
+"achievement.command_20000.desc" = "명령을 20,000번 실행했다";
+"achievement.session_2000.name" = "도시를 세우다";
+"achievement.session_2000.desc" = "세션을 2,000번 시작했다";
+"achievement.token_10million.name" = "지구";
+"achievement.token_10million.desc" = "누적 10,000,000 토큰을 사용했다";
+"achievement.cost_1000.name" = "재벌";
+"achievement.cost_1000.desc" = "누적 비용 $1,000을 넘었다";
+"achievement.file_edit_1000.name" = "마천루";
+"achievement.file_edit_1000.desc" = "파일을 1,000번 수정했다";
+"achievement.read_1000.name" = "연구원";
+"achievement.read_1000.desc" = "파일을 1,000번 읽었다";
+"achievement.read_2000.name" = "게놈 해독자";
+"achievement.read_2000.desc" = "파일을 2,000번 읽었다";
+"achievement.error_100.name" = "만리장성";
+"achievement.error_100.desc" = "에러에서 100번 복구했다";
+"achievement.git_branch_30.name" = "고목나무";
+"achievement.git_branch_30.desc" = "30개 이상 다른 브랜치에서 작업했다";
+"achievement.git_branch_50.name" = "밀림 탐험가";
+"achievement.git_branch_50.desc" = "50개 이상 다른 브랜치에서 작업했다";
+"achievement.night_owl_50.name" = "암흑의 제왕";
+"achievement.night_owl_50.desc" = "심야 작업을 50일 이상 했다";
+"achievement.session_streak_60.name" = "60일 연속";
+"achievement.session_streak_60.desc" = "60일 연속으로 작업했다";
+"achievement.session_streak_180.name" = "반년의 여정";
+"achievement.session_streak_180.desc" = "180일 연속으로 작업했다";
+"achievement.marathon_12h.name" = "사막 횡단";
+"achievement.marathon_12h.desc" = "12시간 이상 연속으로 작업했다";
+"achievement.weekend_50.name" = "주말의 지배자";
+"achievement.weekend_50.desc" = "주말에 50일 이상 작업했다";
+"achievement.multi_7.name" = "럭키 세븐";
+"achievement.multi_7.desc" = "7개 이상 동시에 작업했다";
+"achievement.git_master_100.name" = "화산 폭발";
+"achievement.git_master_100.desc" = "한 세션에서 100개 이상 파일을 변경했다";
+"achievement.token_200k_session.name" = "매머드";
+"achievement.token_200k_session.desc" = "한 세션에서 200k 이상 토큰을 사용했다";
+"achievement.file_surgeon_25.name" = "종합병원";
+"achievement.file_surgeon_25.desc" = "한 세션에서 25개 이상 파일을 수정했다";
+"achievement.complete_5000.name" = "용왕";
+"achievement.complete_5000.desc" = "작업을 5,000번 완료했다";
+"achievement.complete_10000.name" = "블랙홀";
+"achievement.complete_10000.desc" = "작업을 10,000번 완료했다";
+"achievement.command_100000.name" = "은하수";
+"achievement.command_100000.desc" = "명령을 100,000번 실행했다";
+"achievement.command_500000.name" = "관측 가능한 우주";
+"achievement.command_500000.desc" = "명령을 500,000번 실행했다";
+"achievement.session_5000.name" = "글로벌 네트워크";
+"achievement.session_5000.desc" = "세션을 5,000번 시작했다";
+"achievement.session_10000.name" = "항성계";
+"achievement.session_10000.desc" = "세션을 10,000번 시작했다";
+"achievement.token_50million.name" = "항성";
+"achievement.token_50million.desc" = "누적 50,000,000 토큰을 사용했다";
+"achievement.token_100million.name" = "빅뱅";
+"achievement.token_100million.desc" = "누적 100,000,000 토큰을 사용했다";
+"achievement.token_1billion.name" = "오메가 포인트";
+"achievement.token_1billion.desc" = "누적 1,000,000,000 토큰을 사용했다";
+"achievement.token_500k_session.name" = "브론토사우루스";
+"achievement.token_500k_session.desc" = "한 세션에서 500k 이상 토큰을 사용했다";
+"achievement.token_1m_session.name" = "혜성 충돌";
+"achievement.token_1m_session.desc" = "한 세션에서 1M 이상 토큰을 사용했다";
+"achievement.cost_5000.name" = "여왕";
+"achievement.cost_5000.desc" = "누적 비용 $5,000을 넘었다";
+"achievement.cost_10000.name" = "황제";
+"achievement.cost_10000.desc" = "누적 비용 $10,000을 넘었다";
+"achievement.cost_50000.name" = "연방 예산";
+"achievement.cost_50000.desc" = "누적 비용 $50,000을 넘었다";
+"achievement.file_edit_2000.name" = "기계 심장";
+"achievement.file_edit_2000.desc" = "파일을 2,000번 수정했다";
+"achievement.file_edit_5000.name" = "진화";
+"achievement.file_edit_5000.desc" = "파일을 5,000번 수정했다";
+"achievement.file_edit_10000.name" = "쓰나미";
+"achievement.file_edit_10000.desc" = "파일을 10,000번 수정했다";
+"achievement.file_edit_50000.name" = "에베레스트";
+"achievement.file_edit_50000.desc" = "파일을 50,000번 수정했다";
+"achievement.read_5000.name" = "위성 수신";
+"achievement.read_5000.desc" = "파일을 5,000번 읽었다";
+"achievement.read_10000.name" = "외계 통신";
+"achievement.read_10000.desc" = "파일을 10,000번 읽었다";
+"achievement.read_50000.name" = "초지능";
+"achievement.read_50000.desc" = "파일을 50,000번 읽었다";
+"achievement.error_200.name" = "사이보그";
+"achievement.error_200.desc" = "에러에서 200번 복구했다";
+"achievement.error_500.name" = "터미네이터";
+"achievement.error_500.desc" = "에러에서 500번 복구했다";
+"achievement.error_1000.name" = "절대 방패";
+"achievement.error_1000.desc" = "에러에서 1,000번 복구했다";
+"achievement.git_branch_100.name" = "세계수";
+"achievement.git_branch_100.desc" = "100개 이상 다른 브랜치에서 작업했다";
+"achievement.git_branch_500.name" = "잎새의 바다";
+"achievement.git_branch_500.desc" = "500개 이상 다른 브랜치에서 작업했다";
+"achievement.git_master_200.name" = "핵폭발";
+"achievement.git_master_200.desc" = "한 세션에서 200개 이상 파일을 변경했다";
+"achievement.git_master_500.name" = "카테고리 5";
+"achievement.git_master_500.desc" = "한 세션에서 500개 이상 파일을 변경했다";
+"achievement.file_surgeon_50.name" = "신의 손";
+"achievement.file_surgeon_50.desc" = "한 세션에서 50개 이상 파일을 수정했다";
+"achievement.file_surgeon_100.name" = "연금술사";
+"achievement.file_surgeon_100.desc" = "한 세션에서 100개 이상 파일을 수정했다";
+"achievement.night_owl_100.name" = "유령";
+"achievement.night_owl_100.desc" = "심야 작업을 100일 이상 했다";
+"achievement.night_owl_365.name" = "뱀파이어";
+"achievement.night_owl_365.desc" = "심야 작업을 365일 이상 했다";
+"achievement.session_streak_365_x2.name" = "시간의 군주";
+"achievement.session_streak_365_x2.desc" = "730일(2년) 연속으로 작업했다";
+"achievement.session_streak_1000.name" = "영원";
+"achievement.session_streak_1000.desc" = "1,000일 연속으로 작업했다";
+"achievement.marathon_24h.name" = "해가 뜨고 지고";
+"achievement.marathon_24h.desc" = "24시간 이상 연속으로 작업했다";
+"achievement.marathon_48h.name" = "불면의 경지";
+"achievement.marathon_48h.desc" = "48시간 이상 연속으로 작업했다";
+"achievement.weekend_100.name" = "영원한 주말";
+"achievement.weekend_100.desc" = "주말에 100일 이상 작업했다";
+"achievement.weekend_365.name" = "워커홀릭";
+"achievement.weekend_365.desc" = "주말에 365일 이상 작업했다";
+"achievement.multi_10.name" = "오케스트라";
+"achievement.multi_10.desc" = "10개 이상 동시에 작업했다";
+"achievement.multi_15.name" = "불꽃놀이";
+"achievement.multi_15.desc" = "15개 이상 동시에 작업했다";
+"achievement.level_25.name" = "포세이돈";
+"achievement.level_25.desc" = "레벨 25에 도달했다";
+"achievement.level_30.name" = "제우스";
+"achievement.level_30.desc" = "레벨 30에 도달했다";
+"achievement.level_50.name" = "신";
+"achievement.level_50.desc" = "레벨 50에 도달했다";
+"achievement.active_days_365.name" = "개근상";
+"achievement.active_days_365.desc" = "누적 365일 작업했다";
+"achievement.active_days_1000.name" = "천일의 약속";
+"achievement.active_days_1000.desc" = "누적 1,000일 작업했다";
+"achievement.tuesday_coder.name" = "화요일 전사";
+"achievement.tuesday_coder.desc" = "화요일에 작업했다";
+"achievement.wednesday_coder.name" = "수요일 낙타";
+"achievement.wednesday_coder.desc" = "수요일에 작업했다";
+"achievement.thursday_coder.name" = "목요일 번개";
+"achievement.thursday_coder.desc" = "목요일에 작업했다";
+"achievement.first_grep.name" = "첫 검색";
+"achievement.first_grep.desc" = "첫 Grep 검색을 실행했다";
+"achievement.first_glob.name" = "파일 탐색가";
+"achievement.first_glob.desc" = "첫 Glob 패턴 검색을 실행했다";
+"achievement.command_25.name" = "스물다섯 발";
+"achievement.command_25.desc" = "명령을 25번 실행했다";
+"achievement.complete_3.name" = "동메달";
+"achievement.complete_3.desc" = "작업을 3번 완료했다";
+"achievement.session_3.name" = "세 번째 출근";
+"achievement.session_3.desc" = "세션을 3번 시작했다";
+"achievement.session_5.name" = "다섯 번째 출근";
+"achievement.session_5.desc" = "세션을 5번 시작했다";
+"achievement.read_5.name" = "열람자";
+"achievement.read_5.desc" = "한 세션에서 파일을 5번 읽었다";
+"achievement.afternoon_coder.name" = "오후의 커피";
+"achievement.afternoon_coder.desc" = "오후 2~4시에 작업했다";
+"achievement.evening_coder.name" = "석양의 코더";
+"achievement.evening_coder.desc" = "저녁 6~8시에 작업했다";
+"achievement.dinner_coder.name" = "저녁밥 거른 코더";
+"achievement.dinner_coder.desc" = "저녁 7시에 작업 중이었다";
+"achievement.command_75.name" = "일흔다섯";
+"achievement.command_75.desc" = "명령을 75번 실행했다";
+"achievement.command_200.name" = "이백장군";
+"achievement.command_200.desc" = "명령을 200번 실행했다";
+"achievement.complete_15.name" = "열다섯 번째";
+"achievement.complete_15.desc" = "작업을 15번 완료했다";
+"achievement.complete_20.name" = "스무 번째";
+"achievement.complete_20.desc" = "작업을 20번 완료했다";
+"achievement.token_2k_total.name" = "이천 토큰";
+"achievement.token_2k_total.desc" = "누적 2,000 토큰을 사용했다";
+"achievement.token_5k_total.name" = "오천 토큰";
+"achievement.token_5k_total.desc" = "누적 5,000 토큰을 사용했다";
+"achievement.token_2k_session.name" = "보통 세션";
+"achievement.token_2k_session.desc" = "한 세션에서 2k 이상 토큰을 사용했다";
+"achievement.cost_2.name" = "두 번째 달러";
+"achievement.cost_2.desc" = "누적 비용 $2를 넘었다";
+"achievement.cost_3.name" = "세 번째 달러";
+"achievement.cost_3.desc" = "누적 비용 $3을 넘었다";
+"achievement.focus_15.name" = "집중 15분";
+"achievement.focus_15.desc" = "15분 이상 연속 작업했다";
+"achievement.focus_45.name" = "집중 45분";
+"achievement.focus_45.desc" = "45분 이상 연속 작업했다";
+"achievement.file_edit_10.name" = "열 번 수정";
+"achievement.file_edit_10.desc" = "파일을 10번 수정했다";
+"achievement.file_edit_15.name" = "열다섯 번 수정";
+"achievement.file_edit_15.desc" = "파일을 15번 수정했다";
+"achievement.read_25.name" = "다독가";
+"achievement.read_25.desc" = "파일을 25번 읽었다";
+"achievement.read_100.name" = "연구자";
+"achievement.read_100.desc" = "파일을 100번 읽었다";
+"achievement.git_branch_3.name" = "세 갈래";
+"achievement.git_branch_3.desc" = "3개 이상 다른 브랜치에서 작업했다";
+"achievement.error_3.name" = "세 번의 시련";
+"achievement.error_3.desc" = "에러에서 3번 복구했다";
+"achievement.session_15.name" = "열다섯 번째 출근";
+"achievement.session_15.desc" = "세션을 15번 시작했다";
+"achievement.session_20.name" = "스무 번째 출근";
+"achievement.session_20.desc" = "세션을 20번 시작했다";
+"achievement.night_owl_3.name" = "초승달";
+"achievement.night_owl_3.desc" = "심야 작업을 3일 이상 했다";
+"achievement.night_owl_5.name" = "반달";
+"achievement.night_owl_5.desc" = "심야 작업을 5일 이상 했다";
+"achievement.weekend_5.name" = "주말 상근자";
+"achievement.weekend_5.desc" = "주말에 5일 이상 작업했다";
+"achievement.weekend_10.name" = "주말 단골";
+"achievement.weekend_10.desc" = "주말에 10일 이상 작업했다";
+"achievement.complete_75.name" = "상사";
+"achievement.complete_75.desc" = "작업을 75번 완료했다";
+"achievement.complete_150.name" = "금메달";
+"achievement.complete_150.desc" = "작업을 150번 완료했다";
+"achievement.complete_250.name" = "트로피";
+"achievement.complete_250.desc" = "작업을 250번 완료했다";
+"achievement.command_750.name" = "칠백오십";
+"achievement.command_750.desc" = "명령을 750번 실행했다";
+"achievement.command_1500.name" = "천오백";
+"achievement.command_1500.desc" = "명령을 1,500번 실행했다";
+"achievement.command_3000.name" = "삼천검";
+"achievement.command_3000.desc" = "명령을 3,000번 실행했다";
+"achievement.command_7500.name" = "벌목꾼";
+"achievement.command_7500.desc" = "명령을 7,500번 실행했다";
+"achievement.session_30.name" = "한 달 근무";
+"achievement.session_30.desc" = "세션을 30번 시작했다";
+"achievement.session_40.name" = "사십 번 출근";
+"achievement.session_40.desc" = "세션을 40번 시작했다";
+"achievement.token_20k_session.name" = "돌고래";
+"achievement.token_20k_session.desc" = "한 세션에서 20k 이상 토큰을 사용했다";
+"achievement.token_30k_session.name" = "바다표범";
+"achievement.token_30k_session.desc" = "한 세션에서 30k 이상 토큰을 사용했다";
+"achievement.token_200k_total.name" = "토큰 상점";
+"achievement.token_200k_total.desc" = "누적 200,000 토큰을 사용했다";
+"achievement.token_300k_total.name" = "토큰 백화점";
+"achievement.token_300k_total.desc" = "누적 300,000 토큰을 사용했다";
+"achievement.cost_20.name" = "VIP";
+"achievement.cost_20.desc" = "누적 비용 $20을 넘었다";
+"achievement.cost_30.name" = "다이아 회원";
+"achievement.cost_30.desc" = "누적 비용 $30을 넘었다";
+"achievement.cost_75.name" = "골드 후원자";
+"achievement.cost_75.desc" = "누적 비용 $75를 넘었다";
+"achievement.file_edit_75.name" = "설계사";
+"achievement.file_edit_75.desc" = "파일을 75번 수정했다";
+"achievement.file_edit_150.name" = "기술자";
+"achievement.file_edit_150.desc" = "파일을 150번 수정했다";
+"achievement.read_150.name" = "고문서 해독가";
+"achievement.read_150.desc" = "파일을 150번 읽었다";
+"achievement.read_300.name" = "도서관장";
+"achievement.read_300.desc" = "파일을 300번 읽었다";
+"achievement.error_15.name" = "응급처치";
+"achievement.error_15.desc" = "에러에서 15번 복구했다";
+"achievement.error_20.name" = "소방관";
+"achievement.error_20.desc" = "에러에서 20번 복구했다";
+"achievement.error_35.name" = "성벽";
+"achievement.error_35.desc" = "에러에서 35번 복구했다";
+"achievement.git_branch_7.name" = "선인장";
+"achievement.git_branch_7.desc" = "7개 이상 다른 브랜치에서 작업했다";
+"achievement.git_branch_15.name" = "군도";
+"achievement.git_branch_15.desc" = "15개 이상 다른 브랜치에서 작업했다";
+"achievement.git_branch_20.name" = "지도 제작자";
+"achievement.git_branch_20.desc" = "20개 이상 다른 브랜치에서 작업했다";
+"achievement.session_streak_5.name" = "5일 연속";
+"achievement.session_streak_5.desc" = "5일 연속으로 작업했다";
+"achievement.session_streak_10.name" = "10일 연속";
+"achievement.session_streak_10.desc" = "10일 연속으로 작업했다";
+"achievement.session_streak_21.name" = "3주 연속";
+"achievement.session_streak_21.desc" = "21일 연속으로 작업했다";
+"achievement.night_owl_15.name" = "15일의 밤";
+"achievement.night_owl_15.desc" = "심야 작업을 15일 이상 했다";
+"achievement.night_owl_20.name" = "그믐달";
+"achievement.night_owl_20.desc" = "심야 작업을 20일 이상 했다";
+"achievement.night_owl_30.name" = "한 달의 밤";
+"achievement.night_owl_30.desc" = "심야 작업을 30일 이상 했다";
+"achievement.weekend_20.name" = "주말 마니아";
+"achievement.weekend_20.desc" = "주말에 20일 이상 작업했다";
+"achievement.weekend_30.name" = "주말의 왕";
+"achievement.weekend_30.desc" = "주말에 30일 이상 작업했다";
+"achievement.active_days_30.name" = "한 달 개근";
+"achievement.active_days_30.desc" = "누적 30일 작업했다";
+"achievement.active_days_60.name" = "두 달 개근";
+"achievement.active_days_60.desc" = "누적 60일 작업했다";
+"achievement.active_days_90.name" = "분기 개근";
+"achievement.active_days_90.desc" = "누적 90일 작업했다";
+"achievement.active_days_180.name" = "반년 개근";
+"achievement.active_days_180.desc" = "누적 180일 작업했다";
+"achievement.marathon_2h.name" = "하프 마라톤";
+"achievement.marathon_2h.desc" = "2시간 이상 연속으로 작업했다";
+"achievement.marathon_4h.name" = "풀 마라톤";
+"achievement.marathon_4h.desc" = "4시간 이상 연속으로 작업했다";
+"achievement.marathon_8h.name" = "철인";
+"achievement.marathon_8h.desc" = "8시간 이상 연속으로 작업했다";
+"achievement.complete_400.name" = "서커스 단장";
+"achievement.complete_400.desc" = "작업을 400번 완료했다";
+"achievement.complete_750.name" = "성주";
+"achievement.complete_750.desc" = "작업을 750번 완료했다";
+"achievement.command_15000.name" = "탑 빌더";
+"achievement.command_15000.desc" = "명령을 15,000번 실행했다";
+"achievement.command_25000.name" = "크레인";
+"achievement.command_25000.desc" = "명령을 25,000번 실행했다";
+"achievement.session_150.name" = "공장장";
+"achievement.session_150.desc" = "세션을 150번 시작했다";
+"achievement.session_200.name" = "의회";
+"achievement.session_200.desc" = "세션을 200번 시작했다";
+"achievement.session_300.name" = "메트로폴리스";
+"achievement.session_300.desc" = "세션을 300번 시작했다";
+"achievement.session_1000.name" = "네온시티";
+"achievement.session_1000.desc" = "세션을 1,000번 시작했다";
+"achievement.token_2million.name" = "대륙";
+"achievement.token_2million.desc" = "누적 2,000,000 토큰을 사용했다";
+"achievement.token_3million.name" = "서반구";
+"achievement.token_3million.desc" = "누적 3,000,000 토큰을 사용했다";
+"achievement.cost_200.name" = "금고";
+"achievement.cost_200.desc" = "누적 비용 $200을 넘었다";
+"achievement.cost_300.name" = "ATM";
+"achievement.cost_300.desc" = "누적 비용 $300을 넘었다";
+"achievement.file_edit_750.name" = "광산 노동자";
+"achievement.file_edit_750.desc" = "파일을 750번 수정했다";
+"achievement.read_750.name" = "천문학자";
+"achievement.read_750.desc" = "파일을 750번 읽었다";
+"achievement.error_75.name" = "강철 방패";
+"achievement.error_75.desc" = "에러에서 75번 복구했다";
+"achievement.weekend_75.name" = "놀이공원 사장";
+"achievement.weekend_75.desc" = "주말에 75일 이상 작업했다";
+"achievement.active_days_270.name" = "세계 일주";
+"achievement.active_days_270.desc" = "누적 270일 작업했다";
+"achievement.session_streak_45.name" = "45일 연속";
+"achievement.session_streak_45.desc" = "45일 연속으로 작업했다";
+"achievement.session_streak_90.name" = "분기 연속";
+"achievement.session_streak_90.desc" = "90일 연속으로 작업했다";
+"achievement.marathon_10h.name" = "사하라 횡단";
+"achievement.marathon_10h.desc" = "10시간 이상 연속으로 작업했다";
+"achievement.level_12.name" = "빛나는 별";
+"achievement.level_12.desc" = "레벨 12에 도달했다";
+"achievement.complete_7500.name" = "용의 둥지";
+"achievement.complete_7500.desc" = "작업을 7,500번 완료했다";
+"achievement.complete_15000.name" = "차원의 문";
+"achievement.complete_15000.desc" = "작업을 15,000번 완료했다";
+"achievement.complete_25000.name" = "다중 우주";
+"achievement.complete_25000.desc" = "작업을 25,000번 완료했다";
+"achievement.command_200000.name" = "소용돌이";
+"achievement.command_200000.desc" = "명령을 200,000번 실행했다";
+"achievement.command_1000000.name" = "백만장자 명령";
+"achievement.command_1000000.desc" = "명령을 1,000,000번 실행했다";
+"achievement.session_20000.name" = "유성우";
+"achievement.session_20000.desc" = "세션을 20,000번 시작했다";
+"achievement.token_500million.name" = "퀘이사";
+"achievement.token_500million.desc" = "누적 500,000,000 토큰을 사용했다";
+"achievement.token_2m_session.name" = "해일";
+"achievement.token_2m_session.desc" = "한 세션에서 2M 이상 토큰을 사용했다";
+"achievement.token_5m_session.name" = "슈퍼볼케이노";
+"achievement.token_5m_session.desc" = "한 세션에서 5M 이상 토큰을 사용했다";
+"achievement.cost_25000.name" = "왕궁";
+"achievement.cost_25000.desc" = "누적 비용 $25,000을 넘었다";
+"achievement.cost_100000.name" = "국가 예산";
+"achievement.cost_100000.desc" = "누적 비용 $100,000을 넘었다";
+"achievement.file_edit_20000.name" = "허리케인";
+"achievement.file_edit_20000.desc" = "파일을 20,000번 수정했다";
+"achievement.file_edit_100000.name" = "대양";
+"achievement.file_edit_100000.desc" = "파일을 100,000번 수정했다";
+"achievement.read_20000.name" = "만물의 눈";
+"achievement.read_20000.desc" = "파일을 20,000번 읽었다";
+"achievement.read_100000.name" = "딥 스페이스";
+"achievement.read_100000.desc" = "파일을 100,000번 읽었다";
+"achievement.error_2000.name" = "핵융합";
+"achievement.error_2000.desc" = "에러에서 2,000번 복구했다";
+"achievement.git_branch_200.name" = "아마존";
+"achievement.git_branch_200.desc" = "200개 이상 다른 브랜치에서 작업했다";
+"achievement.git_branch_1000.name" = "타이가";
+"achievement.git_branch_1000.desc" = "1,000개 이상 다른 브랜치에서 작업했다";
+"achievement.git_master_1000.name" = "초신성";
+"achievement.git_master_1000.desc" = "한 세션에서 1,000개 이상 파일을 변경했다";
+"achievement.file_surgeon_200.name" = "유전자 편집";
+"achievement.file_surgeon_200.desc" = "한 세션에서 200개 이상 파일을 수정했다";
+"achievement.weekend_500.name" = "영원한 건설";
+"achievement.weekend_500.desc" = "주말에 500일 이상 작업했다";
+"achievement.active_days_2000.name" = "모아이";
+"achievement.active_days_2000.desc" = "누적 2,000일 작업했다";
+"achievement.active_days_3650.name" = "십년의 유산";
+"achievement.active_days_3650.desc" = "누적 3,650일(10년) 작업했다";
+"achievement.session_streak_500.name" = "빙하기";
+"achievement.session_streak_500.desc" = "500일 연속으로 작업했다";
+"achievement.session_streak_1500.name" = "문명";
+"achievement.session_streak_1500.desc" = "1,500일 연속으로 작업했다";
+"achievement.marathon_72h.name" = "불멸";
+"achievement.marathon_72h.desc" = "72시간 이상 연속으로 작업했다";
+"achievement.level_40.name" = "대마법사";
+"achievement.level_40.desc" = "레벨 40에 도달했다";
+"achievement.level_75.name" = "전지전능";
+"achievement.level_75.desc" = "레벨 75에 도달했다";
+"achievement.level_100.name" = "아센션";
+"achievement.level_100.desc" = "레벨 100에 도달했다";
+"achievement.mythic_perfectionist.name" = "전설을 넘어서";
+"achievement.mythic_perfectionist.desc" = "전설 등급 이하 모든 업적을 달성했다";
+"achievement.true_god.name" = "초월";
+"achievement.true_god.desc" = "신화 등급 외 모든 업적을 달성했다";
+
+/* Game UI Strings */
+"game.milestone.week" = "일주일 개근!";
+"game.milestone.2weeks" = "2주 연속!";
+"game.milestone.month" = "한 달 개근!";
+"game.milestone.2months" = "두 달 연속!";
+"game.milestone.100days" = "100일 달성!";
+"game.milestone.year" = "1년 개근!";
+"game.close.hint" = "닫기 (Esc)";
+"game.stat.commands" = "명령";
+"game.stat.tokens" = "토큰";
+"game.stat.activity" = "활동";
+"game.stat.days.suffix" = "일";
+"game.completion.percent" = "%d%% 달성";
+"game.filter.unlocked" = "달성만";
+"game.filter.all" = "전부 보기";
+"game.section.complete" = "COMPLETE";
+
+/* Git errors */
+"git.not.installed" = "Git이 설치되지 않았습니다";
+
+/* Bug report */
+"bug.report.subject" = "[도피스 Bug] %@";
+
+/* Character */
+"char.egg.archetype" = "신입 (부화 전)";
+
+/* Workflow - Planning */
+"workflow.planning.waiting" = "기획 정리 대기";
+"workflow.planning.completed" = "기획 정리가 완료되었습니다.";
+"workflow.planning.done" = "기획 완료";
+"workflow.planning.summary" = "기획자가 요구사항과 수용 기준을 정리했습니다.";
+
+/* Workflow - Design */
+"workflow.design.skipped" = "디자인 단계 생략";
+"workflow.design.waiting" = "디자인 협의 대기";
+"workflow.design.detail" = "기획 정리 결과를 바탕으로 UI/UX와 표현 방향을 정리합니다.";
+"workflow.designer.assigned" = "디자이너 투입: %@";
+"workflow.designer.detail" = "디자이너가 화면 흐름과 상호작용 포인트를 정리합니다.";
+"workflow.design.completed" = "디자인 협의가 완료되었습니다.";
+"workflow.design.done" = "디자인 협의 완료";
+"workflow.design.summary" = "디자이너가 UI/UX 보강 포인트를 정리했습니다.";
+
+/* Workflow - Review */
+"workflow.review.disabled" = "설정에서 코드 리뷰 자동 단계를 비활성화했습니다.";
+"workflow.review.skipped" = "리뷰 단계 생략";
+"workflow.review.skipped.detail" = "설정에서 코드 리뷰 자동 단계를 끄셨습니다.";
+"workflow.review.limit.reached" = "코드 리뷰 자동 한도(%d회)에 도달했습니다.";
+"workflow.review.limit.title" = "리뷰 자동 한도 도달";
+"workflow.review.limit.detail" = "코드 리뷰어가 최대 %d회까지 검토했습니다. 토큰 보호를 위해 자동 재검토를 중단합니다.";
+"workflow.review.waiting" = "코드 리뷰 대기";
+"workflow.review.detail" = "리뷰어가 변경 파일과 리스크를 검토합니다.";
+"workflow.review.assigned" = "코드 리뷰 투입: %@";
+"workflow.review.assigned.detail" = "리뷰어가 변경 파일과 리스크를 먼저 확인합니다.";
+"workflow.review.passed" = "리뷰가 통과되었습니다.";
+"workflow.review.pass" = "리뷰 통과";
+"workflow.review.pass.detail" = "리뷰어가 치명적인 문제를 찾지 못했습니다.";
+"workflow.review.feedback" = "리뷰 피드백이 발생했습니다.";
+"workflow.review.fix.needed" = "리뷰 수정 필요";
+"workflow.review.fix.detail" = "리뷰어가 수정이 필요한 이슈를 남겼습니다.";
+"workflow.review.pass.qa" = "리뷰 통과 · QA 투입";
+
+/* Workflow - QA */
+"workflow.qa.waiting" = "QA 검토 대기";
+"workflow.qa.detail" = "QA가 변경된 기능을 직접 테스트합니다.";
+"workflow.qa.assigned" = "QA 투입: %@";
+"workflow.qa.no.requirements" = "요구사항 정보가 없습니다. 최근 변경 사항과 결과를 기준으로 검증하세요.";
+
+/* Workflow - Development */
+"workflow.dev.from.plan" = "기획 정리 내용을 바탕으로 개발을 진행합니다.";
+"workflow.dev.from.plan.design" = "기획/디자인 정리 내용을 바탕으로 개발을 진행합니다.";
+"workflow.dev.start" = "개발 시작";
+"workflow.dev.start.from.plan" = "기획 정리 내용을 바탕으로 개발자가 구현을 시작합니다.";
+"workflow.dev.start.from.plan.design" = "기획/디자인 정리 내용을 바탕으로 개발자가 구현을 시작합니다.";
+
+/* Workflow - Summary fallbacks */
+"workflow.plan.summary.none" = "기획 요약 없음";
+"workflow.design.summary.none" = "디자인 요약 없음";
+"workflow.dev.summary.none" = "개발 완료 메시지 없음";
+"workflow.review.summary.none" = "코드 리뷰 요약 없음";
+"workflow.files.none" = "- 변경 파일 정보 없음";
+
+/* Session - Terminal limits */
+"session.limit.max" = "직원은 최대 %d명까지 권장합니다. 지금은 더 이상 새 터미널에 배정할 수 없습니다.";
+"session.limit.no.available" = "지금 바로 투입 가능한 직원이 없습니다. 현재 작업이 끝난 뒤 다시 시도해주세요.";
+"session.limit.partial" = "현재 바로 배정 가능한 직원은 %d명뿐입니다. 요청한 %d개 전체를 동시에 만들 수 없습니다.";
+"session.limit.title" = "터미널 추가 제한";
+
+/* Workflow - Handoff labels */
+"workflow.handoff.user" = "사용자 → %@";
+"workflow.handoff.role" = "%@ → %@";
+
+/* Workflow - Developer start */
+"workflow.dev.user.start" = "사용자 요구사항을 받아 개발을 시작합니다.";
+
+/* Workflow - Planner */
+"workflow.planner.busy" = "지금 비어 있는 기획자가 없어 이번 작업은 개발자가 바로 이어받습니다.";
+"workflow.planner.waiting.title" = "기획자 대기 중";
+"workflow.collab.in.progress" = "협업 단계 진행 중";
+"workflow.collab.in.progress.detail" = "현재 다른 역할이 이 작업을 정리하고 있습니다. 완료 후 개발자에게 전달됩니다.";
+"workflow.planner.handoff.detail" = "기획자가 요구사항을 정리하고 필요하면 디자이너와 협의합니다.";
+"workflow.planner.assigned" = "기획자 투입: %@";
+"workflow.planner.assigned.detail" = "기획자가 요구사항을 정리하고 필요하면 디자이너와 협의한 뒤 개발자에게 전달합니다.";
+
+/* Workflow - Token throttle */
+"workflow.throttle.critical" = "토큰 사용량이 높아 자동 %@ 단계를 잠시 줄였습니다.";
+"workflow.throttle.conserve" = "토큰 사용량 절약을 위해 자동 %@ 단계를 생략합니다.";
+
+/* Workflow - Developer completion */
+"workflow.dev.no.code.detail" = "코드 수정 없이 답변을 마쳤습니다.";
+"workflow.dev.no.code.skip" = "검토 단계 스킵 · 코드 수정 없음";
+"workflow.dev.no.code.summary" = "코드 수정 없음";
+"workflow.dev.completed.detail" = "구현을 마치고 검토 단계로 넘깁니다.";
+"workflow.review.skip.title" = "리뷰 단계 생략";
+
+/* Workflow - Revision limits */
+"workflow.revision.limit.title" = "자동 재작업 한도 도달";
+"workflow.revision.limit.detail" = "자동 재작업은 최대 %d회까지만 진행합니다. 추가 검토는 수동으로 진행해주세요.";
+"workflow.revision.limit.stop" = "자동 재작업은 최대 %d회까지만 진행합니다. 이후에는 사용자가 직접 판단할 수 있도록 멈춥니다.";
+
+/* Workflow - QA results */
+"workflow.qa.passed.detail" = "QA가 통과되었습니다.";
+"workflow.qa.failed.detail" = "QA에서 이슈를 발견했습니다.";
+"workflow.qa.fail.title" = "QA 미통과";
+"workflow.qa.fail.msg" = "QA가 이슈를 발견했습니다.";
+"workflow.qa.disabled" = "설정에서 QA 자동 단계를 비활성화했습니다.";
+"workflow.qa.disabled.detail" = "설정에서 QA 자동 단계를 끄셨습니다.";
+"workflow.qa.skip.title" = "QA 단계 생략";
+"workflow.qa.limit.reached" = "QA 자동 한도(%d회)에 도달했습니다.";
+"workflow.qa.limit.title" = "QA 자동 한도 도달";
+"workflow.qa.limit.detail" = "QA는 최대 %d회까지만 자동으로 재시도합니다. 토큰 보호를 위해 자동 테스트를 중단합니다.";
+"workflow.qa.busy" = "QA 담당자가 없거나 바쁩니다";
+
+/* Workflow - Revision feedback */
+"workflow.revision.detail" = "피드백을 반영해 재작업을 진행합니다.";
+"workflow.revision.feedback" = "%@ 피드백 반영";
+"workflow.revision.feedback.detail" = "개발자가 피드백을 반영해 다시 작업합니다.";
+
+/* Workflow - Reporter */
+"workflow.reporter.detail" = "최종 결과와 요구사항을 Markdown으로 정리합니다.";
+"workflow.reporter.assigned" = "보고자 투입: %@";
+"workflow.reporter.assigned.detail" = "최종 요구사항, 구현 결과, 검증 내용을 Markdown으로 정리합니다.";
+"workflow.reporter.completed.detail" = "최종 보고서 작성이 완료되었습니다.";
+"workflow.reporter.report.done" = "보고서 작성 완료";
+"workflow.reporter.done" = "보고자 완료";
+
+/* Workflow - SRE */
+"workflow.sre.detail" = "배포/운영 리스크와 실행 환경을 점검합니다.";
+"workflow.sre.assigned" = "SRE 투입: %@";
+"workflow.sre.assigned.detail" = "배포/운영 리스크와 실행 환경 관점을 점검합니다.";
+"workflow.sre.completed.detail" = "SRE 검토가 완료되었습니다.";
+"workflow.sre.done" = "SRE 검토 완료";
+"workflow.sre.done.detail" = "SRE가 운영/배포 관점 점검을 마쳤습니다.";
+
+/* Workflow - Completion */
+"workflow.report.skip" = "보고 단계 생략";
+"workflow.sre.skip" = "SRE 단계 생략";
+"workflow.completion.done" = "후속 단계 완료";
+"workflow.completion.no.roles" = "사용 가능한 후속 역할이 없어 이 단계에서 마무리합니다.";
+
+/* Workflow - Template fallbacks (additional) */
+"workflow.request.none" = "요구사항 정보가 없습니다.";
+"workflow.request.none.review" = "요구사항 정보가 없습니다. 변경 파일과 최근 완료 요약을 기준으로 검토하세요.";
+"workflow.design.memo.none" = "디자인/경험 메모 없음";
+"workflow.dev.completion.none" = "개발 완료 요약 없음";
+"workflow.review.summary.report.none" = "리뷰 요약 없음";
+"workflow.qa.summary.none" = "QA 요약 없음";
+"workflow.validation.none" = "추가 검증 요약 없음";
+"workflow.files.changed.none" = "- 변경 파일 없음";
+"workflow.feedback.none" = "구체적인 피드백 없음";
+
+/* Crash recovery */
+"recovery.alert.title" = "중단된 작업 %d개를 복원했습니다";
+"recovery.alert.message" = "앱이 비정상 종료되어 완료되지 못한 작업:\n%@\n\n자동 재실행과 자동 롤백은 하지 않았습니다. 현재 변경사항은 그대로 두었고, 복구 폴더를 함께 생성했습니다.";
+"recovery.show.folder" = "복구 폴더 보기";
+"recovery.ok" = "확인";
+
+/* Output Mode */
+"output.mode.full" = "전체";
+"output.mode.realtime" = "실시간";
+"output.mode.resultOnly" = "결과만";
+
+/* Sensitive File Warnings */
+"sensitive.file.read" = "🔒 민감 파일 접근: %@\n→ %@";
+"sensitive.file.write" = "🔒 민감 파일 쓰기: %@\n→ %@";
+"sensitive.file.edit" = "🔒 민감 파일 수정: %@\n→ %@";
+
+/* Time Formatting */
+"time.seconds" = "%d초";
+"time.minutes.seconds" = "%d분 %d초";
+"time.hours.minutes" = "%d시간 %d분";
+
+/* Completion Notification */
+"notif.files.modified" = "%d개 파일 수정";
+"notif.commands" = "%d개 명령";
+"notif.errors" = "%d개 에러";
+
+/* Danger Severity */
+"danger.critical" = "치명적";
+"danger.high" = "높음";
+"danger.medium" = "주의";
+
+/* Audit Event Types */
+"audit.permission.approval" = "권한승인";
+"audit.permission.denial" = "권한거부";
+"audit.session.start" = "세션시작";
+"audit.session.end" = "세션종료";
+"audit.cost.warning" = "비용경고";
+"audit.dangerous.command" = "위험명령";
+"audit.sensitive.file" = "민감파일";
+"audit.sleepwork.start" = "슬립워크시작";
+"audit.sleepwork.end" = "슬립워크종료";
+
+/* Activity Status */
+"activity.reading" = "읽는 중";
+"activity.writing" = "작성 중";
+"activity.searching" = "검색";
+"activity.running" = "실행";
+"activity.error" = "에러";
+
+/* Help */
+"help.command.list" = "명령어 목록 (/help <키워드>로 검색)";
+
+/* Shortcuts Settings */
+"settings.shortcuts" = "단축키";
+"shortcut.recording" = "키 입력 대기…";
+"shortcut.unassigned" = "없음";
+"shortcut.unassign" = "단축키 해제";
+"shortcut.default" = "기본값";
+"shortcut.reset.all" = "모두 초기화";
+"shortcut.reset.single" = "기본값으로 복원";
+"shortcut.reset.title" = "단축키 초기화";
+"shortcut.reset.confirm" = "초기화";
+"shortcut.reset.message" = "모든 단축키를 기본값으로 되돌립니다. 이 작업은 되돌릴 수 없습니다.";
+"shortcut.conflict.title" = "단축키 충돌";
+"shortcut.conflict.system" = "%@은(는) macOS 시스템 단축키와 충돌합니다. 그래도 사용하시겠습니까?";
+"shortcut.conflict.action" = "%@은(는) 이미 '%@'에 할당되어 있습니다. 기존 할당을 해제하고 변경하시겠습니까?";
+"shortcut.conflict.replace" = "변경";
+"shortcut.category.session" = "세션";
+"shortcut.category.terminal" = "터미널";
+"shortcut.category.view" = "뷰 제어";
+"shortcut.category.action" = "액션";
+"shortcut.action.restartSession" = "세션 재시작";
+"shortcut.action.newSession" = "새 세션";
+"shortcut.action.closeSession" = "세션 닫기";
+"shortcut.action.nextTab" = "다음 탭";
+"shortcut.action.previousTab" = "이전 탭";
+"shortcut.action.cancelProcessing" = "작업 취소";
+"shortcut.action.clearTerminal" = "터미널 지우기";
+"shortcut.action.commandPalette" = "커맨드 팔레트";
+"shortcut.action.actionCenter" = "확인 센터";
+"shortcut.action.toggleSplitView" = "분할 뷰 전환";
+"shortcut.action.toggleOfficeView" = "오피스 뷰 전환";
+"shortcut.action.toggleTerminalView" = "터미널 뷰 전환";
+"shortcut.action.exportSessionLog" = "세션 로그 내보내기";
+
+/* Character */
+"char.egg.archetype" = "신입 (부화 전)";
+
+/* Task Status */
+"task.status.running" = "진행";
+"task.status.completed" = "완료";
+"task.status.failed" = "실패";
+
+/* Workflow Stage Status */
+"workflow.stage.queued" = "대기";
+"workflow.stage.running" = "진행";
+"workflow.stage.completed" = "완료";
+"workflow.stage.failed" = "재작업";
+"workflow.stage.skipped" = "건너뜀";
+
+/* Timeline Event Types */
+"timeline.event.started" = "시작";
+"timeline.event.prompt" = "명령";
+"timeline.event.toolUse" = "도구";
+"timeline.event.fileChange" = "파일";
+"timeline.event.error" = "에러";
+"timeline.event.completed" = "완료";
+
+/* Plugin System */
+"settings.plugin" = "플러그인";
+"plugin.section.add" = "플러그인 추가";
+"plugin.section.add.subtitle" = "Homebrew 또는 URL로 설치";
+"plugin.input.placeholder" = "brew formula, user/tap/formula, 또는 URL 입력";
+"plugin.btn.install" = "설치";
+"plugin.format.brew" = "Brew formula:";
+"plugin.format.tap" = "Brew tap:";
+"plugin.format.url" = "직접 다운로드:";
+"plugin.section.installed" = "설치된 플러그인";
+"plugin.section.installed.count" = "%d개 설치 · %d개 활성";
+"plugin.empty" = "설치된 플러그인이 없습니다";
+"plugin.section.info" = "자동 연동";
+"plugin.section.info.subtitle" = "세션에 자동 적용";
+"plugin.info.desc" = "활성화된 플러그인은 새 세션 시작 시 자동으로 --plugin-dir 옵션에 추가됩니다. Homebrew로 설치한 플러그인은 brew upgrade로 업데이트할 수 있습니다.";
+"plugin.confirm.uninstall" = "플러그인 삭제";
+"plugin.confirm.uninstall.msg" = "'%@' 플러그인을 삭제하시겠습니까? Brew 플러그인은 brew uninstall도 함께 실행됩니다.";
+"plugin.progress.analyzing" = "소스 분석 중…";
+"plugin.progress.brew.install" = "brew install 실행 중…";
+"plugin.progress.tapping" = "%@ 탭 추가 중…";
+"plugin.progress.installing" = "%@ 설치 중…";
+"plugin.progress.downloading" = "%@ 다운로드 중…";
+"plugin.progress.extracting" = "압축 해제 중…";
+"plugin.progress.upgrading" = "%@ 업그레이드 중…";
+"plugin.error.brew.not.found" = "Homebrew를 찾을 수 없습니다. brew를 먼저 설치해주세요.";
+"plugin.error.install.failed" = "설치 실패: %@";
+"plugin.error.tap.failed" = "탭 추가 실패: %@";
+"plugin.error.path.not.found" = "설치 경로를 찾을 수 없습니다.";
+"plugin.error.invalid.tap" = "잘못된 tap 형식입니다. user/tap/formula 형식을 사용하세요.";
+"plugin.error.invalid.url" = "잘못된 URL입니다.";
+"plugin.error.download.failed" = "다운로드 실패: %@";
+"plugin.error.extract.failed" = "압축 해제 실패: %@";
+"plugin.error.upgrade.failed" = "업그레이드 실패: %@";
+"plugin.error.already.installed" = "이미 설치된 플러그인입니다.";
+
+/* Pixel Strip View */
+"pixel.break.resting.count" = "%d명 휴식 중";
+"pixel.furniture.edit.mode" = "가구 배치 모드";
+"pixel.furniture.drag.hint" = "— 드래그하여 이동";
+"pixel.furniture.done" = "완료";
+
+/* Main View */
+"main.billing.alert.title" = "Claude 결제일 알림";
+"main.attendance.streak" = "%d일 연속 출석";
+"main.pin.input" = "PIN 입력";
+"main.pin.wrong" = "PIN이 틀렸습니다";
+
+/* Terminal Area View */
+"terminal.count.items" = "%d개";
+"terminal.create.count" = "Create %d개";
+"terminal.budget.unlimited" = "0 = 무제한";
+
+/* Models */
+"models.budget.label" = "예산";
+"models.budget.unlimited" = "무제한";
+
+/* Office Accessibility */
+"office.accessibility.worker.info" = "%@ 작업 정보";
+"office.accessibility.worker.value" = "%@, 토큰 %@, 파일 %d개";
+"plugin.btn.local" = "로컬 폴더";
+"plugin.btn.create" = "새 플러그인";
+"plugin.format.local" = "로컬 경로:";
+"plugin.picker.message" = "플러그인 디렉토리를 선택하세요";
+"plugin.picker.prompt" = "추가";
+"plugin.scaffold.pick.dir" = "플러그인을 생성할 위치를 선택하세요";
+"plugin.scaffold.pick.prompt" = "여기에 생성";
+"plugin.scaffold.title" = "새 플러그인 생성";
+"plugin.scaffold.name.label" = "플러그인 이름";
+"plugin.scaffold.name.placeholder" = "my-awesome-plugin";
+"plugin.scaffold.desc" = "CLAUDE.md, hooks/, slash-commands/, settings.json 등의 기본 구조가 생성됩니다. 생성 후 Finder에서 열리며, 바로 도피스에 등록됩니다.";
+"plugin.scaffold.btn" = "생성 및 등록";
+"plugin.warn.empty" = "유효한 플러그인 파일이 없습니다 (CLAUDE.md, hooks/, slash-commands/ 등)";
+
+// TerminalAreaView — hardcoded Korean strings
+"terminal.no.session.message" = "Cmd+T 또는 새 세션 시작 버튼으로 바로 작업을 시작할 수 있습니다.";
+"terminal.trust.hint" = "(직접 작성한 코드, 잘 알려진 오픈소스, 또는 팀 프로젝트 등)";
+"terminal.trust.warning" = "Claude Code가 이 폴더의 파일을 읽고, 수정하고, 실행할 수 있습니다.";
+"terminal.filter.a11y" = "%@ 필터";
+"terminal.project.a11y.label" = "%@ 프로젝트";
+
+// Git panel - cherry-pick, revert, reset, amend
+"git.cherrypick.success" = "Cherry-pick 완료: %@";
+"git.cherrypick.failed" = "Cherry-pick 실패";
+"git.cherrypick.confirm" = "커밋 '%@'를 현재 브랜치에 cherry-pick 합니다.";
+"git.revert.success" = "Revert 완료: %@";
+"git.revert.failed" = "Revert 실패 — 충돌이 발생했을 수 있습니다";
+"git.revert.confirm" = "커밋 '%@'를 되돌리는 새 커밋을 생성합니다.";
+"git.reset.hard.warning" = "⚠️ HEAD를 '%@'로 이동합니다. 모든 변경사항이 삭제됩니다!";
+"git.reset.confirm" = "HEAD를 '%1$@'로 이동합니다. (%2$@)";
+"git.reset.success" = "Reset (%@) 완료";
+"git.reset.failed" = "Reset 실패";
+"git.amend.placeholder" = "새 커밋 메시지 (비우면 기존 유지)";
+"git.amend.success" = "커밋 amend 완료";
+"git.amend.failed" = "Amend 실패";
+"git.amend.confirm" = "마지막 커밋을 수정합니다.";
+"git.sha.copy" = "SHA 복사";
+"git.sha.copied" = "SHA 복사됨";
+"plugin.marketplace" = "마켓플레이스";
+"plugin.marketplace.loading" = "불러오는 중…";
+"plugin.marketplace.count" = "%d개 플러그인 등록됨";
+"plugin.marketplace.refresh" = "새로고침";
+"plugin.marketplace.hint" = "GitHub에서 플러그인 등록";
+"plugin.marketplace.empty" = "새로고침을 눌러 플러그인을 확인하세요";
+"plugin.marketplace.installed" = "설치됨";
+
+// MARK: - Tab (TerminalTab status/error messages)
+"tab.restore.not.rerun" = "자동으로 다시 실행하지 않았습니다.";
+"tab.restore.last.input" = "마지막 입력: %@";
+"tab.restore.initial.input" = "초기 입력: %@";
+"tab.restore.recovery.folder" = "복구 폴더: %@";
+"tab.restore.continue.hint" = "다음 입력부터 이전 대화를 이어서 보낼 수 있습니다.";
+"tab.restore.interrupted" = "중단된 세션 복원";
+"tab.restore.previous" = "이전 세션 복원";
+"tab.claude.not.installed" = "Claude Code 미설치";
+"tab.claude.not.installed.detail" = "Claude Code CLI를 찾을 수 없습니다.\n\n설치: npm install -g @anthropic-ai/claude-code\n\nPATH가 설정되지 않았을 수 있습니다.\n'which claude'로 경로를 확인하거나,\nnvm/fnm 사용 시 .zshrc 설정을 확인하세요.";
+"tab.token.protection" = "토큰 보호 모드";
+"tab.project.path.missing" = "프로젝트 경로 없음";
+"tab.project.path.missing.detail" = "경로를 찾을 수 없습니다: %@\n디렉토리가 삭제되었거나 외장 드라이브가 분리되었을 수 있습니다.";
+"tab.process.launch.failed" = "프로세스 실행 실패";
+"tab.process.launch.failed.detail" = "Claude Code를 실행할 수 없습니다.\n\n오류: %@\n\nPATH가 올바르게 설정되어 있는지 확인하세요.\n터미널에서 'which claude'를 실행해 경로를 확인할 수 있습니다.";
+"tab.permission.retry.edit" = "이번 한 번만 수정 권한으로 재시도합니다.";
+"tab.permission.retry.full" = "이번 한 번만 전체 권한으로 재시도합니다.";
+"tab.permission.needed" = "%@ 권한이 필요합니다. 승인하면 %@";
+"tab.permission.approved" = "권한 승인됨 · 다시 시도합니다";
+"tab.permission.denied" = "권한 요청이 거부되었습니다";
+"tab.approval.file.edit" = "파일 수정";
+"tab.approval.command.run" = "명령 실행";
+"tab.approval.web.fetch" = "웹 가져오기";
+"tab.approval.web.search" = "웹 검색";
+"tab.parallel.task" = "병렬 작업";
+"tab.cancelled" = "취소됨";
+"tab.force.stopped" = "강제 중지됨";
+"tab.cancel.revert.done" = "작업 취소 및 변경사항 롤백 완료";
+"tab.cancel.revert.backup" = "백업 폴더: %@";
+"tab.sleepwork.stopped" = "슬립워크 중단";
+"tab.sleepwork.stopped.detail" = "토큰 예산의 2배를 초과했습니다. 다음에 이어서 작업할지 확인해주세요.";
+"tab.token.protection.stopped" = "토큰 보호로 중단";
+
+/* Character System */
+"character.name.placeholder" = "이름";
+"character.unlock.required" = "잠금 해제 필요";
+"character.unlock.achievement" = "도전과제 「%@」을(를) 달성하면\n이 캐릭터를 고용할 수 있습니다!";
+"character.unlock.generic" = "도전과제를 달성하면 잠금이 해제됩니다.";
+
+/* Prompt Favorites */
+"fav.title" = "프롬프트 즐겨찾기";
+"fav.toggle.hint" = "Cmd+P 토글";
+"fav.add.help" = "새 즐겨찾기 추가";
+"fav.edit" = "편집";
+"fav.new" = "새 즐겨찾기";
+"fav.edit.title" = "즐겨찾기 편집";
+"fav.field.name" = "이름";
+"fav.field.name.placeholder" = "예: 코드 리뷰";
+"fav.field.prompt" = "프롬프트";
+"fav.field.shortcut" = "단축어 (선택)";
+"fav.field.shortcut.placeholder" = "예: review";
+"fav.field.icon" = "아이콘";
+
+/* Theme */
+"theme.custom.preview" = "도피스 커스텀 테마 미리보기";
+
+/* Claude Install */
+"claude.install.message" = "Claude Code CLI가 설치되어 있지 않습니다.\n\n터미널에서 아래 명령어로 설치해주세요:\n\nnpm install -g @anthropic-ai/claude-code\n\n이미 설치했는데 이 메시지가 보인다면:\n• PATH가 설정되지 않았을 수 있습니다\n• 터미널에서 'which claude'를 실행해 경로를 확인하세요\n• nvm/fnm 등 버전 매니저를 사용 중이라면 셸 프로파일(.zshrc)에 초기화 코드가 있는지 확인하세요\n\n설치 후 '재시도' 버튼을 눌러주세요.";
+
+/* App Quit */
+"quit.running.title" = "진행 중인 작업이 %d개 있습니다";
+"quit.running.message" = "앱을 종료하면 현재 진행 중인 작업은 완료되지 않습니다.\n자동 롤백은 하지 않고, 복구 폴더를 만든 뒤 안전하게 중단할 수 있습니다.";
+"quit.backup.and.quit" = "백업 후 중단하고 종료";
+"quit.force" = "그대로 종료";

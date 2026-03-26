@@ -44,6 +44,7 @@ class UpdateChecker: ObservableObject {
 
     private var downloadTask: URLSessionDownloadTask?
     private var downloadDelegate: DownloadDelegate?
+    private var downloadSession: URLSession?
     private var downloadedAppURL: URL?
 
     init() {
@@ -76,14 +77,14 @@ class UpdateChecker: ObservableObject {
 
                 if let error {
                     print("[도피스] 업데이트 확인 실패: \(error.localizedDescription)")
-                    self.state = .failed(message: "네트워크 오류: \(error.localizedDescription)")
+                    self.state = .failed(message: String(format: NSLocalizedString("update.network.error", comment: ""), error.localizedDescription))
                     return
                 }
 
                 guard let data,
                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                       let tagName = json["tag_name"] as? String else {
-                    self.state = .failed(message: "GitHub 응답을 파싱할 수 없습니다.")
+                    self.state = .failed(message: NSLocalizedString("update.parse.error", comment: ""))
                     return
                 }
 
@@ -140,7 +141,7 @@ class UpdateChecker: ObservableObject {
 
     func performUpdate() {
         guard !downloadURL.isEmpty, let url = URL(string: downloadURL) else {
-            state = .failed(message: "다운로드 URL을 찾을 수 없습니다. GitHub에서 직접 다운로드해주세요.")
+            state = .failed(message: NSLocalizedString("update.no.download.url", comment: ""))
             return
         }
 
@@ -158,7 +159,10 @@ class UpdateChecker: ObservableObject {
         }
         self.downloadDelegate = delegate
 
+        // 이전 세션이 있으면 정리 (URLSession은 delegate를 강하게 참조하므로 반드시 invalidate)
+        downloadSession?.invalidateAndCancel()
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        downloadSession = session
         downloadTask = session.downloadTask(with: url)
         downloadTask?.resume()
         print("[도피스] 다운로드 시작: \(downloadURL)")
@@ -168,16 +172,18 @@ class UpdateChecker: ObservableObject {
         downloadTask?.cancel()
         downloadTask = nil
         downloadDelegate = nil
+        downloadSession?.invalidateAndCancel()
+        downloadSession = nil
         state = .available
     }
 
     private func handleDownloadComplete(tempURL: URL?, error: Error?) {
         if let error {
-            state = .failed(message: "다운로드 실패: \(error.localizedDescription)")
+            state = .failed(message: String(format: NSLocalizedString("update.download.failed", comment: ""), error.localizedDescription))
             return
         }
         guard let tempURL else {
-            state = .failed(message: "다운로드된 파일을 찾을 수 없습니다.")
+            state = .failed(message: NSLocalizedString("update.file.not.found", comment: ""))
             return
         }
 
@@ -194,9 +200,9 @@ class UpdateChecker: ObservableObject {
                     self.state = .readyToInstall
                     print("[도피스] 설치 준비 완료: \(appURL.path)")
                 case .failure(let error):
-                    self.state = .failed(message: "압축 해제 실패: \(error.localizedDescription)")
+                    self.state = .failed(message: String(format: NSLocalizedString("update.extract.failed", comment: ""), error.localizedDescription))
                 case .none:
-                    self.state = .failed(message: "알 수 없는 오류")
+                    self.state = .failed(message: NSLocalizedString("update.unknown.error", comment: ""))
                 }
             }
         }
@@ -236,10 +242,14 @@ class UpdateChecker: ObservableObject {
                 }
             }
 
+            // .app을 찾지 못했으면 임시 디렉토리 정리
+            try? FileManager.default.removeItem(at: tempDir)
             return .failure(NSError(domain: "UpdateChecker", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "압축 해제된 파일에서 .app을 찾을 수 없습니다."
+                NSLocalizedDescriptionKey: NSLocalizedString("update.no.app.found", comment: "")
             ]))
         } catch {
+            // 실패 시 임시 디렉토리 정리
+            try? FileManager.default.removeItem(at: tempDir)
             return .failure(error)
         }
     }
@@ -248,7 +258,7 @@ class UpdateChecker: ObservableObject {
 
     func installAndRestart() {
         guard let newAppURL = downloadedAppURL else {
-            state = .failed(message: "설치할 앱을 찾을 수 없습니다.")
+            state = .failed(message: NSLocalizedString("update.install.not.found", comment: ""))
             return
         }
 
@@ -295,7 +305,7 @@ class UpdateChecker: ObservableObject {
                 NSApp.terminate(nil)
             }
         } catch {
-            state = .failed(message: "설치 스크립트 실행 실패: \(error.localizedDescription)")
+            state = .failed(message: String(format: NSLocalizedString("update.install.script.failed", comment: ""), error.localizedDescription))
         }
     }
 
@@ -309,6 +319,8 @@ class UpdateChecker: ObservableObject {
         downloadTask?.cancel()
         downloadTask = nil
         downloadDelegate = nil
+        downloadSession?.invalidateAndCancel()
+        downloadSession = nil
         downloadedAppURL = nil
         state = .idle
     }
@@ -344,8 +356,10 @@ private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
         let dest = FileManager.default.temporaryDirectory.appendingPathComponent("doffice-download-\(UUID().uuidString).zip")
         do {
             try FileManager.default.copyItem(at: location, to: dest)
+            session.finishTasksAndInvalidate()
             onComplete(dest, nil)
         } catch {
+            session.finishTasksAndInvalidate()
             onComplete(nil, error)
         }
     }
@@ -358,6 +372,7 @@ private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error, (error as NSError).code != NSURLErrorCancelled {
+            session.finishTasksAndInvalidate()
             onComplete(nil, error)
         }
     }
@@ -426,14 +441,14 @@ struct UpdateSheet: View {
 
     private var stateTitle: String {
         switch updater.state {
-        case .idle, .checking: return "업데이트 확인 중"
-        case .noUpdate: return "최신 버전입니다"
-        case .available: return "새 버전이 있습니다"
-        case .downloading: return "다운로드 중"
-        case .extracting: return "압축 해제 중"
-        case .readyToInstall: return "설치 준비 완료"
-        case .installing: return "설치 중..."
-        case .failed: return "업데이트 실패"
+        case .idle, .checking: return NSLocalizedString("update.state.checking", comment: "")
+        case .noUpdate: return NSLocalizedString("update.state.latest", comment: "")
+        case .available: return NSLocalizedString("update.state.available", comment: "")
+        case .downloading: return NSLocalizedString("update.state.downloading", comment: "")
+        case .extracting: return NSLocalizedString("update.state.extracting", comment: "")
+        case .readyToInstall: return NSLocalizedString("update.state.ready", comment: "")
+        case .installing: return NSLocalizedString("update.state.installing", comment: "")
+        case .failed: return NSLocalizedString("update.state.failed", comment: "")
         }
     }
 
@@ -442,7 +457,7 @@ struct UpdateSheet: View {
     private var versionCompareView: some View {
         HStack(spacing: 16) {
             VStack(spacing: 4) {
-                Text("현재").font(Theme.mono(9)).foregroundColor(Theme.textDim)
+                Text(NSLocalizedString("update.label.current", comment: "")).font(Theme.mono(9)).foregroundColor(Theme.textDim)
                 Text("v\(updater.currentVersion)")
                     .font(Theme.mono(13, weight: .bold)).foregroundColor(Theme.textSecondary)
             }
@@ -450,7 +465,7 @@ struct UpdateSheet: View {
                 .font(.system(size: Theme.iconSize(14)))
                 .foregroundColor(Theme.green)
             VStack(spacing: 4) {
-                Text("최신").font(Theme.mono(9)).foregroundColor(Theme.textDim)
+                Text(NSLocalizedString("update.label.latest", comment: "")).font(Theme.mono(9)).foregroundColor(Theme.textDim)
                 Text("v\(updater.latestVersion.isEmpty ? "..." : updater.latestVersion)")
                     .font(Theme.mono(13, weight: .bold)).foregroundColor(Theme.green)
             }
@@ -466,7 +481,7 @@ struct UpdateSheet: View {
     private var releaseNotesView: some View {
         if !updater.releaseNotes.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
-                Text("변경 사항").font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.textDim)
+                Text(NSLocalizedString("update.release.notes", comment: "")).font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.textDim)
                 ScrollView {
                     Text(updater.releaseNotes)
                         .font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
@@ -487,7 +502,7 @@ struct UpdateSheet: View {
         case .checking:
             HStack(spacing: 8) {
                 ProgressView().scaleEffect(0.7)
-                Text("최신 버전을 확인하고 있습니다...")
+                Text(NSLocalizedString("update.checking.msg", comment: ""))
                     .font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
             }
 
@@ -496,7 +511,7 @@ struct UpdateSheet: View {
                 ProgressView(value: progress)
                     .tint(Theme.accent)
                 HStack {
-                    Text("다운로드 중...")
+                    Text(NSLocalizedString("update.downloading.msg", comment: ""))
                         .font(Theme.mono(9)).foregroundColor(Theme.textDim)
                     Spacer()
                     Text("\(Int(progress * 100))%")
@@ -507,7 +522,7 @@ struct UpdateSheet: View {
         case .extracting:
             HStack(spacing: 8) {
                 ProgressView().scaleEffect(0.7)
-                Text("압축을 해제하고 있습니다...")
+                Text(NSLocalizedString("update.extracting.msg", comment: ""))
                     .font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
             }
 
@@ -515,14 +530,14 @@ struct UpdateSheet: View {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: Theme.iconSize(12))).foregroundColor(Theme.green)
-                Text("다운로드가 완료되었습니다. 재시작하면 새 버전이 적용됩니다.")
+                Text(NSLocalizedString("update.ready.msg", comment: ""))
                     .font(Theme.mono(9)).foregroundColor(Theme.green)
             }
 
         case .installing:
             HStack(spacing: 8) {
                 ProgressView().scaleEffect(0.7)
-                Text("앱을 교체하고 재시작합니다...")
+                Text(NSLocalizedString("update.installing.msg", comment: ""))
                     .font(Theme.mono(10)).foregroundColor(Theme.purple)
             }
 
@@ -549,7 +564,7 @@ struct UpdateSheet: View {
         case .available:
             HStack(spacing: 10) {
                 Button(action: { dismiss() }) {
-                    Text("나중에").font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
+                    Text(NSLocalizedString("update.later", comment: "")).font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
                         .padding(.horizontal, 16).padding(.vertical, 8)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.4), lineWidth: 1))
@@ -558,7 +573,7 @@ struct UpdateSheet: View {
                 Button(action: { updater.openReleasePage() }) {
                     HStack(spacing: 4) {
                         Image(systemName: "safari").font(.system(size: Theme.iconSize(9)))
-                        Text("수동 다운로드").font(Theme.mono(10))
+                        Text(NSLocalizedString("update.manual.download", comment: "")).font(Theme.mono(10))
                     }
                     .foregroundColor(Theme.accent)
                     .padding(.horizontal, 12).padding(.vertical, 8)
@@ -569,7 +584,7 @@ struct UpdateSheet: View {
                 Button(action: { updater.performUpdate() }) {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.down.circle.fill").font(.system(size: Theme.iconSize(10)))
-                        Text("지금 업데이트").font(Theme.mono(10, weight: .bold))
+                        Text(NSLocalizedString("update.now", comment: "")).font(Theme.mono(10, weight: .bold))
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 18).padding(.vertical, 8)
@@ -579,7 +594,7 @@ struct UpdateSheet: View {
 
         case .downloading:
             Button(action: { updater.cancelDownload() }) {
-                Text("취소").font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
+                Text(NSLocalizedString("update.cancel", comment: "")).font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
                     .padding(.horizontal, 16).padding(.vertical, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.4), lineWidth: 1))
@@ -588,7 +603,7 @@ struct UpdateSheet: View {
         case .readyToInstall:
             HStack(spacing: 10) {
                 Button(action: { dismiss() }) {
-                    Text("종료 시 적용").font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
+                    Text(NSLocalizedString("update.apply.on.quit", comment: "")).font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
                         .padding(.horizontal, 16).padding(.vertical, 8)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.4), lineWidth: 1))
@@ -597,7 +612,7 @@ struct UpdateSheet: View {
                 Button(action: { updater.installAndRestart() }) {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.clockwise").font(.system(size: Theme.iconSize(10)))
-                        Text("지금 재시작하고 업데이트").font(Theme.mono(10, weight: .bold))
+                        Text(NSLocalizedString("update.restart.now", comment: "")).font(Theme.mono(10, weight: .bold))
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 18).padding(.vertical, 8)
@@ -608,7 +623,7 @@ struct UpdateSheet: View {
         case .failed:
             HStack(spacing: 10) {
                 Button(action: { dismiss() }) {
-                    Text("닫기").font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
+                    Text(NSLocalizedString("update.close", comment: "")).font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
                         .padding(.horizontal, 16).padding(.vertical, 8)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.4), lineWidth: 1))
@@ -617,7 +632,7 @@ struct UpdateSheet: View {
                 Button(action: { updater.openReleasePage() }) {
                     HStack(spacing: 4) {
                         Image(systemName: "safari").font(.system(size: Theme.iconSize(9)))
-                        Text("수동 다운로드").font(Theme.mono(10))
+                        Text(NSLocalizedString("update.manual.download", comment: "")).font(Theme.mono(10))
                     }
                     .foregroundColor(Theme.accent)
                     .padding(.horizontal, 12).padding(.vertical, 8)
@@ -628,7 +643,7 @@ struct UpdateSheet: View {
                 Button(action: { updater.checkForUpdates() }) {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.clockwise").font(.system(size: Theme.iconSize(10)))
-                        Text("재시도").font(Theme.mono(10, weight: .bold))
+                        Text(NSLocalizedString("update.retry", comment: "")).font(Theme.mono(10, weight: .bold))
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 16).padding(.vertical, 8)
@@ -638,7 +653,7 @@ struct UpdateSheet: View {
 
         case .noUpdate:
             Button(action: { dismiss() }) {
-                Text("확인").font(Theme.mono(10, weight: .bold)).foregroundColor(.white)
+                Text(NSLocalizedString("update.ok", comment: "")).font(Theme.mono(10, weight: .bold)).foregroundColor(.white)
                     .padding(.horizontal, 24).padding(.vertical, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accent))
             }.buttonStyle(.plain).keyboardShortcut(.return)

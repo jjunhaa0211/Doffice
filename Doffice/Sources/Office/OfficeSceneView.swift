@@ -290,8 +290,8 @@ struct OfficeSceneView: View {
                 .stroke(tab.workerColor.opacity(0.26), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(tab.workerName) 작업 정보")
-        .accessibilityValue("\(status.label), 토큰 \(tab.officeCompactTokenText), 파일 \(tab.fileChanges.count)개")
+        .accessibilityLabel(String(format: NSLocalizedString("office.accessibility.worker.info", comment: ""), tab.workerName))
+        .accessibilityValue(String(format: NSLocalizedString("office.accessibility.worker.value", comment: ""), status.label, tab.officeCompactTokenText, tab.fileChanges.count))
     }
 
     private func selectionBadge(_ label: String, tint: Color) -> some View {

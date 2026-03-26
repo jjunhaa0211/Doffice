@@ -20,6 +20,8 @@ struct MainView: View {
     @State private var showBillingAlert = false
     @State private var billingAlertMessage = ""
     @ObservedObject private var updater = UpdateChecker.shared
+    @ObservedObject private var pluginHost = PluginHost.shared
+    @State private var activePluginPanelId: String?
     @ObservedObject private var sessionNotifications = SessionNotificationManager.shared
     @Environment(\.openWindow) private var openWindow
     @AppStorage("officeExpanded") private var officeExpanded = true
@@ -59,15 +61,25 @@ struct MainView: View {
                     }
 
                     ZStack {
-                        switch viewMode {
-                        case .split:
-                            splitView
-                        case .office:
-                            officeFullView
-                        case .terminal:
-                            TerminalAreaView()
-                        case .strip:
-                            stripView
+                        if let panelId = activePluginPanelId,
+                           let panel = pluginHost.panels.first(where: { $0.id == panelId }) {
+                            // 플러그인 패널 표시
+                            VStack(spacing: 0) {
+                                pluginPanelHeader(panel)
+                                PluginPanelView(htmlURL: panel.htmlURL, pluginName: panel.pluginName)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                        } else {
+                            switch viewMode {
+                            case .split:
+                                splitView
+                            case .office:
+                                officeFullView
+                            case .terminal:
+                                TerminalAreaView()
+                            case .strip:
+                                stripView
+                            }
                         }
                     }
                 }
@@ -199,7 +211,7 @@ struct MainView: View {
             }
             Button(NSLocalizedString("confirm", comment: ""), role: .cancel) {}
         } message: {
-            Text("Claude Code CLI가 설치되어 있지 않습니다.\n\n터미널에서 아래 명령어로 설치해주세요:\n\nnpm install -g @anthropic-ai/claude-code\n\n이미 설치했는데 이 메시지가 보인다면:\n• PATH가 설정되지 않았을 수 있습니다\n• 터미널에서 'which claude'를 실행해 경로를 확인하세요\n• nvm/fnm 등 버전 매니저를 사용 중이라면 셸 프로파일(.zshrc)에 초기화 코드가 있는지 확인하세요\n\n설치 후 '재시도' 버튼을 눌러주세요.")
+            Text(NSLocalizedString("claude.install.message", comment: ""))
         }
         .alert(roleNoticeTitle, isPresented: $showRoleNoticeAlert) {
             Button(NSLocalizedString("confirm", comment: ""), role: .cancel) {}
@@ -252,6 +264,8 @@ struct MainView: View {
                     showClaudeNotInstalledAlert = true
                 }
             }
+            // 플러그인 확장 포인트 로드
+            PluginHost.shared.reload()
             // Daily login reward
             if let reward = AchievementManager.shared.claimDailyReward() {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
@@ -628,6 +642,44 @@ struct MainView: View {
                 }
             }
 
+            // 플러그인 패널 탭
+            if !pluginHost.panels.isEmpty {
+                Rectangle().fill(Theme.border).frame(width: 1, height: 14)
+                ForEach(pluginHost.panels) { panel in
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            activePluginPanelId = activePluginPanelId == panel.id ? nil : panel.id
+                        }
+                    }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: panel.icon)
+                                .font(.system(size: Theme.chromeIconSize(9), weight: .medium))
+                            Text(panel.title)
+                                .font(Theme.chrome(8))
+                        }
+                        .foregroundColor(activePluginPanelId == panel.id ? Theme.accent : Theme.textDim)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(activePluginPanelId == panel.id ? Theme.accent.opacity(0.1) : Color.clear))
+                    }.buttonStyle(.plain)
+                }
+            }
+
+            // 플러그인 상태바 위젯
+            if !pluginHost.statusBarItems.isEmpty {
+                Rectangle().fill(Theme.border).frame(width: 1, height: 14)
+                ForEach(pluginHost.statusBarItems) { item in
+                    HStack(spacing: 3) {
+                        if !item.icon.isEmpty {
+                            Image(systemName: item.icon)
+                                .font(.system(size: Theme.chromeIconSize(8)))
+                        }
+                        Text(item.text)
+                            .font(Theme.chrome(8))
+                    }
+                    .foregroundColor(Theme.textSecondary)
+                }
+            }
+
             Spacer()
 
             Text("⌘P palette · ⌘T new · ⌘J center · ⌘1-9 switch · ⌘K clear")
@@ -640,6 +692,29 @@ struct MainView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(NSLocalizedString("main.a11y.session.summary", comment: ""))
         .accessibilityValue(statusBarAccessibilitySummary)
+    }
+
+    private func pluginPanelHeader(_ panel: PluginHost.LoadedPanel) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: panel.icon)
+                .font(.system(size: Theme.iconSize(12), weight: .bold))
+                .foregroundColor(Theme.accent)
+            Text(panel.title)
+                .font(Theme.mono(11, weight: .bold))
+                .foregroundColor(Theme.textPrimary)
+            Text("by \(panel.pluginName)")
+                .font(Theme.mono(8))
+                .foregroundColor(Theme.textDim)
+            Spacer()
+            Button(action: { withAnimation { activePluginPanelId = nil } }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(Theme.textDim)
+            }.buttonStyle(.plain)
+        }
+        .padding(.horizontal, Theme.sp3).padding(.vertical, 6)
+        .background(Theme.bgCard)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.border).frame(height: 1) }
     }
 
     private var statusBarAccessibilitySummary: String {
@@ -705,7 +780,7 @@ struct BillingAlertOverlay: View {
                     Text("💳").font(.system(size: 36))
                 }
 
-                Text("Claude 결제일 알림")
+                Text(NSLocalizedString("main.billing.alert.title", comment: ""))
                     .font(Theme.mono(15, weight: .black))
                     .foregroundColor(Theme.textPrimary)
 
@@ -826,7 +901,7 @@ struct DailyRewardOverlay: View {
                     .foregroundColor(Theme.textPrimary)
                     .padding(.bottom, 4)
 
-                Text("\(reward.streak)일 연속 출석")
+                Text(String(format: NSLocalizedString("main.attendance.streak", comment: ""), reward.streak))
                     .font(Theme.mono(11, weight: .bold))
                     .foregroundColor(streakColor)
                     .padding(.bottom, 16)
@@ -954,7 +1029,7 @@ struct SessionLockOverlay: View {
                     .foregroundColor(Theme.textDim)
 
                 if !settings.lockPIN.isEmpty {
-                    SecureField("PIN 입력", text: $pinInput)
+                    SecureField(NSLocalizedString("main.pin.input", comment: ""), text: $pinInput)
                         .font(Theme.monoNormal)
                         .textFieldStyle(.plain)
                         .frame(width: 160)
@@ -974,7 +1049,7 @@ struct SessionLockOverlay: View {
                         }
 
                     if wrongPin {
-                        Text("PIN이 틀렸습니다")
+                        Text(NSLocalizedString("main.pin.wrong", comment: ""))
                             .font(Theme.mono(9, weight: .bold))
                             .foregroundColor(Theme.red)
                     }
@@ -1234,7 +1309,7 @@ struct BugReportView: View {
 
         // mailto URL (이미지는 첨부 안내)
         let mailBody = body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let mailSubject = "[도피스 Bug] \(title)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let mailSubject = String(format: NSLocalizedString("bug.report.subject", comment: ""), title).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         let mailURL = "mailto:goodjunha@gmail.com?subject=\(mailSubject)&body=\(mailBody)"
 
         if let url = URL(string: mailURL) {

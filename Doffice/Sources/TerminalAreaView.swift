@@ -175,14 +175,14 @@ struct EventStreamView: View {
             let cmds = EventStreamView.allSlashCommands
             if let query = args.first?.lowercased() {
                 let filtered = cmds.filter { $0.name.contains(query) || $0.description.contains(query) }
-                if filtered.isEmpty { tab.appendBlock(.status(message: "⚠️ '\(query)' 관련 명령어를 찾을 수 없습니다")); return }
+                if filtered.isEmpty { tab.appendBlock(.status(message: String(format: NSLocalizedString("terminal.cmd.not.found", comment: ""), query))); return }
                 let lines = filtered.map { "/\($0.name)\($0.usage.isEmpty ? "" : " \($0.usage)") — \($0.description)" }
-                tab.appendBlock(.status(message: "🔍 검색 결과\n" + lines.joined(separator: "\n")))
+                tab.appendBlock(.status(message: NSLocalizedString("terminal.search.result", comment: "") + lines.joined(separator: "\n")))
             } else {
                 var grouped: [String: [SlashCommand]] = [:]
                 for c in cmds { grouped[c.category, default: []].append(c) }
                 let order = [NSLocalizedString("slash.category.general", comment: ""), NSLocalizedString("slash.category.model", comment: ""), NSLocalizedString("slash.category.session", comment: ""), NSLocalizedString("slash.category.display", comment: ""), "Git", NSLocalizedString("slash.category.tools", comment: "")]
-                var text = "📜 명령어 목록 (/help <키워드>로 검색)\n"
+                var text = "📜 " + NSLocalizedString("help.command.list", comment: "") + "\n"
                 for cat in order {
                     guard let list = grouped[cat] else { continue }
                     text += "\n[\(cat)]\n"
@@ -193,22 +193,22 @@ struct EventStreamView: View {
         },
         SlashCommand("clear", NSLocalizedString("slash.cmd.clear", comment: ""), category: NSLocalizedString("slash.category.general", comment: "")) { tab, _, _ in
             tab.clearBlocks()
-            tab.appendBlock(.status(message: "🗑️ 로그가 초기화되었습니다"))
+            tab.appendBlock(.status(message: NSLocalizedString("terminal.log.cleared", comment: "")))
         },
         SlashCommand("cancel", NSLocalizedString("slash.cmd.cancel", comment: ""), category: NSLocalizedString("slash.category.general", comment: "")) { tab, _, _ in
             if tab.isProcessing { tab.cancelProcessing() }
-            else { tab.appendBlock(.status(message: "ℹ️ 실행 중인 작업이 없습니다")) }
+            else { tab.appendBlock(.status(message: NSLocalizedString("terminal.no.running.task", comment: ""))) }
         },
         SlashCommand("stop", NSLocalizedString("slash.cmd.stop", comment: ""), category: NSLocalizedString("slash.category.general", comment: "")) { tab, _, _ in
             if tab.isProcessing || tab.isRunning { tab.forceStop() }
-            else { tab.appendBlock(.status(message: "ℹ️ 실행 중인 작업이 없습니다")) }
+            else { tab.appendBlock(.status(message: NSLocalizedString("terminal.no.running.task", comment: ""))) }
         },
         SlashCommand("copy", NSLocalizedString("slash.cmd.copy", comment: ""), category: NSLocalizedString("slash.category.general", comment: "")) { tab, _, _ in
             if let last = tab.blocks.last(where: { if case .thought = $0.blockType { return true }; if case .completion = $0.blockType { return true }; return false }) {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(last.content, forType: .string)
-                tab.appendBlock(.status(message: "📋 클립보드에 복사되었습니다 (\(last.content.count)자)"))
-            } else { tab.appendBlock(.status(message: "⚠️ 복사할 응답이 없습니다")) }
+                tab.appendBlock(.status(message: String(format: NSLocalizedString("terminal.copied.to.clipboard", comment: ""), last.content.count)))
+            } else { tab.appendBlock(.status(message: NSLocalizedString("terminal.no.response.to.copy", comment: ""))) }
         },
         SlashCommand("export", NSLocalizedString("slash.cmd.export", comment: ""), category: NSLocalizedString("slash.category.general", comment: "")) { tab, _, _ in
             let text = tab.blocks.map { block -> String in
@@ -229,8 +229,8 @@ struct EventStreamView: View {
             let dateStr = { let f = DateFormatter(); f.dateFormat = "yyyyMMdd_HHmmss"; return f.string(from: Date()) }()
             let path = "\(tab.projectPath)/workman_log_\(dateStr).txt"
             do { try text.write(toFile: path, atomically: true, encoding: .utf8)
-                tab.appendBlock(.status(message: "📁 로그 저장: \(path)"))
-            } catch { tab.appendBlock(.status(message: "⚠️ 저장 실패: \(error.localizedDescription)")) }
+                tab.appendBlock(.status(message: String(format: NSLocalizedString("terminal.log.saved", comment: ""), path)))
+            } catch { tab.appendBlock(.status(message: String(format: NSLocalizedString("terminal.log.save.failed", comment: ""), error.localizedDescription))) }
         },
 
         // ── 모델/설정 ──
@@ -238,17 +238,17 @@ struct EventStreamView: View {
             guard let arg = args.first?.lowercased(),
                   let model = ClaudeModel.allCases.first(where: { $0.rawValue.lowercased().contains(arg) }) else {
                 let current = tab.selectedModel
-                tab.appendBlock(.status(message: "🤖 현재 모델: \(current.icon) \(current.rawValue)\n사용법: /model <opus|sonnet|haiku>"))
+                tab.appendBlock(.status(message: String(format: NSLocalizedString("terminal.model.current", comment: ""), current.icon, current.rawValue)))
                 return
             }
             tab.selectedModel = model
-            tab.appendBlock(.status(message: "🤖 모델 변경: \(model.icon) \(model.rawValue)"))
+            tab.appendBlock(.status(message: String(format: NSLocalizedString("terminal.model.changed", comment: ""), model.icon, model.rawValue)))
         },
         SlashCommand("effort", NSLocalizedString("slash.cmd.effort", comment: ""), usage: "<low|medium|high|max>", category: NSLocalizedString("slash.category.model", comment: "")) { tab, _, args in
             guard let arg = args.first?.lowercased(),
                   let effort = EffortLevel.allCases.first(where: { $0.rawValue.lowercased() == arg }) else {
                 let current = tab.effortLevel
-                tab.appendBlock(.status(message: "💪 현재 노력 수준: \(current.icon) \(current.rawValue)\n사용법: /effort <low|medium|high|max>"))
+                tab.appendBlock(.status(message: String(format: NSLocalizedString("terminal.effort.current", comment: ""), current.icon, current.rawValue)))
                 return
             }
             tab.effortLevel = effort
@@ -256,7 +256,7 @@ struct EventStreamView: View {
         },
         SlashCommand("output", NSLocalizedString("slash.cmd.output", comment: ""), usage: "<full|realtime|result>", category: NSLocalizedString("slash.category.model", comment: "")) { tab, _, args in
             guard let arg = args.first?.lowercased() else {
-                tab.appendBlock(.status(message: String(format: NSLocalizedString("slash.status.output.current", comment: ""), tab.outputMode.icon, tab.outputMode.rawValue)))
+                tab.appendBlock(.status(message: String(format: NSLocalizedString("slash.status.output.current", comment: ""), tab.outputMode.icon, tab.outputMode.displayName)))
                 return
             }
             let modeMap: [String: OutputMode] = ["full": .full, "전체": .full, "realtime": .realtime, "실시간": .realtime, "result": .resultOnly, "결과만": .resultOnly, "결과": .resultOnly]
@@ -404,7 +404,7 @@ struct EventStreamView: View {
                 NSLocalizedString("slash.status.config.title", comment: ""),
                 String(format: NSLocalizedString("slash.status.config.model", comment: ""), tab.selectedModel.icon, tab.selectedModel.rawValue),
                 String(format: NSLocalizedString("slash.status.config.effort", comment: ""), tab.effortLevel.icon, tab.effortLevel.rawValue),
-                String(format: NSLocalizedString("slash.status.config.output", comment: ""), tab.outputMode.icon, tab.outputMode.rawValue),
+                String(format: NSLocalizedString("slash.status.config.output", comment: ""), tab.outputMode.icon, tab.outputMode.displayName),
                 String(format: NSLocalizedString("slash.status.config.permission", comment: ""), tab.permissionMode.icon, tab.permissionMode.displayName),
                 String(format: NSLocalizedString("slash.status.config.budget", comment: ""), tab.maxBudgetUSD > 0 ? "$\(String(format: "%.2f", tab.maxBudgetUSD))" : NSLocalizedString("slash.status.budget.unlimited", comment: "")),
                 String(format: NSLocalizedString("slash.status.config.worktree", comment: ""), tab.useWorktree ? "✅" : "❌"),
@@ -502,6 +502,10 @@ struct EventStreamView: View {
                 tab1 = t1; tab2 = t2
             } else {
                 // 인자 없으면 처음 2개 비교
+                guard allTabs.count >= 2 else {
+                    tab.appendBlock(.status(message: NSLocalizedString("slash.compare.need.two", comment: "")))
+                    return
+                }
                 tab1 = allTabs[0]; tab2 = allTabs[1]
             }
 
@@ -564,7 +568,7 @@ struct EventStreamView: View {
                 case .error: icon = "❌"
                 case .completed: icon = "✅"
                 }
-                lines.append("\(time) \(icon) \(event.type.rawValue): \(event.detail)")
+                lines.append("\(time) \(icon) \(event.type.displayName): \(event.detail)")
             }
             tab.appendBlock(.status(message: lines.joined(separator: "\n")))
         },
@@ -646,8 +650,10 @@ struct EventStreamView: View {
     var body: some View {
         if settings.rawTerminalMode {
             rawTerminalBody
+                .id("raw-\(tab.id)")  // 모드 전환 시 뷰 완전 재생성
         } else {
             normalBody
+                .id("normal-\(tab.id)")
         }
     }
 
@@ -963,7 +969,7 @@ struct EventStreamView: View {
                 .padding(.horizontal, 5).padding(.vertical, 2)
                 .background(active ? color.opacity(0.1) : .clear).cornerRadius(3)
         }.buttonStyle(.plain)
-        .accessibilityLabel("\(tool) 필터")
+        .accessibilityLabel(String(format: NSLocalizedString("terminal.filter.a11y", comment: ""), tool))
     }
 
     private func toolColor(_ name: String) -> Color {
@@ -1341,7 +1347,7 @@ struct EventStreamView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.title = NSLocalizedString("terminal.image.attach.title", comment: "")
-        panel.message = "Claude에 보낼 이미지를 선택하세요"
+        panel.message = NSLocalizedString("terminal.image.pick.message", comment: "")
         if panel.runModal() == .OK {
             tab.attachedImages.append(contentsOf: panel.urls)
         }
@@ -1385,10 +1391,10 @@ struct EventStreamView: View {
                 Image(systemName: "command").font(Theme.chrome(8)).foregroundColor(Theme.accent)
                 Text(NSLocalizedString("terminal.command.label", comment: "")).font(Theme.chrome(8, weight: .bold)).foregroundColor(Theme.accent)
                 if commands.count < Self.allSlashCommands.count {
-                    Text("\(commands.count)개 일치").font(Theme.chrome(7)).foregroundColor(Theme.textDim)
+                    Text(String(format: NSLocalizedString("terminal.cmd.match.count", comment: ""), commands.count)).font(Theme.chrome(7)).foregroundColor(Theme.textDim)
                 }
                 Spacer()
-                Text("↑↓ 선택  Tab 완성  Enter 실행  Esc 닫기").font(Theme.chrome(7)).foregroundColor(Theme.textDim)
+                Text(NSLocalizedString("terminal.cmd.suggestion.hint", comment: "")).font(Theme.chrome(7)).foregroundColor(Theme.textDim)
             }
             .padding(.horizontal, 12).padding(.vertical, 4)
 
@@ -1470,7 +1476,8 @@ struct EventStreamView: View {
         }
 
         guard let lastUserPromptIndex else { return nil }
-        let responseBlocks = tab.blocks.suffix(from: tab.blocks.index(after: lastUserPromptIndex))
+        let nextIdx = tab.blocks.index(after: lastUserPromptIndex)
+        let responseBlocks = nextIdx < tab.blocks.endIndex ? tab.blocks.suffix(from: nextIdx) : ArraySlice<StreamBlock>()
         let responseText = responseBlocks.compactMap { block -> String? in
             if case .thought = block.blockType {
                 return block.content
@@ -1930,10 +1937,14 @@ private struct PlanSelectionRequest {
 
         // Parenthesized: (1), (2), (A), (B)
         if trimmed.hasPrefix("("), let closeIdx = trimmed.firstIndex(of: ")") {
-            let inner = trimmed[trimmed.index(after: trimmed.startIndex)..<closeIdx]
+            let afterStart = trimmed.index(after: trimmed.startIndex)
+            guard afterStart < trimmed.endIndex, afterStart <= closeIdx else { return nil }
+            let inner = trimmed[afterStart..<closeIdx]
             guard inner.count >= 1, inner.count <= 2 else { return nil }
             let key = String(inner).uppercased()
-            let label = String(trimmed[trimmed.index(after: closeIdx)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let afterClose = trimmed.index(after: closeIdx)
+            guard afterClose <= trimmed.endIndex else { return nil }
+            let label = String(trimmed[afterClose...]).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !label.isEmpty else { return nil }
             return Option(id: "plan-option-\(key)-\(label)", key: key, label: label)
         }
@@ -2162,12 +2173,12 @@ struct ToolOutputBlockView: View {
             let head = lines.prefix(3)
             let tail = lines.suffix(3)
             let hidden = lines.count - 6
-            return (head + ["    ... \(hidden)줄 생략 ..."] + tail).joined(separator: "\n")
+            return (head + [String(format: NSLocalizedString("terminal.lines.omitted", comment: ""), hidden)] + tail).joined(separator: "\n")
         }
         let head = lines.prefix(6)
         let tail = lines.suffix(4)
         let hidden = lines.count - 10
-        return (head + ["    ... \(hidden)줄 생략 ..."] + tail).joined(separator: "\n")
+        return (head + [String(format: NSLocalizedString("terminal.lines.omitted", comment: ""), hidden)] + tail).joined(separator: "\n")
     }
 
     var body: some View {
@@ -2208,8 +2219,8 @@ struct MarkdownTextView: View {
     let compact: Bool
 
     // Pre-compiled regex patterns (avoid recompilation on every inlineMarkdown call)
-    private static let boldRegex = try! NSRegularExpression(pattern: "\\*\\*(.+?)\\*\\*")
-    private static let codeRegex = try! NSRegularExpression(pattern: "`([^`]+)`")
+    private static let boldRegex = try? NSRegularExpression(pattern: "\\*\\*(.+?)\\*\\*")
+    private static let codeRegex = try? NSRegularExpression(pattern: "`([^`]+)`")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -2259,8 +2270,8 @@ struct MarkdownTextView: View {
             let searchRange = NSRange(location: pos, length: nsText.length - pos)
 
             // Find earliest match of either pattern
-            let boldMatch = Self.boldRegex.firstMatch(in: text, range: searchRange)
-            let codeMatch = Self.codeRegex.firstMatch(in: text, range: searchRange)
+            let boldMatch = Self.boldRegex?.firstMatch(in: text, range: searchRange)
+            let codeMatch = Self.codeRegex?.firstMatch(in: text, range: searchRange)
 
             // Pick whichever comes first
             let match: NSTextCheckingResult?
@@ -2692,7 +2703,7 @@ struct EmptySessionView: View {
             Spacer()
             AppEmptyStateView(
                 title: NSLocalizedString("terminal.no.session.title", comment: ""),
-                message: "Cmd+T 또는 새 세션 시작 버튼으로 바로 작업을 시작할 수 있습니다.",
+                message: NSLocalizedString("terminal.no.session.message", comment: ""),
                 symbol: "plus.circle.fill",
                 tint: Theme.accent
             )
@@ -3026,7 +3037,7 @@ struct NewTabSheet: View {
                     .font(Theme.mono(11, weight: .medium))
                     .foregroundColor(Theme.textPrimary)
 
-                Text("(직접 작성한 코드, 잘 알려진 오픈소스, 또는 팀 프로젝트 등)")
+                Text(NSLocalizedString("terminal.trust.hint", comment: ""))
                     .font(Theme.mono(9))
                     .foregroundColor(Theme.textDim)
 
@@ -3034,7 +3045,7 @@ struct NewTabSheet: View {
 
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill").font(.system(size: Theme.iconSize(9))).foregroundColor(Theme.yellow)
-                    Text("Claude Code가 이 폴더의 파일을 읽고, 수정하고, 실행할 수 있습니다.")
+                    Text(NSLocalizedString("terminal.trust.warning", comment: ""))
                         .font(Theme.mono(9)).foregroundColor(Theme.yellow)
                 }
             }
@@ -3302,7 +3313,7 @@ struct NewTabSheet: View {
                             HStack {
                                 sectionLabel(NSLocalizedString("terminal.config.terminal.count", comment: ""))
                                 Spacer()
-                                Text("\(terminalCount)개")
+                                Text(String(format: NSLocalizedString("terminal.count.items", comment: ""), terminalCount))
                                     .font(Theme.mono(9, weight: .bold))
                                     .foregroundColor(Theme.accent)
                             }
@@ -3449,7 +3460,7 @@ struct NewTabSheet: View {
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "play.fill").font(.system(size: Theme.iconSize(9), weight: .bold))
-                        Text(terminalCount > 1 ? "Create \(terminalCount)개" : "Create")
+                        Text(terminalCount > 1 ? String(format: NSLocalizedString("terminal.create.count", comment: ""), terminalCount) : "Create")
                             .font(Theme.mono(10, weight: .bold))
                     }
                     .appButtonSurface(tone: .accent, prominent: true)
@@ -3497,7 +3508,7 @@ struct NewTabSheet: View {
                         Image(systemName: "dollarsign.circle.fill").font(.system(size: Theme.iconSize(9))).foregroundColor(Theme.yellow)
                         Text(NSLocalizedString("terminal.budget.limit", comment: "")).font(Theme.mono(9, weight: .medium)).foregroundColor(Theme.textSecondary)
                     }
-                    TextField("0 = 무제한", text: $maxBudget)
+                    TextField(NSLocalizedString("terminal.budget.unlimited", comment: ""), text: $maxBudget)
                         .textFieldStyle(.plain)
                         .font(Theme.mono(10))
                         .frame(width: 100)
@@ -3780,7 +3791,7 @@ struct NewTabSheet: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(project.name) 프로젝트")
+                    .accessibilityLabel(String(format: NSLocalizedString("terminal.project.a11y.label", comment: ""), project.name))
                     .accessibilityValue(project.isFavorite ? NSLocalizedString("terminal.project.a11y.favorite", comment: "") : NSLocalizedString("terminal.project.a11y.recent", comment: ""))
                     .accessibilityHint(NSLocalizedString("terminal.project.a11y.hint", comment: ""))
                 }

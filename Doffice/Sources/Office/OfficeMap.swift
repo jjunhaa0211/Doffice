@@ -111,7 +111,7 @@ class OfficeMap: ObservableObject {
                 var path: [TileCoord] = [end]
                 var c = end
                 while let prev = came[c] { path.insert(prev, at: 0); c = prev }
-                path.removeFirst() // start 제거
+                if !path.isEmpty { path.removeFirst() } // start 제거
                 return path
             }
             if closed.contains(current.coord) { continue }

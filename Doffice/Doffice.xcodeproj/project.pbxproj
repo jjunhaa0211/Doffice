@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A50001 /* PluginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50001 /* PluginManager.swift */; };
+		A50002 /* PromptFavorites.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50002 /* PromptFavorites.swift */; };
 		07A2B801437FFDA42534AA17 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AADE3B5D98B955B0C80A5DE3 /* Cocoa.framework */; };
 		273023032BF912399A803AEC /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F35199C3D3E258D53AF607EA /* XCTest.framework */; };
 		28ABC1238F8EE87369BBC7EF /* AuditLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D1AE3CB99EAC879DE06BC9 /* AuditLog.swift */; };
@@ -47,6 +49,7 @@
 		A10016 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = V10002 /* InfoPlist.strings */; };
 		DABD99DB56A43993BD71CB63 /* SensitiveFileShield.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCDF8262B8C09E5CB418BA0D /* SensitiveFileShield.swift */; };
 		FC234AD686A13A3048D439D8 /* DangerousCommandDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C60E443524B7F6AE927F898 /* DangerousCommandDetector.swift */; };
+		A40001 /* ShortcutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40001 /* ShortcutManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -97,6 +100,9 @@
 		CORETEST02 /* CoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CoreTests.swift; sourceTree = "<group>"; };
 		B57D61AE58AAA182FF626C15 /* SessionPersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionPersistenceTests.swift; sourceTree = "<group>"; };
 		BCDF8262B8C09E5CB418BA0D /* SensitiveFileShield.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SensitiveFileShield.swift; sourceTree = "<group>"; };
+		B40001 /* ShortcutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutManager.swift; sourceTree = "<group>"; };
+		B50001 /* PluginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginManager.swift; sourceTree = "<group>"; };
+		B50002 /* PromptFavorites.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptFavorites.swift; sourceTree = "<group>"; };
 		D10001 /* Doffice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Doffice.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E10001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E10002 /* WorkManApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WorkManApp.entitlements; sourceTree = "<group>"; };
@@ -194,6 +200,9 @@
 				9C60E443524B7F6AE927F898 /* DangerousCommandDetector.swift */,
 				BCDF8262B8C09E5CB418BA0D /* SensitiveFileShield.swift */,
 				19D1AE3CB99EAC879DE06BC9 /* AuditLog.swift */,
+				B40001 /* ShortcutManager.swift */,
+				B50001 /* PluginManager.swift */,
+				B50002 /* PromptFavorites.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -375,6 +384,9 @@
 				FC234AD686A13A3048D439D8 /* DangerousCommandDetector.swift in Sources */,
 				DABD99DB56A43993BD71CB63 /* SensitiveFileShield.swift in Sources */,
 				28ABC1238F8EE87369BBC7EF /* AuditLog.swift in Sources */,
+				A40001 /* ShortcutManager.swift in Sources */,
+				A50001 /* PluginManager.swift in Sources */,
+				A50002 /* PromptFavorites.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -454,7 +466,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 3.2.1;
+				MARKETING_VERSION = 0.0.21;
 				PRODUCT_BUNDLE_IDENTIFIER = com.junha.doffice;
 				PRODUCT_NAME = Doffice;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -482,7 +494,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 3.2.1;
+				MARKETING_VERSION = 0.0.21;
 				PRODUCT_BUNDLE_IDENTIFIER = com.junha.doffice;
 				PRODUCT_NAME = Doffice;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -500,6 +512,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_DYNAMIC_NO_PIC = NO;

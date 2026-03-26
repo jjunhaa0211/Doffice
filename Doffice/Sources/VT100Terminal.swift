@@ -142,8 +142,12 @@ class VT100Terminal: ObservableObject {
                 // CSI 최종 바이트
                 handleCSI(params: csiParams, final: ch)
                 parseState = .normal
-            } else {
+            } else if csiParams.count < 256 {
                 csiParams.append(ch)
+            } else {
+                // 비정상적으로 긴 CSI 시퀀스 — 파서 리셋
+                csiParams = ""
+                parseState = .normal
             }
 
         case .osc:
@@ -151,8 +155,12 @@ class VT100Terminal: ObservableObject {
                 parseState = .normal
             } else if ch == "\u{1B}" {
                 parseState = .oscEsc
-            } else {
+            } else if oscBuffer.count < 4096 {
                 oscBuffer.append(ch)
+            } else {
+                // 비정상적으로 긴 OSC 시퀀스 — 파서 리셋
+                oscBuffer = ""
+                parseState = .normal
             }
 
         case .oscEsc:
@@ -171,6 +179,8 @@ class VT100Terminal: ObservableObject {
             cursorCol = 0
             lineFeed()
         }
+        guard cursorRow >= 0 && cursorRow < buffer.count else { return }
+        guard cursorCol >= 0 && cursorCol < buffer[cursorRow].count else { return }
         buffer[cursorRow][cursorCol] = Cell(
             char: ch, fg: currentFg, bg: currentBg,
             bold: currentBold, dim: currentDim
@@ -187,6 +197,7 @@ class VT100Terminal: ObservableObject {
     }
 
     private func scrollUp() {
+        guard rows > 0 && buffer.count >= rows else { return }
         // 첫 줄을 스크롤백에 저장
         if scrollback.count >= maxScrollback { scrollback.removeFirst() }
         scrollback.append(buffer[0])
@@ -198,6 +209,7 @@ class VT100Terminal: ObservableObject {
     }
 
     private func scrollDown() {
+        guard rows > 0 && buffer.count >= rows else { return }
         for r in stride(from: rows - 1, through: 1, by: -1) {
             buffer[r] = buffer[r - 1]
         }
@@ -237,19 +249,30 @@ class VT100Terminal: ObservableObject {
             cursorCol = min(cols - 1, max(0, col - 1))
 
         case "J": // 화면 지우기
+            guard cursorRow >= 0 && cursorRow < buffer.count else { break }
             switch p1 {
             case 0: // 커서부터 끝
-                for c in cursorCol..<cols { buffer[cursorRow][c] = Cell() }
+                for c in cursorCol..<cols {
+                    guard c >= 0 && c < buffer[cursorRow].count else { continue }
+                    buffer[cursorRow][c] = Cell()
+                }
                 for r in (cursorRow + 1)..<rows {
+                    guard r >= 0 && r < buffer.count else { continue }
                     buffer[r] = Array(repeating: Cell(), count: cols)
                 }
             case 1: // 처음부터 커서
                 for r in 0..<cursorRow {
+                    guard r >= 0 && r < buffer.count else { continue }
                     buffer[r] = Array(repeating: Cell(), count: cols)
                 }
-                for c in 0...cursorCol { buffer[cursorRow][c] = Cell() }
+                if !buffer[cursorRow].isEmpty {
+                    for c in 0...min(cursorCol, buffer[cursorRow].count - 1) {
+                        buffer[cursorRow][c] = Cell()
+                    }
+                }
             case 2, 3: // 전체 화면
                 for r in 0..<rows {
+                    guard r >= 0 && r < buffer.count else { continue }
                     buffer[r] = Array(repeating: Cell(), count: cols)
                 }
                 cursorRow = 0
@@ -258,11 +281,18 @@ class VT100Terminal: ObservableObject {
             }
 
         case "K": // 줄 지우기
+            guard cursorRow >= 0 && cursorRow < buffer.count else { break }
             switch p1 {
             case 0: // 커서부터 줄 끝
-                for c in cursorCol..<cols { buffer[cursorRow][c] = Cell() }
+                for c in cursorCol..<cols {
+                    guard c >= 0 && c < buffer[cursorRow].count else { continue }
+                    buffer[cursorRow][c] = Cell()
+                }
             case 1: // 줄 처음부터 커서
-                for c in 0...min(cursorCol, cols - 1) { buffer[cursorRow][c] = Cell() }
+                for c in 0...min(cursorCol, cols - 1) {
+                    guard c >= 0 && c < buffer[cursorRow].count else { continue }
+                    buffer[cursorRow][c] = Cell()
+                }
             case 2: // 줄 전체
                 buffer[cursorRow] = Array(repeating: Cell(), count: cols)
             default: break
@@ -271,6 +301,8 @@ class VT100Terminal: ObservableObject {
         case "L": // 줄 삽입
             let n = max(1, p1)
             for _ in 0..<n {
+                guard rows > 0 && rows - 1 < buffer.count else { break }
+                guard cursorRow >= 0 && cursorRow < buffer.count else { break }
                 if cursorRow < rows - 1 {
                     buffer.remove(at: rows - 1)
                     buffer.insert(Array(repeating: Cell(), count: cols), at: cursorRow)
@@ -280,6 +312,7 @@ class VT100Terminal: ObservableObject {
         case "M": // 줄 삭제
             let n = max(1, p1)
             for _ in 0..<n {
+                guard cursorRow >= 0 && cursorRow < buffer.count else { break }
                 if cursorRow < rows {
                     buffer.remove(at: cursorRow)
                     buffer.append(Array(repeating: Cell(), count: cols))
@@ -287,7 +320,10 @@ class VT100Terminal: ObservableObject {
             }
 
         case "P": // 문자 삭제
-            let n = min(max(1, p1), cols - cursorCol)
+            guard cursorRow >= 0 && cursorRow < buffer.count else { break }
+            guard cursorCol >= 0 && cursorCol < buffer[cursorRow].count else { break }
+            let n = min(max(1, p1), buffer[cursorRow].count - cursorCol)
+            guard n > 0 else { break }
             buffer[cursorRow].removeSubrange(cursorCol..<(cursorCol + n))
             buffer[cursorRow].append(contentsOf: Array(repeating: Cell(), count: n))
 
@@ -308,6 +344,8 @@ class VT100Terminal: ObservableObject {
             cursorCol = savedCursorCol
 
         case "@": // 빈 문자 삽입
+            guard cursorRow >= 0 && cursorRow < buffer.count else { break }
+            guard cursorCol >= 0 && cursorCol <= buffer[cursorRow].count else { break }
             let n = min(max(1, p1), cols - cursorCol)
             for _ in 0..<n {
                 buffer[cursorRow].insert(Cell(), at: cursorCol)
@@ -387,20 +425,22 @@ class VT100Terminal: ObservableObject {
         Self.colorTable[fg] ?? NSColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1)
     }
 
-    /// 전체 화면을 NSAttributedString으로 렌더링 (스크롤백 포함)
-    func render(fontSize: CGFloat) -> NSAttributedString {
+    /// 전체 화면을 NSAttributedString으로 렌더링 (스크롤백 최근 일부만 포함)
+    func render(fontSize: CGFloat, maxScrollbackLines: Int = 200) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let defaultFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         let boldFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .bold)
 
-        // 스크롤백 렌더링
-        for row in scrollback {
-            appendRow(row, to: result, defaultFont: defaultFont, boldFont: boldFont)
+        // 스크롤백 렌더링 — 메모리 절약을 위해 최근 N줄만
+        let scrollbackStart = max(0, scrollback.count - maxScrollbackLines)
+        for i in scrollbackStart..<scrollback.count {
+            appendRow(scrollback[i], to: result, defaultFont: defaultFont, boldFont: boldFont)
             result.append(NSAttributedString(string: "\n"))
         }
 
         // 현재 화면 렌더링
         for r in 0..<rows {
+            guard r < buffer.count else { break }
             if r > 0 { result.append(NSAttributedString(string: "\n")) }
             appendRow(buffer[r], to: result, defaultFont: defaultFont, boldFont: boldFont)
         }

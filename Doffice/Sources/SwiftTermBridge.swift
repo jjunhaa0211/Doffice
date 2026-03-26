@@ -66,7 +66,12 @@ class SwiftTermContainer: NSView, LocalProcessTerminalViewDelegate {
         }
     }
 
-    required init?(coder: NSCoder) { fatalError() }
+    required init?(coder: NSCoder) { return nil }
+
+    deinit {
+        // PTY 프로세스 정리 — 뷰 파괴 시 리소스 누수 방지
+        terminalView.processDelegate = nil
+    }
 
     override func layout() {
         super.layout()

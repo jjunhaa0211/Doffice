@@ -90,6 +90,19 @@ struct GitStashEntry: Identifiable {
 }
 
 // ═══════════════════════════════════════════════════════
+// MARK: - Blame Model
+// ═══════════════════════════════════════════════════════
+
+struct BlameLine: Identifiable {
+    let id: Int              // line number (1-based)
+    let hash: String         // commit SHA
+    let shortHash: String
+    let author: String
+    let date: Date
+    let content: String      // actual line content
+}
+
+// ═══════════════════════════════════════════════════════
 // MARK: - Diff Models
 // ═══════════════════════════════════════════════════════
 
@@ -166,8 +179,8 @@ class GitDataProvider: ObservableObject {
     private static func checkGitAvailable() -> Bool {
         if let cached = gitAvailable { return cached }
         let result = TerminalTab.shellSync("git --version 2>/dev/null")
-        gitAvailable = result != nil && result!.contains("git version")
-        return gitAvailable!
+        gitAvailable = result?.contains("git version") ?? false
+        return gitAvailable ?? false
     }
 
     // Lane colors — computed each time to respect dark/light mode changes
@@ -198,7 +211,7 @@ class GitDataProvider: ObservableObject {
         allCommitsLoaded = false
 
         guard Self.checkGitAvailable() else {
-            lastError = "Git이 설치되지 않았습니다"
+            lastError = NSLocalizedString("git.not.installed", comment: "")
             return
         }
 
@@ -218,7 +231,7 @@ class GitDataProvider: ObservableObject {
     func refreshAll() {
         guard !projectPath.isEmpty, !isLoading else { return }
         guard Self.checkGitAvailable() else {
-            lastError = "Git이 설치되지 않았습니다"
+            lastError = NSLocalizedString("git.not.installed", comment: "")
             isLoading = false
             return
         }
@@ -529,7 +542,7 @@ class GitDataProvider: ObservableObject {
             } else {
                 result = TerminalTab.shellSync("git -C \"\(path)\" tag \"\(name)\" 2>&1")
             }
-            let failed = result != nil && (result!.contains("fatal") || result!.contains("error"))
+            let failed = result.map { $0.contains("fatal") || $0.contains("error") } ?? false
             DispatchQueue.main.async {
                 if failed { self?.lastError = result ?? "" }
                 self?.refreshAll()
@@ -569,7 +582,7 @@ class GitDataProvider: ObservableObject {
             } else {
                 result = TerminalTab.shellSync("git -C \"\(path)\" stash push 2>&1")
             }
-            let failed = result != nil && result!.contains("fatal")
+            let failed = result?.contains("fatal") ?? false
             DispatchQueue.main.async {
                 if failed { self?.lastError = result ?? "" }
                 self?.refreshAll()
@@ -605,6 +618,132 @@ class GitDataProvider: ObservableObject {
         let path = projectPath
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = TerminalTab.shellSync("git -C \"\(path)\" stash drop stash@{\(index)} 2>&1") ?? ""
+            let failed = result.contains("fatal") || result.contains("error")
+            DispatchQueue.main.async {
+                if failed { self?.lastError = result }
+                self?.refreshAll()
+                completion?(!failed)
+            }
+        }
+    }
+
+    // MARK: - Cherry-pick
+
+    func cherryPick(hash: String, completion: ((Bool) -> Void)? = nil) {
+        guard hash.allSatisfy({ $0.isHexDigit }) else {
+            lastError = "Invalid commit hash"
+            completion?(false)
+            return
+        }
+        let path = projectPath
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = TerminalTab.shellSync("git -C \"\(path)\" cherry-pick \(hash) 2>&1") ?? ""
+            let failed = result.contains("fatal") || result.contains("error") || result.contains("conflict")
+            DispatchQueue.main.async {
+                if failed { self?.lastError = result }
+                self?.refreshAll()
+                completion?(!failed)
+            }
+        }
+    }
+
+    // MARK: - Revert Commit
+
+    func revertCommit(hash: String, completion: ((Bool) -> Void)? = nil) {
+        guard hash.allSatisfy({ $0.isHexDigit }) else {
+            lastError = "Invalid commit hash"
+            completion?(false)
+            return
+        }
+        let path = projectPath
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = TerminalTab.shellSync("git -C \"\(path)\" revert --no-edit \(hash) 2>&1") ?? ""
+            let failed = result.contains("fatal") || result.contains("error") || result.contains("conflict")
+            DispatchQueue.main.async {
+                if failed { self?.lastError = result }
+                self?.refreshAll()
+                completion?(!failed)
+            }
+        }
+    }
+
+    // MARK: - Amend Commit
+
+    func amendCommit(message: String? = nil, completion: ((Bool) -> Void)? = nil) {
+        let path = projectPath
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result: String
+            if let message = message, !message.isEmpty {
+                let safeMsg = message.replacingOccurrences(of: "\"", with: "\\\"")
+                    .replacingOccurrences(of: "$", with: "\\$")
+                    .replacingOccurrences(of: "`", with: "\\`")
+                result = TerminalTab.shellSync("git -C \"\(path)\" commit --amend -m \"\(safeMsg)\" 2>&1") ?? ""
+            } else {
+                result = TerminalTab.shellSync("git -C \"\(path)\" commit --amend --no-edit 2>&1") ?? ""
+            }
+            let failed = result.contains("fatal") || result.contains("error")
+            DispatchQueue.main.async {
+                if failed { self?.lastError = result }
+                self?.refreshAll()
+                completion?(!failed)
+            }
+        }
+    }
+
+    // MARK: - Blame
+
+    @Published var blameLines: [BlameLine] = []
+    @Published var blameFilePath: String = ""
+
+    func fetchBlame(filePath: String) {
+        let safePath = GitDataParser.sanitizePath(filePath)
+        let path = projectPath
+        blameFilePath = filePath
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let raw = TerminalTab.shellSync("git -C \"\(path)\" blame --porcelain -- \"\(safePath)\" 2>/dev/null") ?? ""
+            let lines = GitDataParser.parseBlame(raw)
+            DispatchQueue.main.async {
+                self?.blameLines = lines
+            }
+        }
+    }
+
+    // MARK: - File History
+
+    @Published var fileHistory: [GitCommitNode] = []
+    @Published var fileHistoryPath: String = ""
+
+    func fetchFileHistory(filePath: String) {
+        let safePath = GitDataParser.sanitizePath(filePath)
+        let path = projectPath
+        fileHistoryPath = filePath
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let fieldSep = "<<F>>"
+            let format = "%x00%H\(fieldSep)%h\(fieldSep)%s\(fieldSep)%an\(fieldSep)%ae\(fieldSep)%aI\(fieldSep)%P\(fieldSep)%D\(fieldSep)%b"
+            let raw = TerminalTab.shellSync("git -C \"\(path)\" log --follow --format='\(format)' -n 50 -- \"\(safePath)\" 2>/dev/null") ?? ""
+            let commits = GitDataParser.parseCommitRecords(raw)
+            DispatchQueue.main.async {
+                self?.fileHistory = commits
+            }
+        }
+    }
+
+    // MARK: - Reset to Commit
+
+    func resetToCommit(hash: String, mode: String = "mixed", completion: ((Bool) -> Void)? = nil) {
+        guard hash.allSatisfy({ $0.isHexDigit }) else {
+            lastError = "Invalid commit hash"
+            completion?(false)
+            return
+        }
+        guard ["soft", "mixed", "hard"].contains(mode) else {
+            lastError = "Invalid reset mode"
+            completion?(false)
+            return
+        }
+        let path = projectPath
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = TerminalTab.shellSync("git -C \"\(path)\" reset --\(mode) \(hash) 2>&1") ?? ""
             let failed = result.contains("fatal") || result.contains("error")
             DispatchQueue.main.async {
                 if failed { self?.lastError = result }
@@ -756,21 +895,22 @@ enum GitDataParser {
                 }
             }
 
-            result[i].lane = myLane!
+            guard let lane = myLane else { continue }
+            result[i].lane = lane
 
             // Record which lanes are active at this position (for graph drawing)
             var activeSet = Set<Int>()
             for (idx, sha) in activeLanes.enumerated() {
                 if sha != nil { activeSet.insert(idx) }
             }
-            activeSet.insert(myLane!)
+            activeSet.insert(lane)
             result[i].activeLanes = activeSet
 
             // Update lanes: replace current lane with first parent, add others
             if commit.parentHashes.isEmpty {
-                activeLanes[myLane!] = nil
+                activeLanes[lane] = nil
             } else {
-                activeLanes[myLane!] = commit.parentHashes[0]
+                activeLanes[lane] = commit.parentHashes[0]
                 for pIdx in commit.parentHashes.indices.dropFirst() {
                     let parentHash = commit.parentHashes[pIdx]
                     if !activeLanes.contains(parentHash) {
@@ -798,8 +938,9 @@ enum GitDataParser {
         var unstaged: [GitFileChange] = []
 
         for line in raw.components(separatedBy: "\n") where line.count >= 3 {
-            let indexStatus = line[line.index(line.startIndex, offsetBy: 0)]
-            let workStatus = line[line.index(line.startIndex, offsetBy: 1)]
+            let chars = Array(line)
+            let indexStatus = chars[0]
+            let workStatus = chars[1]
             let filePath = String(line.dropFirst(3))
             let fileName = (filePath as NSString).lastPathComponent
 
@@ -961,5 +1102,89 @@ enum GitDataParser {
             isBinary: false,
             stats: (additions: totalAdditions, deletions: totalDeletions)
         )
+    }
+
+    // MARK: - Blame Parsing
+
+    static func parseBlame(_ raw: String) -> [BlameLine] {
+        guard !raw.isEmpty else { return [] }
+        var lines: [BlameLine] = []
+        var currentHash = ""
+        var currentAuthor = ""
+        var currentDate = Date()
+        var lineNum = 0
+
+        let dateFormatter: DateFormatter = {
+            let f = DateFormatter()
+            f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
+            f.locale = Locale(identifier: "en_US_POSIX")
+            return f
+        }()
+
+        for line in raw.components(separatedBy: "\n") {
+            if line.isEmpty { continue }
+
+            // Header line: <hash> <orig-line> <final-line> [<num-lines>]
+            let headerParts = line.split(separator: " ")
+            if headerParts.count >= 3,
+               headerParts[0].count == 40,
+               headerParts[0].allSatisfy({ $0.isHexDigit }) {
+                currentHash = String(headerParts[0])
+                lineNum = Int(headerParts[2]) ?? (lineNum + 1)
+            } else if line.hasPrefix("author ") {
+                currentAuthor = String(line.dropFirst(7))
+            } else if line.hasPrefix("author-time ") {
+                if let ts = TimeInterval(line.dropFirst(12)) {
+                    currentDate = Date(timeIntervalSince1970: ts)
+                }
+            } else if line.hasPrefix("\t") {
+                // Content line
+                let content = String(line.dropFirst())
+                lines.append(BlameLine(
+                    id: lineNum,
+                    hash: currentHash,
+                    shortHash: String(currentHash.prefix(7)),
+                    author: currentAuthor,
+                    date: currentDate,
+                    content: content
+                ))
+            }
+        }
+        return lines
+    }
+
+    // MARK: - Commit Records Parsing (shared)
+
+    static func parseCommitRecords(_ raw: String) -> [GitCommitNode] {
+        let fieldSep = "<<F>>"
+        var commits: [GitCommitNode] = []
+        let records = raw.components(separatedBy: "\0").filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+        for record in records {
+            let trimmed = record.trimmingCharacters(in: .whitespacesAndNewlines)
+            let parts = trimmed.components(separatedBy: fieldSep)
+            guard parts.count >= 8 else { continue }
+
+            let hash = parts[0].trimmingCharacters(in: .init(charactersIn: "'"))
+            let shortHash = parts[1]
+            let subject = parts[2]
+            let author = parts[3]
+            let email = parts[4]
+            let dateStr = parts[5]
+            let parents = parts[6].split(separator: " ").map(String.init)
+            let refStr = parts[7].trimmingCharacters(in: .init(charactersIn: "'"))
+            let body = parts.count > 8 ? parts[8...].joined(separator: fieldSep).trimmingCharacters(in: .whitespacesAndNewlines) : ""
+
+            let date = gitDateFormatter.date(from: dateStr) ?? Date()
+            let refs = parseRefs(refStr)
+            let coAuthors = parseCoAuthors(body)
+
+            commits.append(GitCommitNode(
+                id: hash, shortHash: shortHash, message: subject, body: body,
+                author: author, authorEmail: email, date: date,
+                parentHashes: parents, coAuthors: coAuthors, refs: refs
+            ))
+        }
+        return commits
     }
 }

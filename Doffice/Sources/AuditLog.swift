@@ -6,15 +6,33 @@ enum AuditEventType: String, Codable, CaseIterable {
     case fileRead = "Read"
     case fileWrite = "Write"
     case fileEdit = "Edit"
-    case permissionApproval = "권한승인"
-    case permissionDenial = "권한거부"
-    case sessionStart = "세션시작"
-    case sessionEnd = "세션종료"
-    case costWarning = "비용경고"
-    case dangerousCommand = "위험명령"
-    case sensitiveFileAccess = "민감파일"
-    case sleepWorkStart = "슬립워크시작"
-    case sleepWorkEnd = "슬립워크종료"
+    case permissionApproval = "PermissionApproval"
+    case permissionDenial = "PermissionDenial"
+    case sessionStart = "SessionStart"
+    case sessionEnd = "SessionEnd"
+    case costWarning = "CostWarning"
+    case dangerousCommand = "DangerousCommand"
+    case sensitiveFileAccess = "SensitiveFile"
+    case sleepWorkStart = "SleepWorkStart"
+    case sleepWorkEnd = "SleepWorkEnd"
+
+    var displayName: String {
+        switch self {
+        case .bashCommand: return "Bash"
+        case .fileRead: return "Read"
+        case .fileWrite: return "Write"
+        case .fileEdit: return "Edit"
+        case .permissionApproval: return NSLocalizedString("audit.permission.approval", comment: "")
+        case .permissionDenial: return NSLocalizedString("audit.permission.denial", comment: "")
+        case .sessionStart: return NSLocalizedString("audit.session.start", comment: "")
+        case .sessionEnd: return NSLocalizedString("audit.session.end", comment: "")
+        case .costWarning: return NSLocalizedString("audit.cost.warning", comment: "")
+        case .dangerousCommand: return NSLocalizedString("audit.dangerous.command", comment: "")
+        case .sensitiveFileAccess: return NSLocalizedString("audit.sensitive.file", comment: "")
+        case .sleepWorkStart: return NSLocalizedString("audit.sleepwork.start", comment: "")
+        case .sleepWorkEnd: return NSLocalizedString("audit.sleepwork.end", comment: "")
+        }
+    }
 
     var icon: String {
         switch self {

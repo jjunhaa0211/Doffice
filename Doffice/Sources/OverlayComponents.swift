@@ -27,8 +27,8 @@ struct ActionCenterView: View {
             DSModalHeader(
                 icon: "bell.badge.fill",
                 iconColor: Theme.orange,
-                title: "확인 센터",
-                subtitle: "승인 대기, 오류, 완료 상태를 한 곳에서 확인합니다.",
+                title: NSLocalizedString("overlay.action.center", comment: ""),
+                subtitle: NSLocalizedString("overlay.action.center.subtitle", comment: ""),
                 onClose: { dismiss() }
             )
 
@@ -37,18 +37,18 @@ struct ActionCenterView: View {
                     // 승인 대기
                     if !pendingApprovalTabs.isEmpty {
                         actionSection(
-                            title: "승인 대기",
+                            title: NSLocalizedString("overlay.pending.approval", comment: ""),
                             symbol: "hand.raised.fill",
                             tint: Theme.orange,
                             tabs: pendingApprovalTabs
                         ) { tab in
                             HStack(spacing: 6) {
-                                Text(tab.pendingApproval?.command ?? "도구 승인")
+                                Text(tab.pendingApproval?.command ?? NSLocalizedString("overlay.tool.approval", comment: ""))
                                     .font(Theme.mono(8))
                                     .foregroundColor(Theme.textDim)
                                     .lineLimit(1)
                                 Spacer()
-                                Button("이동") {
+                                Button(NSLocalizedString("overlay.go", comment: "")) {
                                     manager.selectTab(tab.id)
                                     dismiss()
                                 }
@@ -62,18 +62,18 @@ struct ActionCenterView: View {
                     // 오류
                     if !attentionTabs.isEmpty {
                         actionSection(
-                            title: "확인 필요",
+                            title: NSLocalizedString("overlay.needs.attention", comment: ""),
                             symbol: "exclamationmark.triangle.fill",
                             tint: Theme.red,
                             tabs: attentionTabs
                         ) { tab in
                             HStack(spacing: 6) {
-                                Text(tab.startError ?? "오류 발생")
+                                Text(tab.startError ?? NSLocalizedString("overlay.error.occurred", comment: ""))
                                     .font(Theme.mono(8))
                                     .foregroundColor(Theme.textDim)
                                     .lineLimit(1)
                                 Spacer()
-                                Button("이동") {
+                                Button(NSLocalizedString("overlay.go", comment: "")) {
                                     manager.selectTab(tab.id)
                                     dismiss()
                                 }
@@ -87,7 +87,7 @@ struct ActionCenterView: View {
                     // 작업 중
                     if !processingTabs.isEmpty {
                         actionSection(
-                            title: "작업 중",
+                            title: NSLocalizedString("overlay.in.progress", comment: ""),
                             symbol: "gearshape.2.fill",
                             tint: Theme.accent,
                             tabs: processingTabs
@@ -97,7 +97,7 @@ struct ActionCenterView: View {
                                     .font(Theme.mono(8))
                                     .foregroundColor(Theme.textDim)
                                 Spacer()
-                                Button("이동") {
+                                Button(NSLocalizedString("overlay.go", comment: "")) {
                                     manager.selectTab(tab.id)
                                     dismiss()
                                 }
@@ -111,7 +111,7 @@ struct ActionCenterView: View {
                     // 완료
                     if !completedTabs.isEmpty {
                         actionSection(
-                            title: "완료",
+                            title: NSLocalizedString("overlay.completed", comment: ""),
                             symbol: "checkmark.circle.fill",
                             tint: Theme.green,
                             tabs: completedTabs
@@ -123,7 +123,7 @@ struct ActionCenterView: View {
                                         .foregroundColor(Theme.textDim)
                                 }
                                 Spacer()
-                                Button("이동") {
+                                Button(NSLocalizedString("overlay.go", comment: "")) {
                                     manager.selectTab(tab.id)
                                     dismiss()
                                 }
@@ -139,7 +139,7 @@ struct ActionCenterView: View {
                             Image(systemName: "checkmark.seal.fill")
                                 .font(.system(size: 32))
                                 .foregroundColor(Theme.green.opacity(0.6))
-                            Text("모든 세션이 정상입니다")
+                            Text(NSLocalizedString("overlay.all.normal", comment: ""))
                                 .font(Theme.mono(11, weight: .medium))
                                 .foregroundColor(Theme.textDim)
                         }
@@ -234,39 +234,47 @@ struct CommandPaletteView: View {
 
     private var allActions: [CommandPaletteAction] {
         var actions: [CommandPaletteAction] = [
-            CommandPaletteAction(title: "새 세션", subtitle: "Cmd+T", symbol: "plus.circle.fill", tint: Theme.green) {
+            CommandPaletteAction(title: NSLocalizedString("overlay.new.session", comment: ""), subtitle: "Cmd+T", symbol: "plus.circle.fill", tint: Theme.green) {
                 isPresented = false; onNewSession()
             },
-            CommandPaletteAction(title: "세션 새로고침", subtitle: "Cmd+R", symbol: "arrow.clockwise", tint: Theme.accent) {
+            CommandPaletteAction(title: NSLocalizedString("overlay.refresh.session", comment: ""), subtitle: "Cmd+R", symbol: "arrow.clockwise", tint: Theme.accent) {
                 isPresented = false; manager.refresh()
             },
-            CommandPaletteAction(title: "설정", subtitle: "", symbol: "gearshape.fill", tint: Theme.textSecondary) {
+            CommandPaletteAction(title: NSLocalizedString("overlay.settings", comment: ""), subtitle: "", symbol: "gearshape.fill", tint: Theme.textSecondary) {
                 isPresented = false; onSettings()
             },
-            CommandPaletteAction(title: "버그 신고", subtitle: "", symbol: "ladybug.fill", tint: Theme.red) {
+            CommandPaletteAction(title: NSLocalizedString("overlay.bug.report", comment: ""), subtitle: "", symbol: "ladybug.fill", tint: Theme.red) {
                 isPresented = false; onBugReport()
             },
-            CommandPaletteAction(title: "로그 내보내기", subtitle: "Cmd+Shift+E", symbol: "square.and.arrow.up", tint: Theme.cyan) {
+            CommandPaletteAction(title: NSLocalizedString("overlay.export.log", comment: ""), subtitle: "Cmd+Shift+E", symbol: "square.and.arrow.up", tint: Theme.cyan) {
                 isPresented = false; onExportLog()
             },
-            CommandPaletteAction(title: "분할 뷰", subtitle: "", symbol: "rectangle.split.1x2", tint: Theme.accent) {
+            CommandPaletteAction(title: NSLocalizedString("overlay.split.view", comment: ""), subtitle: "", symbol: "rectangle.split.1x2", tint: Theme.accent) {
                 isPresented = false; onSetViewMode(0)
             },
-            CommandPaletteAction(title: "오피스 뷰", subtitle: "", symbol: "building.2", tint: Theme.purple) {
+            CommandPaletteAction(title: NSLocalizedString("overlay.office.view", comment: ""), subtitle: "", symbol: "building.2", tint: Theme.purple) {
                 isPresented = false; onSetViewMode(1)
             },
-            CommandPaletteAction(title: "스트립 뷰", subtitle: "", symbol: "person.2.fill", tint: Theme.orange) {
+            CommandPaletteAction(title: NSLocalizedString("overlay.strip.view", comment: ""), subtitle: "", symbol: "person.2.fill", tint: Theme.orange) {
                 isPresented = false; onSetViewMode(3)
             },
-            CommandPaletteAction(title: "터미널 뷰", subtitle: "", symbol: "terminal", tint: Theme.green) {
+            CommandPaletteAction(title: NSLocalizedString("overlay.terminal.view", comment: ""), subtitle: "", symbol: "terminal", tint: Theme.green) {
                 isPresented = false; onSetViewMode(2)
             },
         ]
 
+        // 플러그인 명령어 추가
+        for cmd in PluginHost.shared.commands {
+            actions.append(CommandPaletteAction(title: cmd.title, subtitle: "[\(cmd.pluginName)]", symbol: cmd.icon, tint: Theme.purple) {
+                isPresented = false
+                PluginHost.shared.executeCommand(cmd, projectPath: manager.activeTab?.projectPath)
+            })
+        }
+
         // 현재 세션들을 검색 대상에 추가
         for tab in manager.userVisibleTabs {
             let name = tab.workerName.isEmpty ? tab.projectName : "\(tab.workerName) · \(tab.projectName)"
-            actions.append(CommandPaletteAction(title: name, subtitle: "세션 이동", symbol: "arrow.right.circle", tint: tab.statusPresentation.tint) {
+            actions.append(CommandPaletteAction(title: name, subtitle: NSLocalizedString("overlay.go.to.session", comment: ""), symbol: "arrow.right.circle", tint: tab.statusPresentation.tint) {
                 isPresented = false; manager.selectTab(tab.id)
             })
         }
@@ -295,7 +303,7 @@ struct CommandPaletteView: View {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: Theme.iconSize(14)))
                         .foregroundColor(Theme.textDim)
-                    TextField("명령어 검색...", text: $query)
+                    TextField(NSLocalizedString("overlay.search.commands", comment: ""), text: $query)
                         .font(Theme.mono(13))
                         .textFieldStyle(.plain)
                         .foregroundColor(Theme.textPrimary)
@@ -332,21 +340,21 @@ struct CommandPaletteView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.up.arrow.down")
                             .font(.system(size: 8))
-                        Text("탐색")
+                        Text(NSLocalizedString("overlay.navigate", comment: ""))
                             .font(Theme.mono(8))
                     }
                     .foregroundColor(Theme.textDim)
                     HStack(spacing: 4) {
                         Image(systemName: "return")
                             .font(.system(size: 8))
-                        Text("실행")
+                        Text(NSLocalizedString("overlay.execute", comment: ""))
                             .font(Theme.mono(8))
                     }
                     .foregroundColor(Theme.textDim)
                     HStack(spacing: 4) {
                         Text("esc")
                             .font(Theme.mono(8))
-                        Text("닫기")
+                        Text(NSLocalizedString("overlay.close", comment: ""))
                             .font(Theme.mono(8))
                     }
                     .foregroundColor(Theme.textDim)
@@ -474,7 +482,7 @@ struct SavePresetSheet: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack {
-                Text("프리셋 저장")
+                Text(NSLocalizedString("overlay.save.preset", comment: ""))
                     .font(Theme.mono(14, weight: .bold))
                     .foregroundColor(Theme.textPrimary)
                 Spacer()
@@ -486,8 +494,8 @@ struct SavePresetSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("이름").font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.textSecondary)
-                TextField("예: 리뷰용, 병렬 개발용", text: $presetName)
+                Text(NSLocalizedString("overlay.label.name", comment: "")).font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.textSecondary)
+                TextField(NSLocalizedString("overlay.preset.placeholder", comment: ""), text: $presetName)
                     .textFieldStyle(.plain)
                     .font(Theme.mono(11))
                     .padding(10)
@@ -496,7 +504,7 @@ struct SavePresetSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("아이콘").font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.textSecondary)
+                Text(NSLocalizedString("overlay.label.icon", comment: "")).font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.textSecondary)
                 HStack(spacing: 8) {
                     ForEach(icons, id: \.self) { icon in
                         Button(action: { selectedIcon = icon }) {
@@ -513,7 +521,7 @@ struct SavePresetSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("색상").font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.textSecondary)
+                Text(NSLocalizedString("overlay.label.color", comment: "")).font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.textSecondary)
                 HStack(spacing: 8) {
                     ForEach(tints, id: \.0) { name, color in
                         Button(action: { selectedTint = name }) {
@@ -529,17 +537,17 @@ struct SavePresetSheet: View {
 
             // 설정 요약
             VStack(alignment: .leading, spacing: 4) {
-                Text("포함 설정").font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.textSecondary)
+                Text(NSLocalizedString("overlay.included.settings", comment: "")).font(Theme.mono(9, weight: .bold)).foregroundColor(Theme.textSecondary)
                 HStack(spacing: 8) {
-                    presetTag("모델: \(draft.selectedModel)")
-                    presetTag("노력: \(draft.effortLevel)")
-                    presetTag("터미널: \(draft.terminalCount)")
-                    if !draft.systemPrompt.isEmpty { presetTag("시스템 프롬프트") }
+                    presetTag(String(format: NSLocalizedString("overlay.model.prefix", comment: ""), "\(draft.selectedModel)"))
+                    presetTag(String(format: NSLocalizedString("overlay.effort.prefix", comment: ""), "\(draft.effortLevel)"))
+                    presetTag(String(format: NSLocalizedString("overlay.terminal.prefix", comment: ""), "\(draft.terminalCount)"))
+                    if !draft.systemPrompt.isEmpty { presetTag(NSLocalizedString("overlay.system.prompt", comment: "")) }
                 }
             }
 
             HStack {
-                Button("취소") { dismiss() }
+                Button(NSLocalizedString("overlay.cancel", comment: "")) { dismiss() }
                     .buttonStyle(.plain)
                     .font(Theme.mono(10, weight: .bold))
                     .foregroundColor(Theme.textDim)
@@ -547,7 +555,7 @@ struct SavePresetSheet: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
                     .keyboardShortcut(.escape)
                 Spacer()
-                Button("저장") {
+                Button(NSLocalizedString("overlay.save", comment: "")) {
                     let preset = CustomSessionPreset(
                         name: presetName.trimmingCharacters(in: .whitespacesAndNewlines),
                         icon: selectedIcon,
@@ -633,9 +641,10 @@ final class SessionNotificationManager: ObservableObject {
     func postCompletion(tabName: String, tabId: String) {
         guard !knownCompletedIds.contains(tabId) else { return }
         knownCompletedIds.insert(tabId)
+        pruneKnownIdsIfNeeded()
         post(SessionNotification(
-            title: "\(tabName) 완료",
-            detail: "작업이 완료되었습니다",
+            title: String(format: NSLocalizedString("overlay.notif.completed", comment: ""), tabName),
+            detail: NSLocalizedString("overlay.notif.task.done", comment: ""),
             symbol: "checkmark.circle.fill",
             tint: Theme.green,
             tabId: tabId
@@ -645,8 +654,9 @@ final class SessionNotificationManager: ObservableObject {
     func postError(tabName: String, tabId: String, message: String) {
         guard !knownErrorIds.contains(tabId) else { return }
         knownErrorIds.insert(tabId)
+        pruneKnownIdsIfNeeded()
         post(SessionNotification(
-            title: "\(tabName) 오류",
+            title: String(format: NSLocalizedString("overlay.notif.error", comment: ""), tabName),
             detail: message,
             symbol: "exclamationmark.triangle.fill",
             tint: Theme.red,
@@ -656,12 +666,26 @@ final class SessionNotificationManager: ObservableObject {
 
     func postApprovalNeeded(tabName: String, tabId: String, toolName: String) {
         post(SessionNotification(
-            title: "\(tabName) 승인 필요",
-            detail: "\(toolName) 실행 승인을 기다리고 있습니다",
+            title: String(format: NSLocalizedString("overlay.notif.approval.needed", comment: ""), tabName),
+            detail: String(format: NSLocalizedString("overlay.notif.approval.waiting", comment: ""), toolName),
             symbol: "hand.raised.fill",
             tint: Theme.orange,
             tabId: tabId
         ))
+    }
+
+    /// 메모리 누수 방지: 알림 ID 셋이 과도하게 커지면 정리
+    private func pruneKnownIdsIfNeeded() {
+        let maxSize = 500
+        if knownCompletedIds.count > maxSize {
+            // 현재 존재하는 탭 ID만 유지
+            let activeIds = Set(SessionManager.shared.tabs.map(\.id))
+            knownCompletedIds = knownCompletedIds.intersection(activeIds)
+        }
+        if knownErrorIds.count > maxSize {
+            let activeIds = Set(SessionManager.shared.tabs.map(\.id))
+            knownErrorIds = knownErrorIds.intersection(activeIds)
+        }
     }
 
     private func handleCompletion(tabId: String) {

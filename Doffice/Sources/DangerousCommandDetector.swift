@@ -10,6 +10,14 @@ enum DangerousSeverity: String {
     case critical = "치명적"
     case high = "높음"
     case medium = "주의"
+
+    var displayName: String {
+        switch self {
+        case .critical: return NSLocalizedString("danger.critical", comment: "")
+        case .high: return NSLocalizedString("danger.high", comment: "")
+        case .medium: return NSLocalizedString("danger.medium", comment: "")
+        }
+    }
 }
 
 struct DangerousCommandMatch {

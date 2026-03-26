@@ -2,6 +2,21 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 // ═══════════════════════════════════════════════════════
+// MARK: - Custom Theme Config (JSON 직렬화 모델)
+// ═══════════════════════════════════════════════════════
+
+struct CustomThemeConfig: Codable, Equatable {
+    var accentHex: String?          // nil = 기본 accent 사용
+    var useGradient: Bool = false
+    var gradientStartHex: String?
+    var gradientEndHex: String?
+    var fontName: String?           // nil = 시스템 폰트
+    var fontSize: Double?           // nil = 기존 scale 시스템 사용
+
+    static let `default` = CustomThemeConfig()
+}
+
+// ═══════════════════════════════════════════════════════
 // MARK: - App Settings (전역 설정)
 // ═══════════════════════════════════════════════════════
 
@@ -26,6 +41,60 @@ class AppSettings: ObservableObject {
     // ── 배경 테마 ──
     @AppStorage("backgroundTheme") var backgroundTheme: String = "auto" {
         didSet { objectWillChange.send() }
+    }
+
+    // ── 커스텀 테마 (JSON) ──
+    @AppStorage("customThemeJSON") var customThemeJSON: String = "" {
+        didSet {
+            _cachedCustomTheme = nil
+            objectWillChange.send()
+        }
+    }
+
+    private var _cachedCustomTheme: CustomThemeConfig?
+
+    var customTheme: CustomThemeConfig {
+        if let cached = _cachedCustomTheme { return cached }
+        guard !customThemeJSON.isEmpty,
+              let data = customThemeJSON.data(using: .utf8),
+              let config = try? JSONDecoder().decode(CustomThemeConfig.self, from: data) else {
+            return .default
+        }
+        _cachedCustomTheme = config
+        return config
+    }
+
+    func saveCustomTheme(_ config: CustomThemeConfig) {
+        if let data = try? JSONEncoder().encode(config),
+           let json = String(data: data, encoding: .utf8) {
+            customThemeJSON = json
+        }
+    }
+
+    func exportThemeToFile() {
+        let config = customTheme
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        guard let data = try? encoder.encode(config) else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "doffice_theme.json"
+        panel.title = NSLocalizedString("settings.customtheme.export", comment: "")
+        if panel.runModal() == .OK, let url = panel.url {
+            try? data.write(to: url)
+        }
+    }
+
+    func importThemeFromFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.title = NSLocalizedString("settings.customtheme.import", comment: "")
+        if panel.runModal() == .OK, let url = panel.url {
+            guard let data = try? Data(contentsOf: url),
+                  let config = try? JSONDecoder().decode(CustomThemeConfig.self, from: data) else { return }
+            saveCustomTheme(config)
+        }
     }
 
     // ── 자동화/성능 보호 설정 ──
@@ -358,6 +427,7 @@ class AppSettings: ObservableObject {
         layoutPresets = presets
     }
 }
+
 
 enum AutomationTemplateKind: String, CaseIterable, Identifiable {
     case planner
@@ -1106,12 +1176,22 @@ enum Theme {
     static var textTerminal: Color { dark ? Color(hex: "ededed") : Color(hex: "171717") }
 
     // ── System ──
-    static var textOnAccent: Color { .white }
+    static var textOnAccent: Color {
+        if AppSettings.shared.customTheme.accentHex != nil {
+            return accent.contrastingTextColor
+        }
+        return .white
+    }
     static var overlay: Color { dark ? .white : .black }
     static var overlayBg: Color { dark ? .black : .white }
 
     // ── Semantic Accents ──
-    static var accent: Color { dark ? Color(hex: "3291ff") : Color(hex: "0070f3") }
+    static var accent: Color {
+        if let hex = AppSettings.shared.customTheme.accentHex, !hex.isEmpty {
+            return Color(hex: hex)
+        }
+        return dark ? Color(hex: "3291ff") : Color(hex: "0070f3")
+    }
     static var green: Color { dark ? Color(hex: "3ecf8e") : Color(hex: "18a058") }
     static var red: Color { dark ? Color(hex: "f14c4c") : Color(hex: "e5484d") }
     static var yellow: Color { dark ? Color(hex: "f5a623") : Color(hex: "ca8a04") }
@@ -1123,6 +1203,22 @@ enum Theme {
     // ── Semantic accent backgrounds (soft fills for badges/indicators) ──
     static func accentBg(_ color: Color) -> Color { color.opacity(dark ? 0.12 : 0.08) }
     static func accentBorder(_ color: Color) -> Color { color.opacity(dark ? 0.25 : 0.2) }
+
+    /// 그라데이션 또는 단색 accent 배경 (AnyShapeStyle)
+    static var accentBackground: AnyShapeStyle {
+        let config = AppSettings.shared.customTheme
+        if config.useGradient,
+           let startHex = config.gradientStartHex, !startHex.isEmpty,
+           let endHex = config.gradientEndHex, !endHex.isEmpty {
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [Color(hex: startHex), Color(hex: endHex)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+            )
+        }
+        return AnyShapeStyle(accent)
+    }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // 2. TYPOGRAPHY SYSTEM
@@ -1143,24 +1239,45 @@ enum Theme {
     static var monoBold: Font { .system(size: round(11 * scale), weight: .semibold, design: .monospaced) }
     static var pixel: Font { .system(size: round(8 * chromeScale), weight: .bold, design: .monospaced) }
 
-    /// Primary UI text (Geist Sans equivalent — system san-serif)
-    static func mono(_ baseSize: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: round(baseSize * scale), weight: weight, design: .default)
+    /// 커스텀 테마에서 fontSize가 설정되어 있으면 해당 스케일 사용
+    private static var customScale: CGFloat? {
+        guard let fs = AppSettings.shared.customTheme.fontSize, fs > 0 else { return nil }
+        return CGFloat(fs / 11.0)
     }
 
-    /// Code, terminal, git hashes, file paths
+    /// Primary UI text (Geist Sans equivalent — system san-serif)
+    static func mono(_ baseSize: CGFloat, weight: Font.Weight = .regular) -> Font {
+        let effectiveScale = customScale ?? scale
+        if let fontName = AppSettings.shared.customTheme.fontName, !fontName.isEmpty {
+            return Font.custom(fontName, size: round(baseSize * effectiveScale)).weight(weight)
+        }
+        return .system(size: round(baseSize * effectiveScale), weight: weight, design: .default)
+    }
+
+    /// Code, terminal, git hashes, file paths — 커스텀 폰트 미적용 (항상 monospaced)
     static func code(_ baseSize: CGFloat, weight: Font.Weight = .regular) -> Font {
         .system(size: round(baseSize * scale), weight: weight, design: .monospaced)
     }
 
     /// General scaled font
     static func scaled(_ baseSize: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
-        .system(size: round(baseSize * scale), weight: weight, design: design)
+        let effectiveScale = customScale ?? scale
+        if let fontName = AppSettings.shared.customTheme.fontName, !fontName.isEmpty, design == .default {
+            return Font.custom(fontName, size: round(baseSize * effectiveScale)).weight(weight)
+        }
+        return .system(size: round(baseSize * effectiveScale), weight: weight, design: design)
     }
 
     /// Chrome-only font (sidebar, toolbar — less aggressive scaling)
     static func chrome(_ baseSize: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: round(baseSize * chromeScale), weight: weight, design: .default)
+        let effectiveChromeScale: CGFloat = {
+            if let cs = customScale { return 1 + (cs - 1) * 0.5 }
+            return chromeScale
+        }()
+        if let fontName = AppSettings.shared.customTheme.fontName, !fontName.isEmpty {
+            return Font.custom(fontName, size: round(baseSize * effectiveChromeScale)).weight(weight)
+        }
+        return .system(size: round(baseSize * effectiveChromeScale), weight: weight, design: .default)
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1858,10 +1975,29 @@ struct SettingsView: View {
     @State private var showLanguageRestartAlert = false
     @State private var pendingLanguage: String?
 
+    // Custom Theme
+    @State private var customAccentColor: Color = Theme.accent
+    @State private var customGradientStart: Color = Color(hex: "3291ff")
+    @State private var customGradientEnd: Color = Color(hex: "8e4ec6")
+    @State private var customUseGradient: Bool = false
+    @State private var customFontName: String = ""
+    @State private var customFontSize: Double = 11.0
+    @State private var showImportError = false
+
+    // Plugin
+    @ObservedObject private var pluginManager = PluginManager.shared
+    @State private var pluginSourceInput: String = ""
+    @State private var showPluginUninstallConfirm = false
+    @State private var pluginToUninstall: PluginEntry?
+    @State private var showPluginScaffold = false
+    @State private var scaffoldName: String = ""
+
     private let settingsTabs: [(String, String)] = [
         ("slider.horizontal.3", NSLocalizedString("settings.general", comment: "")), ("paintbrush.fill", NSLocalizedString("settings.display", comment: "")), ("building.2.fill", NSLocalizedString("settings.office", comment: "")),
         ("bolt.fill", NSLocalizedString("settings.token", comment: "")), ("externaldrive.fill", NSLocalizedString("settings.data", comment: "")), ("doc.text.fill", NSLocalizedString("settings.template", comment: "")),
-        ("cup.and.saucer.fill", NSLocalizedString("settings.support", comment: "")), ("lock.shield.fill", NSLocalizedString("settings.security", comment: ""))
+        ("puzzlepiece.fill", NSLocalizedString("settings.plugin", comment: "")),
+        ("cup.and.saucer.fill", NSLocalizedString("settings.support", comment: "")), ("lock.shield.fill", NSLocalizedString("settings.security", comment: "")),
+        ("keyboard.fill", NSLocalizedString("settings.shortcuts", comment: ""))
     ]
 
     var body: some View {
@@ -1893,8 +2029,10 @@ struct SettingsView: View {
                     case 3: tokenTab
                     case 4: dataTab
                     case 5: templateTab
-                    case 6: supportTab
-                    case 7: securityTab
+                    case 6: pluginTab
+                    case 7: supportTab
+                    case 8: securityTab
+                    case 9: ShortcutsSettingsTab()
                     default: generalTab
                     }
                 }
@@ -1908,6 +2046,14 @@ struct SettingsView: View {
             editingAppName = settings.appDisplayName
             editingCompanyName = settings.companyName
             calculateCacheSize()
+            // 커스텀 테마 상태 초기화
+            let ct = settings.customTheme
+            if let hex = ct.accentHex, !hex.isEmpty { customAccentColor = Color(hex: hex) }
+            if let hex = ct.gradientStartHex, !hex.isEmpty { customGradientStart = Color(hex: hex) }
+            if let hex = ct.gradientEndHex, !hex.isEmpty { customGradientEnd = Color(hex: hex) }
+            customUseGradient = ct.useGradient
+            customFontName = ct.fontName ?? ""
+            customFontSize = ct.fontSize ?? 11.0
         }
         .alert(clearAllMode ? NSLocalizedString("theme.alert.clear.all", comment: "") : NSLocalizedString("theme.alert.clear.old", comment: ""), isPresented: $showClearConfirm) {
             Button(NSLocalizedString("delete", comment: ""), role: .destructive) {
@@ -1962,6 +2108,11 @@ struct SettingsView: View {
                 }
             }()
             Text(String(format: NSLocalizedString("theme.alert.language.msg", comment: ""), langName))
+        }
+        .alert(NSLocalizedString("settings.customtheme.import.error", comment: ""), isPresented: $showImportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("settings.customtheme.import.error.msg", comment: ""))
         }
     }
 
@@ -2166,6 +2317,215 @@ struct SettingsView: View {
                         }
                     }
                     settingPreviewCard
+                }
+            }
+
+            // ── 커스텀 테마 ──
+            settingsSection(title: NSLocalizedString("settings.customtheme", comment: ""), subtitle: NSLocalizedString("settings.customtheme.subtitle", comment: "")) {
+                VStack(spacing: 12) {
+                    // 강조 색상
+                    HStack {
+                        Text(NSLocalizedString("settings.customtheme.accent", comment: ""))
+                            .font(Theme.mono(10, weight: .medium))
+                            .foregroundColor(Theme.textPrimary)
+                        Spacer()
+                        ColorPicker("", selection: $customAccentColor, supportsOpacity: false)
+                            .labelsHidden()
+                            .onChange(of: customAccentColor) { newColor in
+                                var config = settings.customTheme
+                                config.accentHex = newColor.hexString
+                                settings.saveCustomTheme(config)
+                            }
+                        Button(action: {
+                            var config = settings.customTheme
+                            config.accentHex = nil
+                            settings.saveCustomTheme(config)
+                            customAccentColor = Theme.accent
+                        }) {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 10))
+                                .foregroundColor(Theme.textDim)
+                        }.buttonStyle(.plain)
+                    }
+
+                    // 그라데이션
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text(NSLocalizedString("settings.customtheme.gradient", comment: ""))
+                                .font(Theme.mono(10, weight: .medium))
+                                .foregroundColor(Theme.textPrimary)
+                            Spacer()
+                            Toggle("", isOn: $customUseGradient)
+                                .toggleStyle(.switch)
+                                .controlSize(.small)
+                                .onChange(of: customUseGradient) { newVal in
+                                    var config = settings.customTheme
+                                    config.useGradient = newVal
+                                    if newVal {
+                                        config.gradientStartHex = customGradientStart.hexString
+                                        config.gradientEndHex = customGradientEnd.hexString
+                                    }
+                                    settings.saveCustomTheme(config)
+                                }
+                        }
+
+                        if customUseGradient {
+                            HStack(spacing: 12) {
+                                HStack(spacing: 6) {
+                                    Text(NSLocalizedString("settings.customtheme.gradient.start", comment: ""))
+                                        .font(Theme.mono(9)).foregroundColor(Theme.textSecondary)
+                                    ColorPicker("", selection: $customGradientStart, supportsOpacity: false)
+                                        .labelsHidden()
+                                        .onChange(of: customGradientStart) { newColor in
+                                            var config = settings.customTheme
+                                            config.gradientStartHex = newColor.hexString
+                                            settings.saveCustomTheme(config)
+                                        }
+                                }
+                                HStack(spacing: 6) {
+                                    Text(NSLocalizedString("settings.customtheme.gradient.end", comment: ""))
+                                        .font(Theme.mono(9)).foregroundColor(Theme.textSecondary)
+                                    ColorPicker("", selection: $customGradientEnd, supportsOpacity: false)
+                                        .labelsHidden()
+                                        .onChange(of: customGradientEnd) { newColor in
+                                            var config = settings.customTheme
+                                            config.gradientEndHex = newColor.hexString
+                                            settings.saveCustomTheme(config)
+                                        }
+                                }
+                            }
+                            // 그라데이션 미리보기
+                            RoundedRectangle(cornerRadius: Theme.cornerMedium)
+                                .fill(LinearGradient(colors: [customGradientStart, customGradientEnd], startPoint: .leading, endPoint: .trailing))
+                                .frame(height: 28)
+                                .overlay(
+                                    Text("Gradient Preview")
+                                        .font(Theme.mono(9, weight: .bold))
+                                        .foregroundColor(customGradientStart.contrastingTextColor)
+                                )
+                        }
+                    }
+
+                    Rectangle().fill(Theme.border).frame(height: 1)
+
+                    // 폰트 선택
+                    HStack {
+                        Text(NSLocalizedString("settings.customtheme.font", comment: ""))
+                            .font(Theme.mono(10, weight: .medium))
+                            .foregroundColor(Theme.textPrimary)
+                        Spacer()
+                        Picker("", selection: $customFontName) {
+                            Text(NSLocalizedString("settings.customtheme.font.system", comment: ""))
+                                .tag("")
+                            ForEach(NSFontManager.shared.availableFontFamilies, id: \.self) { family in
+                                Text(family).font(.custom(family, size: 12)).tag(family)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: 200)
+                        .onChange(of: customFontName) { newVal in
+                            var config = settings.customTheme
+                            config.fontName = newVal.isEmpty ? nil : newVal
+                            settings.saveCustomTheme(config)
+                        }
+                    }
+
+                    // 폰트 크기 슬라이더
+                    VStack(spacing: 4) {
+                        HStack {
+                            Text(NSLocalizedString("settings.customtheme.fontsize", comment: ""))
+                                .font(Theme.mono(10, weight: .medium))
+                                .foregroundColor(Theme.textPrimary)
+                            Spacer()
+                            Text(String(format: "%.0fpt", customFontSize))
+                                .font(Theme.code(10))
+                                .foregroundColor(Theme.textSecondary)
+                        }
+                        Slider(value: $customFontSize, in: 8...24, step: 1)
+                            .onChange(of: customFontSize) { newVal in
+                                var config = settings.customTheme
+                                config.fontSize = newVal
+                                settings.saveCustomTheme(config)
+                            }
+                    }
+
+                    // 미리보기
+                    RoundedRectangle(cornerRadius: Theme.cornerMedium)
+                        .fill(Theme.accent.opacity(0.12))
+                        .overlay(
+                            VStack(spacing: 4) {
+                                Text("The quick brown fox")
+                                    .font(Theme.mono(11, weight: .medium))
+                                    .foregroundColor(Theme.textPrimary)
+                                Text(NSLocalizedString("theme.custom.preview", comment: ""))
+                                    .font(Theme.mono(9))
+                                    .foregroundColor(Theme.textSecondary)
+                            }
+                        )
+                        .frame(height: 52)
+                        .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(Theme.accent.opacity(0.2), lineWidth: 1))
+
+                    Rectangle().fill(Theme.border).frame(height: 1)
+
+                    // Import / Export / Reset 버튼
+                    HStack(spacing: 8) {
+                        Button(action: { settings.exportThemeToFile() }) {
+                            Label(NSLocalizedString("settings.customtheme.export", comment: ""), systemImage: "square.and.arrow.up")
+                                .font(Theme.mono(9, weight: .bold))
+                                .foregroundColor(Theme.cyan)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(Theme.cyan.opacity(0.1)))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.cyan.opacity(0.25), lineWidth: 1))
+                        }.buttonStyle(.plain)
+
+                        Button(action: {
+                            let panel = NSOpenPanel()
+                            panel.allowedContentTypes = [.json]
+                            panel.allowsMultipleSelection = false
+                            panel.title = NSLocalizedString("settings.customtheme.import", comment: "")
+                            if panel.runModal() == .OK, let url = panel.url {
+                                guard let data = try? Data(contentsOf: url),
+                                      let config = try? JSONDecoder().decode(CustomThemeConfig.self, from: data) else {
+                                    showImportError = true
+                                    return
+                                }
+                                settings.saveCustomTheme(config)
+                                // 상태 동기화
+                                if let hex = config.accentHex, !hex.isEmpty { customAccentColor = Color(hex: hex) }
+                                if let hex = config.gradientStartHex, !hex.isEmpty { customGradientStart = Color(hex: hex) }
+                                if let hex = config.gradientEndHex, !hex.isEmpty { customGradientEnd = Color(hex: hex) }
+                                customUseGradient = config.useGradient
+                                customFontName = config.fontName ?? ""
+                                customFontSize = config.fontSize ?? 11.0
+                            }
+                        }) {
+                            Label(NSLocalizedString("settings.customtheme.import", comment: ""), systemImage: "square.and.arrow.down")
+                                .font(Theme.mono(9, weight: .bold))
+                                .foregroundColor(Theme.accent)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent.opacity(0.1)))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.accent.opacity(0.25), lineWidth: 1))
+                        }.buttonStyle(.plain)
+
+                        Spacer()
+
+                        Button(action: {
+                            settings.saveCustomTheme(.default)
+                            customAccentColor = Theme.accent
+                            customGradientStart = Color(hex: "3291ff")
+                            customGradientEnd = Color(hex: "8e4ec6")
+                            customUseGradient = false
+                            customFontName = ""
+                            customFontSize = 11.0
+                        }) {
+                            Text(NSLocalizedString("settings.customtheme.reset", comment: ""))
+                                .font(Theme.mono(9, weight: .bold))
+                                .foregroundColor(Theme.orange)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(Theme.orange.opacity(0.1)))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.orange.opacity(0.25), lineWidth: 1))
+                        }.buttonStyle(.plain)
+                    }
                 }
             }
         }
@@ -2464,6 +2824,480 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    // MARK: - 플러그인 탭
+
+    private var pluginTab: some View {
+        VStack(spacing: 14) {
+            settingsSection(title: NSLocalizedString("plugin.section.add", comment: ""), subtitle: NSLocalizedString("plugin.section.add.subtitle", comment: "")) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        TextField(NSLocalizedString("plugin.input.placeholder", comment: ""), text: $pluginSourceInput)
+                            .font(Theme.mono(10)).textFieldStyle(.plain)
+                            .padding(8)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.5), lineWidth: 1))
+                            .onSubmit { installPlugin() }
+
+                        Button(action: { installPlugin() }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: Theme.iconSize(11), weight: .bold))
+                                Text(NSLocalizedString("plugin.btn.install", comment: ""))
+                                    .font(Theme.mono(9, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(pluginManager.isInstalling ? Theme.textDim : Theme.accent))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(pluginManager.isInstalling || pluginSourceInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+
+                    // 로컬 폴더 선택 + 새 플러그인 생성
+                    HStack(spacing: 8) {
+                        Button(action: { pickLocalPluginFolder() }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "folder.badge.plus")
+                                    .font(.system(size: Theme.iconSize(10), weight: .medium))
+                                Text(NSLocalizedString("plugin.btn.local", comment: ""))
+                                    .font(Theme.mono(9, weight: .medium))
+                            }
+                            .foregroundColor(Theme.cyan)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.cyan.opacity(0.08)))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.cyan.opacity(0.2), lineWidth: 1))
+                        }.buttonStyle(.plain)
+
+                        Button(action: { showPluginScaffold = true }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "hammer.fill")
+                                    .font(.system(size: Theme.iconSize(10), weight: .medium))
+                                Text(NSLocalizedString("plugin.btn.create", comment: ""))
+                                    .font(Theme.mono(9, weight: .medium))
+                            }
+                            .foregroundColor(Theme.green)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.green.opacity(0.08)))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.green.opacity(0.2), lineWidth: 1))
+                        }.buttonStyle(.plain)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        pluginFormatHint(icon: "mug.fill", text: NSLocalizedString("plugin.format.brew", comment: ""), example: "formula-name")
+                        pluginFormatHint(icon: "arrow.triangle.branch", text: NSLocalizedString("plugin.format.tap", comment: ""), example: "user/tap/formula")
+                        pluginFormatHint(icon: "link", text: NSLocalizedString("plugin.format.url", comment: ""), example: "https://…/plugin.tar.gz")
+                        pluginFormatHint(icon: "folder.fill", text: NSLocalizedString("plugin.format.local", comment: ""), example: "~/my-plugins/my-plugin")
+                    }
+
+                    if pluginManager.isInstalling {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text(pluginManager.installProgress)
+                                .font(Theme.mono(9))
+                                .foregroundColor(Theme.cyan)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.cyan.opacity(0.08)))
+                    }
+
+                    if let error = pluginManager.lastError {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: Theme.iconSize(11), weight: .bold))
+                                .foregroundColor(Theme.red)
+                            Text(error)
+                                .font(Theme.mono(8))
+                                .foregroundColor(Theme.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                            Button(action: { pluginManager.lastError = nil }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(Theme.textDim)
+                            }.buttonStyle(.plain)
+                        }
+                        .padding(8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.red.opacity(0.08)))
+                    }
+                }
+            }
+
+            settingsSection(
+                title: NSLocalizedString("plugin.section.installed", comment: ""),
+                subtitle: String(format: NSLocalizedString("plugin.section.installed.count", comment: ""),
+                                 pluginManager.plugins.count,
+                                 pluginManager.plugins.filter { $0.enabled }.count)
+            ) {
+                if pluginManager.plugins.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "puzzlepiece.extension")
+                            .font(.system(size: Theme.iconSize(14), weight: .light))
+                            .foregroundColor(Theme.textDim)
+                        Text(NSLocalizedString("plugin.empty", comment: ""))
+                            .font(Theme.mono(10))
+                            .foregroundColor(Theme.textDim)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(pluginManager.plugins) { plugin in
+                            pluginRow(plugin)
+                        }
+                    }
+                }
+            }
+
+            // 마켓플레이스
+            settingsSection(
+                title: NSLocalizedString("plugin.marketplace", comment: ""),
+                subtitle: pluginManager.isLoadingRegistry
+                    ? NSLocalizedString("plugin.marketplace.loading", comment: "")
+                    : String(format: NSLocalizedString("plugin.marketplace.count", comment: ""), pluginManager.registryPlugins.count)
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Button(action: { pluginManager.fetchRegistry() }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: Theme.iconSize(10), weight: .bold))
+                                Text(NSLocalizedString("plugin.marketplace.refresh", comment: ""))
+                                    .font(Theme.mono(9, weight: .medium))
+                            }
+                            .foregroundColor(Theme.accent)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent.opacity(0.08)))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.accent.opacity(0.2), lineWidth: 1))
+                        }.buttonStyle(.plain)
+                        .disabled(pluginManager.isLoadingRegistry)
+
+                        Spacer()
+
+                        Text(NSLocalizedString("plugin.marketplace.hint", comment: ""))
+                            .font(Theme.mono(7))
+                            .foregroundColor(Theme.textDim)
+                    }
+
+                    if pluginManager.isLoadingRegistry {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text(NSLocalizedString("plugin.marketplace.loading", comment: ""))
+                                .font(Theme.mono(9)).foregroundColor(Theme.textDim)
+                        }
+                    }
+
+                    if let error = pluginManager.registryError {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 10)).foregroundColor(Theme.orange)
+                            Text(error)
+                                .font(Theme.mono(8)).foregroundColor(Theme.orange)
+                                .lineLimit(2)
+                        }
+                    }
+
+                    if !pluginManager.registryPlugins.isEmpty {
+                        VStack(spacing: 6) {
+                            ForEach(pluginManager.registryPlugins) { item in
+                                marketplaceRow(item)
+                            }
+                        }
+                    } else if !pluginManager.isLoadingRegistry && pluginManager.registryError == nil {
+                        HStack(spacing: 8) {
+                            Image(systemName: "tray")
+                                .font(.system(size: Theme.iconSize(12), weight: .light))
+                                .foregroundColor(Theme.textDim)
+                            Text(NSLocalizedString("plugin.marketplace.empty", comment: ""))
+                                .font(Theme.mono(9)).foregroundColor(Theme.textDim)
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                    }
+                }
+            }
+
+            // 정보
+            settingsSection(title: NSLocalizedString("plugin.section.info", comment: ""), subtitle: NSLocalizedString("plugin.section.info.subtitle", comment: "")) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.system(size: Theme.iconSize(11), weight: .bold))
+                        .foregroundColor(Theme.accent)
+                    Text(NSLocalizedString("plugin.info.desc", comment: ""))
+                        .font(Theme.mono(8))
+                        .foregroundColor(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .alert(NSLocalizedString("plugin.confirm.uninstall", comment: ""), isPresented: $showPluginUninstallConfirm) {
+            Button(NSLocalizedString("delete", comment: ""), role: .destructive) {
+                if let plugin = pluginToUninstall {
+                    pluginManager.uninstall(plugin)
+                    pluginToUninstall = nil
+                }
+            }
+            Button(NSLocalizedString("cancel", comment: ""), role: .cancel) { pluginToUninstall = nil }
+        } message: {
+            Text(String(format: NSLocalizedString("plugin.confirm.uninstall.msg", comment: ""), pluginToUninstall?.name ?? ""))
+        }
+        .sheet(isPresented: $showPluginScaffold) {
+            VStack(spacing: 16) {
+                HStack {
+                    Image(systemName: "hammer.fill")
+                        .font(.system(size: Theme.iconSize(14), weight: .bold))
+                        .foregroundColor(Theme.green)
+                    Text(NSLocalizedString("plugin.scaffold.title", comment: ""))
+                        .font(Theme.mono(13, weight: .bold))
+                        .foregroundColor(Theme.textPrimary)
+                    Spacer()
+                    Button(action: { showPluginScaffold = false }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(Theme.textDim)
+                    }.buttonStyle(.plain)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(NSLocalizedString("plugin.scaffold.name.label", comment: ""))
+                        .font(Theme.mono(10, weight: .medium))
+                        .foregroundColor(Theme.textSecondary)
+                    TextField(NSLocalizedString("plugin.scaffold.name.placeholder", comment: ""), text: $scaffoldName)
+                        .font(Theme.mono(11)).textFieldStyle(.plain)
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border, lineWidth: 1))
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(NSLocalizedString("plugin.scaffold.desc", comment: ""))
+                        .font(Theme.mono(8))
+                        .foregroundColor(Theme.textDim)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack {
+                    Spacer()
+                    Button(action: { showPluginScaffold = false }) {
+                        Text(NSLocalizedString("cancel", comment: ""))
+                            .font(Theme.mono(10, weight: .medium))
+                            .foregroundColor(Theme.textSecondary)
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
+                    }.buttonStyle(.plain)
+
+                    Button(action: { scaffoldNewPlugin() }) {
+                        Text(NSLocalizedString("plugin.scaffold.btn", comment: ""))
+                            .font(Theme.mono(10, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(scaffoldName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Theme.textDim : Theme.green))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(scaffoldName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(width: 400)
+            .background(Theme.bg)
+        }
+    }
+
+    private func installPlugin() {
+        let source = pluginSourceInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !source.isEmpty else { return }
+        pluginManager.install(source: source)
+        pluginSourceInput = ""
+    }
+
+    private func pickLocalPluginFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.message = NSLocalizedString("plugin.picker.message", comment: "")
+        panel.prompt = NSLocalizedString("plugin.picker.prompt", comment: "")
+        if panel.runModal() == .OK, let url = panel.url {
+            pluginManager.install(source: url.path)
+        }
+    }
+
+    private func scaffoldNewPlugin() {
+        let name = scaffoldName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.message = NSLocalizedString("plugin.scaffold.pick.dir", comment: "")
+        panel.prompt = NSLocalizedString("plugin.scaffold.pick.prompt", comment: "")
+        if panel.runModal() == .OK, let url = panel.url {
+            if let pluginPath = pluginManager.scaffold(name: name, at: url.path) {
+                // 생성된 플러그인을 바로 등록
+                pluginManager.install(source: pluginPath)
+                // Finder에서 열기
+                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: pluginPath)
+            }
+        }
+        scaffoldName = ""
+        showPluginScaffold = false
+    }
+
+    private func pluginTypeIcon(_ type: PluginEntry.SourceType) -> String {
+        switch type {
+        case .brewFormula, .brewTap: return "mug.fill"
+        case .rawURL: return "link.circle.fill"
+        case .local: return "folder.circle.fill"
+        }
+    }
+
+    private func pluginRow(_ plugin: PluginEntry) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: pluginTypeIcon(plugin.sourceType))
+                .font(.system(size: Theme.iconSize(14), weight: .bold))
+                .foregroundColor(plugin.enabled ? Theme.accent : Theme.textDim)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(plugin.name)
+                    .font(Theme.mono(10, weight: .bold))
+                    .foregroundColor(plugin.enabled ? Theme.textPrimary : Theme.textDim)
+                HStack(spacing: 6) {
+                    Text("v\(plugin.version)")
+                        .font(Theme.mono(8))
+                        .foregroundColor(Theme.textDim)
+                    Text("\u{00B7}").foregroundColor(Theme.textDim)
+                    Text(plugin.source)
+                        .font(Theme.mono(8))
+                        .foregroundColor(Theme.textDim)
+                        .lineLimit(1).truncationMode(.middle)
+                }
+            }
+
+            Spacer()
+
+            Toggle("", isOn: Binding(
+                get: { plugin.enabled },
+                set: { _ in pluginManager.toggleEnabled(plugin) }
+            ))
+            .toggleStyle(.switch).tint(Theme.green).labelsHidden().controlSize(.mini)
+
+            // Finder에서 열기
+            Button(action: { pluginManager.revealInFinder(plugin) }) {
+                Image(systemName: "folder")
+                    .font(.system(size: Theme.iconSize(11), weight: .medium))
+                    .foregroundColor(Theme.textSecondary)
+            }.buttonStyle(.plain)
+
+            // brew 업그레이드 (brew만)
+            if plugin.sourceType == .brewFormula || plugin.sourceType == .brewTap {
+                Button(action: { pluginManager.upgrade(plugin) }) {
+                    Image(systemName: "arrow.clockwise.circle")
+                        .font(.system(size: Theme.iconSize(12), weight: .medium))
+                        .foregroundColor(Theme.cyan)
+                }.buttonStyle(.plain)
+            }
+
+            Button(action: {
+                pluginToUninstall = plugin
+                showPluginUninstallConfirm = true
+            }) {
+                Image(systemName: "trash")
+                    .font(.system(size: Theme.iconSize(11), weight: .medium))
+                    .foregroundColor(Theme.red.opacity(0.7))
+            }.buttonStyle(.plain)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(plugin.enabled ? Theme.bgSurface : Theme.bgSurface.opacity(0.4)))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(plugin.enabled ? Theme.border.opacity(0.4) : Theme.border.opacity(0.2), lineWidth: 1))
+    }
+
+    private func pluginFormatHint(icon: String, text: String, example: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: Theme.iconSize(9), weight: .medium))
+                .foregroundColor(Theme.textDim)
+                .frame(width: 14)
+            Text(text)
+                .font(Theme.mono(8))
+                .foregroundColor(Theme.textDim)
+            Text(example)
+                .font(Theme.mono(8, weight: .medium))
+                .foregroundColor(Theme.textSecondary)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(RoundedRectangle(cornerRadius: 4).fill(Theme.bgSurface))
+        }
+    }
+
+    private func marketplaceRow(_ item: RegistryPlugin) -> some View {
+        let installed = pluginManager.isInstalled(item)
+        return HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(item.name)
+                        .font(Theme.mono(10, weight: .bold))
+                        .foregroundColor(Theme.textPrimary)
+                    Text("v\(item.version)")
+                        .font(Theme.mono(7))
+                        .foregroundColor(Theme.textDim)
+                    if item.characterCount > 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 7))
+                            Text("\(item.characterCount)")
+                                .font(Theme.mono(7, weight: .medium))
+                        }
+                        .foregroundColor(Theme.purple)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(RoundedRectangle(cornerRadius: 3).fill(Theme.purple.opacity(0.1)))
+                    }
+                }
+                Text(item.description)
+                    .font(Theme.mono(8))
+                    .foregroundColor(Theme.textDim)
+                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text("by \(item.author)")
+                        .font(Theme.mono(7))
+                        .foregroundColor(Theme.textDim)
+                    if !item.tags.isEmpty {
+                        ForEach(item.tags.prefix(3), id: \.self) { tag in
+                            Text(tag)
+                                .font(Theme.mono(6, weight: .medium))
+                                .foregroundColor(Theme.cyan)
+                                .padding(.horizontal, 4).padding(.vertical, 1)
+                                .background(RoundedRectangle(cornerRadius: 3).fill(Theme.cyan.opacity(0.08)))
+                        }
+                    }
+                }
+            }
+
+            Spacer()
+
+            if installed {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10))
+                    Text(NSLocalizedString("plugin.marketplace.installed", comment: ""))
+                        .font(Theme.mono(8, weight: .medium))
+                }
+                .foregroundColor(Theme.green)
+            } else {
+                Button(action: { pluginManager.installFromRegistry(item) }) {
+                    Text(NSLocalizedString("plugin.btn.install", comment: ""))
+                        .font(Theme.mono(9, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent))
+                }
+                .buttonStyle(.plain)
+                .disabled(pluginManager.isInstalling)
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bgSurface))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border.opacity(0.3), lineWidth: 1))
     }
 
     private var supportTab: some View {
@@ -4524,5 +5358,30 @@ extension Color {
         let g = int >> 8 & 0xFF
         let b = int & 0xFF
         self.init(.sRGB, red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255)
+    }
+
+    /// Color → 6자리 hex 문자열 (# 없음)
+    var hexString: String {
+        let nsColor = NSColor(self).usingColorSpace(.sRGB) ?? NSColor(self)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        nsColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return String(format: "%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
+    }
+
+    /// W3C 상대 휘도 (0 = 검정, 1 = 흰색)
+    var luminance: Double {
+        let nsColor = NSColor(self).usingColorSpace(.sRGB) ?? NSColor(self)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        nsColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+        func linearize(_ c: CGFloat) -> Double {
+            let v = Double(c)
+            return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b)
+    }
+
+    /// 배경색 위 텍스트 가독성을 위한 자동 대비 색상
+    var contrastingTextColor: Color {
+        luminance > 0.179 ? .black : .white
     }
 }

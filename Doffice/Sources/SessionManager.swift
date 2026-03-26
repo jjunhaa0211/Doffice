@@ -78,6 +78,8 @@ class SessionManager: ObservableObject {
     private var reportScanWorkItem: DispatchWorkItem?
     private var reportRefreshToken = UUID()
     private var isAppActive = true
+    /// 사용자가 명시적으로 닫은 프로젝트 경로 (rescan에서 재추가 방지)
+    private var dismissedPaths = Set<String>()
 
     // MARK: - Session Search
 
@@ -284,6 +286,8 @@ class SessionManager: ObservableObject {
                         }
                         continue
                     }
+                    // 사용자가 닫은 경로는 재추가하지 않음
+                    if self.dismissedPaths.contains(session.path) { continue }
                     self.addTab(
                         projectName: session.projectName,
                         projectPath: session.path,
@@ -524,9 +528,10 @@ class SessionManager: ObservableObject {
                     tab.sessionCount = projectSessionCount[tab.projectPath] ?? tab.sessionCount
                 }
 
-                // 새 세션 추가
+                // 새 세션 추가 (사용자가 닫은 경로는 제외)
                 for session in detected {
-                    if !self.tabs.contains(where: { $0.projectPath == session.path }) {
+                    if !self.tabs.contains(where: { $0.projectPath == session.path }),
+                       !self.dismissedPaths.contains(session.path) {
                         self.addTab(
                             projectName: session.projectName,
                             projectPath: session.path,
@@ -733,18 +738,18 @@ class SessionManager: ObservableObject {
     func notifyManualLaunchCapacity(requested: Int = 1) {
         let message: String
         if CharacterRegistry.shared.hiredCharacters.count >= CharacterRegistry.maxHiredCount && manualLaunchCapacity == 0 {
-            message = "직원은 최대 \(CharacterRegistry.maxHiredCount)명까지 권장합니다. 지금은 더 이상 새 터미널에 배정할 수 없습니다."
+            message = String(format: NSLocalizedString("session.limit.max", comment: ""), CharacterRegistry.maxHiredCount)
         } else if manualLaunchCapacity == 0 {
-            message = "지금 바로 투입 가능한 직원이 없습니다. 현재 작업이 끝난 뒤 다시 시도해주세요."
+            message = NSLocalizedString("session.limit.no.available", comment: "")
         } else {
-            message = "현재 바로 배정 가능한 직원은 \(manualLaunchCapacity)명뿐입니다. 요청한 \(requested)개 전체를 동시에 만들 수 없습니다."
+            message = String(format: NSLocalizedString("session.limit.partial", comment: ""), manualLaunchCapacity, requested)
         }
 
         NotificationCenter.default.post(
             name: .workmanRoleNotice,
             object: nil,
             userInfo: [
-                "title": "터미널 추가 제한",
+                "title": NSLocalizedString("session.limit.title", comment: ""),
                 "message": message
             ]
         )
@@ -752,6 +757,10 @@ class SessionManager: ObservableObject {
 
     func removeTab(_ id: String) {
         if let tab = tabs.first(where: { $0.id == id }) {
+            // rescan이 닫은 세션을 다시 추가하지 않도록 경로 기억
+            if tab.detectedPid != nil {
+                dismissedPaths.insert(tab.projectPath)
+            }
             tab.stop()
             if tab.automationSourceTabId == nil {
                 let childTabs = tabs.filter { $0.automationSourceTabId == tab.id }
@@ -853,8 +862,8 @@ class SessionManager: ObservableObject {
             workerName: tab.workerName,
             assigneeCharacterId: tab.characterId,
             state: .running,
-            handoffLabel: "사용자 → \(tab.workerName)",
-            detail: "사용자 요구사항을 받아 개발을 시작합니다."
+            handoffLabel: String(format: NSLocalizedString("workflow.handoff.user", comment: ""), tab.workerName),
+            detail: NSLocalizedString("workflow.dev.user.start", comment: "")
         )
     }
 
@@ -866,27 +875,27 @@ class SessionManager: ObservableObject {
         }
 
         if let reason = automationThrottleReason(for: .planner) {
-            tab.appendBlock(.status(message: "토큰 보호 모드"), content: reason)
+            tab.appendBlock(.status(message: NSLocalizedString("token.protection.mode", comment: "")), content: reason)
             return false
         }
 
         guard let plannerCharacter = availableAutomationCharacter(for: .planner, sourceId: tab.id) else {
             if !CharacterRegistry.shared.hiredCharacters(for: .planner).isEmpty {
-                tab.appendBlock(.status(message: "기획자 대기 중"), content: "지금 비어 있는 기획자가 없어 이번 작업은 개발자가 바로 이어받습니다.")
+                tab.appendBlock(.status(message: NSLocalizedString("workflow.planner.waiting.title", comment: "")), content: NSLocalizedString("workflow.planner.busy", comment: ""))
             }
             return false
         }
 
         guard !hasAutomationInFlight(for: tab.id, roles: [.planner, .designer, .reviewer, .qa, .reporter, .sre]) else {
             tab.appendBlock(
-                .status(message: "협업 단계 진행 중"),
-                content: "현재 다른 역할이 이 작업을 정리하고 있습니다. 완료 후 개발자에게 전달됩니다."
+                .status(message: NSLocalizedString("workflow.collab.in.progress", comment: "")),
+                content: NSLocalizedString("workflow.collab.in.progress.detail", comment: "")
             )
             return true
         }
 
         tab.resetWorkflowTracking(request: prompt)
-        tab.officeSeatLockReason = "기획 정리 대기"
+        tab.officeSeatLockReason = NSLocalizedString("workflow.planning.waiting", comment: "")
         tab.lastActivityTime = Date()
         tab.appendBlock(.userPrompt, content: prompt)
 
@@ -904,13 +913,13 @@ class SessionManager: ObservableObject {
             workerName: plannerTab.workerName,
             assigneeCharacterId: plannerCharacter.id,
             state: .running,
-            handoffLabel: "사용자 → \(plannerTab.workerName)",
-            detail: "기획자가 요구사항을 정리하고 필요하면 디자이너와 협의합니다."
+            handoffLabel: String(format: NSLocalizedString("workflow.handoff.user", comment: ""), plannerTab.workerName),
+            detail: NSLocalizedString("workflow.planner.handoff.detail", comment: "")
         )
 
         tab.appendBlock(
-            .status(message: "기획자 투입: \(plannerTab.workerName)"),
-            content: "기획자가 요구사항을 정리하고 필요하면 디자이너와 협의한 뒤 개발자에게 전달합니다."
+            .status(message: String(format: NSLocalizedString("workflow.planner.assigned", comment: ""), plannerTab.workerName)),
+            content: NSLocalizedString("workflow.planner.assigned.detail", comment: "")
         )
         return true
     }
@@ -930,7 +939,7 @@ class SessionManager: ObservableObject {
             tracker.dailyRemaining < 25_000 ||
             tracker.weeklyRemaining < 80_000
         if critical {
-            return "토큰 사용량이 높아 자동 \(role.displayName) 단계를 잠시 줄였습니다."
+            return String(format: NSLocalizedString("workflow.throttle.critical", comment: ""), role.displayName)
         }
 
         let conservativeRoles: Set<WorkerJob> = [.planner, .designer, .reporter, .sre]
@@ -939,7 +948,7 @@ class SessionManager: ObservableObject {
             tracker.dailyRemaining < 80_000 ||
             tracker.weeklyRemaining < 250_000
         if conserve && conservativeRoles.contains(role) {
-            return "토큰 사용량 절약을 위해 자동 \(role.displayName) 단계를 생략합니다."
+            return String(format: NSLocalizedString("workflow.throttle.conserve", comment: ""), role.displayName)
         }
         return nil
     }
@@ -1064,21 +1073,21 @@ class SessionManager: ObservableObject {
             role: .planner,
             state: .completed,
             detail: plannerTab.lastCompletionSummary.isEmpty
-                ? "기획 정리가 완료되었습니다."
+                ? NSLocalizedString("workflow.planning.completed", comment: "")
                 : String(plannerTab.lastCompletionSummary.prefix(260))
         )
         sourceTab.appendBlock(
-            .status(message: "기획 완료"),
+            .status(message: NSLocalizedString("workflow.planning.done", comment: "")),
             content: plannerTab.lastCompletionSummary.isEmpty
-                ? "기획자가 요구사항과 수용 기준을 정리했습니다."
+                ? NSLocalizedString("workflow.planning.summary", comment: "")
                 : String(plannerTab.lastCompletionSummary.prefix(260))
         )
 
         if let reason = automationThrottleReason(for: .designer) {
-            sourceTab.appendBlock(.status(message: "디자인 단계 생략"), content: reason)
+            sourceTab.appendBlock(.status(message: NSLocalizedString("workflow.design.skipped", comment: "")), content: reason)
         } else if let designerCharacter = availableAutomationCharacter(for: .designer, sourceId: sourceId),
                   !hasAutomationInFlight(for: sourceId, roles: [.designer]) {
-            sourceTab.officeSeatLockReason = "디자인 협의 대기"
+            sourceTab.officeSeatLockReason = NSLocalizedString("workflow.design.waiting", comment: "")
             let designerPrompt = buildDesignerPrompt(for: sourceTab)
             let designerTab = startOrReuseAutomationTab(
                 role: .designer,
@@ -1093,12 +1102,12 @@ class SessionManager: ObservableObject {
                 workerName: designerTab.workerName,
                 assigneeCharacterId: designerCharacter.id,
                 state: .running,
-                handoffLabel: "\(plannerTab.workerName) → \(designerTab.workerName)",
-                detail: "기획 정리 결과를 바탕으로 UI/UX와 표현 방향을 정리합니다."
+                handoffLabel: String(format: NSLocalizedString("workflow.handoff.role", comment: ""), plannerTab.workerName, designerTab.workerName),
+                detail: NSLocalizedString("workflow.design.detail", comment: "")
             )
             sourceTab.appendBlock(
-                .status(message: "디자이너 투입: \(designerTab.workerName)"),
-                content: "디자이너가 화면 흐름과 상호작용 포인트를 정리합니다."
+                .status(message: String(format: NSLocalizedString("workflow.designer.assigned", comment: ""), designerTab.workerName)),
+                content: NSLocalizedString("workflow.designer.detail", comment: "")
             )
             return
         }
@@ -1115,13 +1124,13 @@ class SessionManager: ObservableObject {
             role: .designer,
             state: .completed,
             detail: designerTab.lastCompletionSummary.isEmpty
-                ? "디자인 협의가 완료되었습니다."
+                ? NSLocalizedString("workflow.design.completed", comment: "")
                 : String(designerTab.lastCompletionSummary.prefix(260))
         )
         sourceTab.appendBlock(
-            .status(message: "디자인 협의 완료"),
+            .status(message: NSLocalizedString("workflow.design.done", comment: "")),
             content: designerTab.lastCompletionSummary.isEmpty
-                ? "디자이너가 UI/UX 보강 포인트를 정리했습니다."
+                ? NSLocalizedString("workflow.design.summary", comment: "")
                 : String(designerTab.lastCompletionSummary.prefix(260))
         )
 
@@ -1134,12 +1143,12 @@ class SessionManager: ObservableObject {
             tab.updateWorkflowStage(
                 role: .developer,
                 state: .completed,
-                detail: "코드 수정 없이 답변을 마쳤습니다."
+                detail: NSLocalizedString("workflow.dev.no.code.detail", comment: "")
             )
-            tab.appendBlock(.status(message: "검토 단계 스킵 · 코드 수정 없음"))
+            tab.appendBlock(.status(message: NSLocalizedString("workflow.dev.no.code.skip", comment: "")))
             launchCompletionRecipients(
                 for: tab,
-                validationSummary: "코드 수정 없음",
+                validationSummary: NSLocalizedString("workflow.dev.no.code.summary", comment: ""),
                 qaSummary: nil,
                 handoffSourceName: tab.workerName
             )
@@ -1149,11 +1158,11 @@ class SessionManager: ObservableObject {
         tab.updateWorkflowStage(
             role: .developer,
             state: .completed,
-            detail: "구현을 마치고 검토 단계로 넘깁니다."
+            detail: NSLocalizedString("workflow.dev.completed.detail", comment: "")
         )
 
         if let reason = automationThrottleReason(for: .reviewer) {
-            tab.appendBlock(.status(message: "리뷰 단계 생략"), content: reason)
+            tab.appendBlock(.status(message: NSLocalizedString("workflow.review.skip.title", comment: "")), content: reason)
             launchQA(for: tab, reviewSummary: nil, handoffSourceName: tab.workerName)
             return
         }
@@ -1162,9 +1171,9 @@ class SessionManager: ObservableObject {
             tab.updateWorkflowStage(
                 role: .reviewer,
                 state: .skipped,
-                detail: "설정에서 코드 리뷰 자동 단계를 비활성화했습니다."
+                detail: NSLocalizedString("workflow.review.disabled", comment: "")
             )
-            tab.appendBlock(.status(message: "리뷰 단계 생략"), content: "설정에서 코드 리뷰 자동 단계를 끄셨습니다.")
+            tab.appendBlock(.status(message: NSLocalizedString("workflow.review.skipped", comment: "")), content: NSLocalizedString("workflow.review.skipped.detail", comment: ""))
             launchQA(for: tab, reviewSummary: nil, handoffSourceName: tab.workerName)
             return
         }
@@ -1174,11 +1183,11 @@ class SessionManager: ObservableObject {
             tab.updateWorkflowStage(
                 role: .reviewer,
                 state: .failed,
-                detail: "코드 리뷰 자동 한도(\(AppSettings.shared.reviewerMaxPasses)회)에 도달했습니다."
+                detail: String(format: NSLocalizedString("workflow.review.limit.reached", comment: ""), AppSettings.shared.reviewerMaxPasses)
             )
             tab.appendBlock(
-                .status(message: "리뷰 자동 한도 도달"),
-                content: "코드 리뷰어가 최대 \(AppSettings.shared.reviewerMaxPasses)회까지 검토했습니다. 토큰 보호를 위해 자동 재검토를 중단합니다."
+                .status(message: NSLocalizedString("workflow.review.limit.title", comment: "")),
+                content: String(format: NSLocalizedString("workflow.review.limit.detail", comment: ""), AppSettings.shared.reviewerMaxPasses)
             )
             return
         }
@@ -1201,16 +1210,16 @@ class SessionManager: ObservableObject {
                 automationSourceTabId: tab.id
             )
             tab.reviewerAttemptCount += 1
-            tab.officeSeatLockReason = "코드 리뷰 대기"
+            tab.officeSeatLockReason = NSLocalizedString("workflow.review.waiting", comment: "")
             tab.upsertWorkflowStage(
                 role: .reviewer,
                 workerName: reviewTab.workerName,
                 assigneeCharacterId: reviewerCharacter.id,
                 state: .running,
-                handoffLabel: "\(tab.workerName) → \(reviewTab.workerName)",
-                detail: "리뷰어가 변경 파일과 리스크를 검토합니다."
+                handoffLabel: String(format: NSLocalizedString("workflow.handoff.role", comment: ""), tab.workerName, reviewTab.workerName),
+                detail: NSLocalizedString("workflow.review.detail", comment: "")
             )
-            tab.appendBlock(.status(message: "코드 리뷰 투입: \(reviewTab.workerName)"), content: "리뷰어가 변경 파일과 리스크를 먼저 확인합니다.")
+            tab.appendBlock(.status(message: String(format: NSLocalizedString("workflow.review.assigned", comment: ""), reviewTab.workerName)), content: NSLocalizedString("workflow.review.assigned.detail", comment: ""))
             return
         }
 
@@ -1228,13 +1237,13 @@ class SessionManager: ObservableObject {
                 role: .reviewer,
                 state: .completed,
                 detail: reviewerTab.lastCompletionSummary.isEmpty
-                    ? "리뷰가 통과되었습니다."
+                    ? NSLocalizedString("workflow.review.passed", comment: "")
                     : String(reviewerTab.lastCompletionSummary.prefix(240))
             )
             sourceTab.appendBlock(
-                .status(message: "리뷰 통과"),
+                .status(message: NSLocalizedString("workflow.review.pass", comment: "")),
                 content: reviewerTab.lastCompletionSummary.isEmpty
-                    ? "리뷰어가 치명적인 문제를 찾지 못했습니다."
+                    ? NSLocalizedString("workflow.review.pass.detail", comment: "")
                     : String(reviewerTab.lastCompletionSummary.prefix(240))
             )
             if CharacterRegistry.shared.hiredCharacters(for: .qa).isEmpty {
@@ -1261,19 +1270,19 @@ class SessionManager: ObservableObject {
                 role: .reviewer,
                 state: .failed,
                 detail: reviewerTab.lastCompletionSummary.isEmpty
-                    ? "리뷰 피드백이 발생했습니다."
+                    ? NSLocalizedString("workflow.review.feedback", comment: "")
                     : String(reviewerTab.lastCompletionSummary.prefix(260))
             )
             sourceTab.appendBlock(
-                .status(message: "리뷰 수정 필요"),
+                .status(message: NSLocalizedString("workflow.review.fix.needed", comment: "")),
                 content: reviewerTab.lastCompletionSummary.isEmpty
-                    ? "리뷰어가 수정이 필요한 이슈를 남겼습니다."
+                    ? NSLocalizedString("workflow.review.fix.detail", comment: "")
                     : String(reviewerTab.lastCompletionSummary.prefix(260))
             )
             guard sourceTab.automatedRevisionCount < AppSettings.shared.automationRevisionLimit else {
                 sourceTab.appendBlock(
-                    .status(message: "자동 재작업 한도 도달"),
-                    content: "자동 재작업은 최대 \(AppSettings.shared.automationRevisionLimit)회까지만 진행합니다. 추가 검토는 수동으로 진행해주세요."
+                    .status(message: NSLocalizedString("workflow.revision.limit.title", comment: "")),
+                    content: String(format: NSLocalizedString("workflow.revision.limit.detail", comment: ""), AppSettings.shared.automationRevisionLimit)
                 )
                 return
             }
@@ -1297,7 +1306,7 @@ class SessionManager: ObservableObject {
                 role: .qa,
                 state: .completed,
                 detail: qaTab.lastCompletionSummary.isEmpty
-                    ? "QA가 통과되었습니다."
+                    ? NSLocalizedString("workflow.qa.passed.detail", comment: "")
                     : String(qaTab.lastCompletionSummary.prefix(240))
             )
             launchCompletionRecipients(
@@ -1315,14 +1324,14 @@ class SessionManager: ObservableObject {
                 role: .qa,
                 state: .failed,
                 detail: qaTab.lastCompletionSummary.isEmpty
-                    ? "QA에서 이슈를 발견했습니다."
+                    ? NSLocalizedString("workflow.qa.failed.detail", comment: "")
                     : String(qaTab.lastCompletionSummary.prefix(240))
             )
-            sourceTab.appendBlock(.status(message: "QA 미통과"), content: qaTab.lastCompletionSummary.isEmpty ? "QA가 이슈를 발견했습니다." : String(qaTab.lastCompletionSummary.prefix(240)))
+            sourceTab.appendBlock(.status(message: NSLocalizedString("workflow.qa.fail.title", comment: "")), content: qaTab.lastCompletionSummary.isEmpty ? NSLocalizedString("workflow.qa.fail.msg", comment: "") : String(qaTab.lastCompletionSummary.prefix(240)))
             guard sourceTab.automatedRevisionCount < AppSettings.shared.automationRevisionLimit else {
                 sourceTab.appendBlock(
-                    .status(message: "자동 재작업 한도 도달"),
-                    content: "자동 재작업은 최대 \(AppSettings.shared.automationRevisionLimit)회까지만 진행합니다. 추가 검토는 수동으로 진행해주세요."
+                    .status(message: NSLocalizedString("workflow.revision.limit.title", comment: "")),
+                    content: String(format: NSLocalizedString("workflow.revision.limit.detail", comment: ""), AppSettings.shared.automationRevisionLimit)
                 )
                 return
             }
@@ -1342,7 +1351,7 @@ class SessionManager: ObservableObject {
             role: .reporter,
             state: .completed,
             detail: reporterTab.lastCompletionSummary.isEmpty
-                ? "최종 보고서 작성이 완료되었습니다."
+                ? NSLocalizedString("workflow.reporter.completed.detail", comment: "")
                 : String(reporterTab.lastCompletionSummary.prefix(240))
         )
         if let reportPath = reporterTab.automationReportPath {
@@ -1350,11 +1359,11 @@ class SessionManager: ObservableObject {
             invalidateAvailableReportsCache()
             scheduleAvailableReportCountRefresh()
             sourceTab.appendBlock(
-                .status(message: "보고서 작성 완료"),
+                .status(message: NSLocalizedString("workflow.reporter.report.done", comment: "")),
                 content: "Markdown: \(reportPath)"
             )
         } else {
-            sourceTab.appendBlock(.status(message: "보고자 완료"), content: reporterTab.lastCompletionSummary)
+            sourceTab.appendBlock(.status(message: NSLocalizedString("workflow.reporter.done", comment: "")), content: reporterTab.lastCompletionSummary)
         }
     }
 
@@ -1367,13 +1376,13 @@ class SessionManager: ObservableObject {
             role: .sre,
             state: .completed,
             detail: sreTab.lastCompletionSummary.isEmpty
-                ? "SRE 검토가 완료되었습니다."
+                ? NSLocalizedString("workflow.sre.completed.detail", comment: "")
                 : String(sreTab.lastCompletionSummary.prefix(260))
         )
         sourceTab.appendBlock(
-            .status(message: "SRE 검토 완료"),
+            .status(message: NSLocalizedString("workflow.sre.done", comment: "")),
             content: sreTab.lastCompletionSummary.isEmpty
-                ? "SRE가 운영/배포 관점 점검을 마쳤습니다."
+                ? NSLocalizedString("workflow.sre.done.detail", comment: "")
                 : String(sreTab.lastCompletionSummary.prefix(260))
         )
     }
@@ -1381,7 +1390,7 @@ class SessionManager: ObservableObject {
     private func launchQA(for sourceTab: TerminalTab, reviewSummary: String?, handoffSourceName: String) {
         if let reason = automationThrottleReason(for: .qa) {
             sourceTab.officeSeatLockReason = nil
-            sourceTab.appendBlock(.status(message: "QA 단계 생략"), content: reason)
+            sourceTab.appendBlock(.status(message: NSLocalizedString("workflow.qa.skip.title", comment: "")), content: reason)
             launchCompletionRecipients(
                 for: sourceTab,
                 validationSummary: reviewSummary ?? sourceTab.workflowReviewSummary,
@@ -1396,9 +1405,9 @@ class SessionManager: ObservableObject {
             sourceTab.updateWorkflowStage(
                 role: .qa,
                 state: .skipped,
-                detail: "설정에서 QA 자동 단계를 비활성화했습니다."
+                detail: NSLocalizedString("workflow.qa.disabled", comment: "")
             )
-            sourceTab.appendBlock(.status(message: "QA 단계 생략"), content: "설정에서 QA 자동 단계를 끄셨습니다.")
+            sourceTab.appendBlock(.status(message: NSLocalizedString("workflow.qa.skip.title", comment: "")), content: NSLocalizedString("workflow.qa.disabled.detail", comment: ""))
             launchCompletionRecipients(
                 for: sourceTab,
                 validationSummary: reviewSummary ?? sourceTab.workflowReviewSummary,
@@ -1420,18 +1429,18 @@ class SessionManager: ObservableObject {
             sourceTab.updateWorkflowStage(
                 role: .qa,
                 state: .failed,
-                detail: "QA 자동 한도(\(AppSettings.shared.qaMaxPasses)회)에 도달했습니다."
+                detail: String(format: NSLocalizedString("workflow.qa.limit.reached", comment: ""), AppSettings.shared.qaMaxPasses)
             )
             sourceTab.appendBlock(
-                .status(message: "QA 자동 한도 도달"),
-                content: "QA는 최대 \(AppSettings.shared.qaMaxPasses)회까지만 자동으로 재시도합니다. 토큰 보호를 위해 자동 테스트를 중단합니다."
+                .status(message: NSLocalizedString("workflow.qa.limit.title", comment: "")),
+                content: String(format: NSLocalizedString("workflow.qa.limit.detail", comment: ""), AppSettings.shared.qaMaxPasses)
             )
             return
         }
 
         guard let qaCharacter = availableAutomationCharacter(for: .qa, sourceId: sourceTab.id) else {
             sourceTab.officeSeatLockReason = nil
-            sourceTab.appendBlock(.status(message: "QA 담당자가 없거나 바쁩니다"))
+            sourceTab.appendBlock(.status(message: NSLocalizedString("workflow.qa.busy", comment: "")))
             launchCompletionRecipients(
                 for: sourceTab,
                 validationSummary: reviewSummary ?? sourceTab.workflowReviewSummary,
@@ -1451,17 +1460,17 @@ class SessionManager: ObservableObject {
             automationSourceTabId: sourceTab.id
         )
         sourceTab.qaAttemptCount += 1
-        sourceTab.officeSeatLockReason = "QA 검토 대기"
+        sourceTab.officeSeatLockReason = NSLocalizedString("workflow.qa.waiting", comment: "")
         sourceTab.upsertWorkflowStage(
             role: .qa,
             workerName: qaTab.workerName,
             assigneeCharacterId: qaCharacter.id,
             state: .running,
-            handoffLabel: "\(handoffSourceName) → \(qaTab.workerName)",
-            detail: "QA가 변경된 기능을 직접 테스트합니다."
+            handoffLabel: String(format: NSLocalizedString("workflow.handoff.role", comment: ""), handoffSourceName, qaTab.workerName),
+            detail: NSLocalizedString("workflow.qa.detail", comment: "")
         )
-        let message = reviewSummary == nil ? "QA 투입: \(qaTab.workerName)" : "리뷰 통과 · QA 투입"
-        sourceTab.appendBlock(.status(message: message), content: "QA가 변경된 기능을 직접 테스트합니다.")
+        let message = reviewSummary == nil ? String(format: NSLocalizedString("workflow.qa.assigned", comment: ""), qaTab.workerName) : NSLocalizedString("workflow.review.pass.qa", comment: "")
+        sourceTab.appendBlock(.status(message: message), content: NSLocalizedString("workflow.qa.detail", comment: ""))
     }
 
     private func dispatchDeveloperFromPreparation(for sourceTab: TerminalTab, handoffSourceName: String) {
@@ -1471,16 +1480,16 @@ class SessionManager: ObservableObject {
             workerName: sourceTab.workerName,
             assigneeCharacterId: sourceTab.characterId,
             state: .running,
-            handoffLabel: "\(handoffSourceName) → \(sourceTab.workerName)",
+            handoffLabel: String(format: NSLocalizedString("workflow.handoff.role", comment: ""), handoffSourceName, sourceTab.workerName),
             detail: sourceTab.workflowDesignSummary.isEmpty
-                ? "기획 정리 내용을 바탕으로 개발을 진행합니다."
-                : "기획/디자인 정리 내용을 바탕으로 개발을 진행합니다."
+                ? NSLocalizedString("workflow.dev.from.plan", comment: "")
+                : NSLocalizedString("workflow.dev.from.plan.design", comment: "")
         )
         sourceTab.appendBlock(
-            .status(message: "개발 시작"),
+            .status(message: NSLocalizedString("workflow.dev.start", comment: "")),
             content: sourceTab.workflowDesignSummary.isEmpty
-                ? "기획 정리 내용을 바탕으로 개발자가 구현을 시작합니다."
-                : "기획/디자인 정리 내용을 바탕으로 개발자가 구현을 시작합니다."
+                ? NSLocalizedString("workflow.dev.start.from.plan", comment: "")
+                : NSLocalizedString("workflow.dev.start.from.plan.design", comment: "")
         )
         sourceTab.sendPrompt(
             buildDeveloperExecutionPrompt(for: sourceTab),
@@ -1492,8 +1501,8 @@ class SessionManager: ObservableObject {
         guard sourceTab.automatedRevisionCount < AppSettings.shared.automationRevisionLimit else {
             sourceTab.officeSeatLockReason = nil
             sourceTab.appendBlock(
-                .status(message: "자동 재작업 한도 도달"),
-                content: "자동 재작업은 최대 \(AppSettings.shared.automationRevisionLimit)회까지만 진행합니다. 이후에는 사용자가 직접 판단할 수 있도록 멈춥니다."
+                .status(message: NSLocalizedString("workflow.revision.limit.title", comment: "")),
+                content: String(format: NSLocalizedString("workflow.revision.limit.stop", comment: ""), AppSettings.shared.automationRevisionLimit)
             )
             return
         }
@@ -1503,12 +1512,12 @@ class SessionManager: ObservableObject {
             workerName: sourceTab.workerName,
             assigneeCharacterId: sourceTab.characterId,
             state: .running,
-            handoffLabel: "\(role.displayName) → \(sourceTab.workerName)",
-            detail: "피드백을 반영해 재작업을 진행합니다."
+            handoffLabel: String(format: NSLocalizedString("workflow.handoff.role", comment: ""), role.displayName, sourceTab.workerName),
+            detail: NSLocalizedString("workflow.revision.detail", comment: "")
         )
         sourceTab.appendBlock(
-            .status(message: "\(role.displayName) 피드백 반영"),
-            content: "개발자가 피드백을 반영해 다시 작업합니다."
+            .status(message: String(format: NSLocalizedString("workflow.revision.feedback", comment: ""), role.displayName)),
+            content: NSLocalizedString("workflow.revision.feedback.detail", comment: "")
         )
         sourceTab.sendPrompt(
             buildDeveloperRevisionPrompt(for: sourceTab, feedback: feedback, from: role),
@@ -1560,12 +1569,12 @@ class SessionManager: ObservableObject {
                 workerName: reporterTab.workerName,
                 assigneeCharacterId: reporterCharacter.id,
                 state: .running,
-                handoffLabel: "\(handoffSourceName) → \(reporterTab.workerName)",
-                detail: "최종 결과와 요구사항을 Markdown으로 정리합니다."
+                handoffLabel: String(format: NSLocalizedString("workflow.handoff.role", comment: ""), handoffSourceName, reporterTab.workerName),
+                detail: NSLocalizedString("workflow.reporter.detail", comment: "")
             )
             sourceTab.appendBlock(
-                .status(message: "보고자 투입: \(reporterTab.workerName)"),
-                content: "최종 요구사항, 구현 결과, 검증 내용을 Markdown으로 정리합니다."
+                .status(message: String(format: NSLocalizedString("workflow.reporter.assigned", comment: ""), reporterTab.workerName)),
+                content: NSLocalizedString("workflow.reporter.assigned.detail", comment: "")
             )
             launchedAny = true
         }
@@ -1591,26 +1600,26 @@ class SessionManager: ObservableObject {
                 workerName: sreTab.workerName,
                 assigneeCharacterId: sreCharacter.id,
                 state: .running,
-                handoffLabel: "\(handoffSourceName) → \(sreTab.workerName)",
-                detail: "배포/운영 리스크와 실행 환경을 점검합니다."
+                handoffLabel: String(format: NSLocalizedString("workflow.handoff.role", comment: ""), handoffSourceName, sreTab.workerName),
+                detail: NSLocalizedString("workflow.sre.detail", comment: "")
             )
             sourceTab.appendBlock(
-                .status(message: "SRE 투입: \(sreTab.workerName)"),
-                content: "배포/운영 리스크와 실행 환경 관점을 점검합니다."
+                .status(message: String(format: NSLocalizedString("workflow.sre.assigned", comment: ""), sreTab.workerName)),
+                content: NSLocalizedString("workflow.sre.assigned.detail", comment: "")
             )
             launchedAny = true
         }
 
         if !launchedAny {
             if let reporterReason = automationThrottleReason(for: .reporter) {
-                sourceTab.appendBlock(.status(message: "보고 단계 생략"), content: reporterReason)
+                sourceTab.appendBlock(.status(message: NSLocalizedString("workflow.report.skip", comment: "")), content: reporterReason)
             }
             if let sreReason = automationThrottleReason(for: .sre) {
-                sourceTab.appendBlock(.status(message: "SRE 단계 생략"), content: sreReason)
+                sourceTab.appendBlock(.status(message: NSLocalizedString("workflow.sre.skip", comment: "")), content: sreReason)
             }
             sourceTab.appendBlock(
-                .status(message: "후속 단계 완료"),
-                content: "사용 가능한 후속 역할이 없어 이 단계에서 마무리합니다."
+                .status(message: NSLocalizedString("workflow.completion.done", comment: "")),
+                content: NSLocalizedString("workflow.completion.no.roles", comment: "")
             )
         }
     }
@@ -1630,7 +1639,7 @@ class SessionManager: ObservableObject {
             context: [
                 "project_name": tab.projectName,
                 "project_path": tab.projectPath,
-                "request": templateValue(request, fallback: "요구사항 정보가 없습니다.")
+                "request": templateValue(request, fallback: NSLocalizedString("workflow.request.none", comment: ""))
             ]
         )
     }
@@ -1641,8 +1650,8 @@ class SessionManager: ObservableObject {
             context: [
                 "project_name": tab.projectName,
                 "project_path": tab.projectPath,
-                "request": templateValue(tab.workflowRequirementText, fallback: "요구사항 정보가 없습니다."),
-                "plan_summary": templateValue(tab.workflowPlanSummary, fallback: "기획 요약 없음")
+                "request": templateValue(tab.workflowRequirementText, fallback: NSLocalizedString("workflow.request.none", comment: "")),
+                "plan_summary": templateValue(tab.workflowPlanSummary, fallback: NSLocalizedString("workflow.plan.summary.none", comment: ""))
             ]
         )
     }
@@ -1653,9 +1662,9 @@ class SessionManager: ObservableObject {
             context: [
                 "project_name": tab.projectName,
                 "project_path": tab.projectPath,
-                "request": templateValue(tab.workflowRequirementText, fallback: "요구사항 정보가 없습니다."),
-                "plan_summary": templateValue(tab.workflowPlanSummary, fallback: "기획 요약 없음"),
-                "design_summary": templateValue(tab.workflowDesignSummary, fallback: "디자인/경험 메모 없음")
+                "request": templateValue(tab.workflowRequirementText, fallback: NSLocalizedString("workflow.request.none", comment: "")),
+                "plan_summary": templateValue(tab.workflowPlanSummary, fallback: NSLocalizedString("workflow.plan.summary.none", comment: "")),
+                "design_summary": templateValue(tab.workflowDesignSummary, fallback: NSLocalizedString("workflow.design.memo.none", comment: ""))
             ]
         )
     }
@@ -1666,11 +1675,11 @@ class SessionManager: ObservableObject {
             context: [
                 "project_name": tab.projectName,
                 "project_path": tab.projectPath,
-                "request": templateValue(tab.workflowRequirementText, fallback: "요구사항 정보가 없습니다."),
-                "plan_summary": templateValue(tab.workflowPlanSummary, fallback: "기획 요약 없음"),
-                "design_summary": templateValue(tab.workflowDesignSummary, fallback: "디자인/경험 메모 없음"),
+                "request": templateValue(tab.workflowRequirementText, fallback: NSLocalizedString("workflow.request.none", comment: "")),
+                "plan_summary": templateValue(tab.workflowPlanSummary, fallback: NSLocalizedString("workflow.plan.summary.none", comment: "")),
+                "design_summary": templateValue(tab.workflowDesignSummary, fallback: NSLocalizedString("workflow.design.memo.none", comment: "")),
                 "feedback_role": role.displayName,
-                "feedback": templateValue(feedback, fallback: "구체적인 피드백 없음")
+                "feedback": templateValue(feedback, fallback: NSLocalizedString("workflow.feedback.none", comment: ""))
             ]
         )
     }
@@ -1681,11 +1690,11 @@ class SessionManager: ObservableObject {
             context: [
                 "project_name": tab.projectName,
                 "project_path": tab.projectPath,
-                "request": templateValue(tab.workflowRequirementText, fallback: "요구사항 정보가 없습니다. 변경 파일과 최근 완료 요약을 기준으로 검토하세요."),
-                "plan_summary": templateValue(tab.workflowPlanSummary, fallback: "기획 요약 없음"),
-                "design_summary": templateValue(tab.workflowDesignSummary, fallback: "디자인 요약 없음"),
-                "dev_summary": templateValue(tab.lastCompletionSummary, fallback: "개발 완료 메시지 없음"),
-                "changed_files": templateFileList(tab.fileChanges.suffix(10).map(\.path), fallback: "- 변경 파일 정보 없음")
+                "request": templateValue(tab.workflowRequirementText, fallback: NSLocalizedString("workflow.request.none.review", comment: "")),
+                "plan_summary": templateValue(tab.workflowPlanSummary, fallback: NSLocalizedString("workflow.plan.summary.none", comment: "")),
+                "design_summary": templateValue(tab.workflowDesignSummary, fallback: NSLocalizedString("workflow.design.summary.none", comment: "")),
+                "dev_summary": templateValue(tab.lastCompletionSummary, fallback: NSLocalizedString("workflow.dev.summary.none", comment: "")),
+                "changed_files": templateFileList(tab.fileChanges.suffix(10).map(\.path), fallback: NSLocalizedString("workflow.files.none", comment: ""))
             ]
         )
     }
@@ -1696,12 +1705,12 @@ class SessionManager: ObservableObject {
             context: [
                 "project_name": tab.projectName,
                 "project_path": tab.projectPath,
-                "request": templateValue(tab.workflowRequirementText, fallback: "요구사항 정보가 없습니다. 최근 변경 사항과 결과를 기준으로 검증하세요."),
-                "plan_summary": templateValue(tab.workflowPlanSummary, fallback: "기획 요약 없음"),
-                "design_summary": templateValue(tab.workflowDesignSummary, fallback: "디자인 요약 없음"),
-                "dev_summary": templateValue(tab.lastCompletionSummary, fallback: "개발 완료 메시지 없음"),
-                "review_summary": templateValue(reviewSummary ?? "", fallback: "코드 리뷰 요약 없음"),
-                "changed_files": templateFileList(tab.fileChanges.suffix(8).map(\.path), fallback: "- 변경 파일 정보 없음")
+                "request": templateValue(tab.workflowRequirementText, fallback: NSLocalizedString("workflow.qa.no.requirements", comment: "")),
+                "plan_summary": templateValue(tab.workflowPlanSummary, fallback: NSLocalizedString("workflow.plan.summary.none", comment: "")),
+                "design_summary": templateValue(tab.workflowDesignSummary, fallback: NSLocalizedString("workflow.design.summary.none", comment: "")),
+                "dev_summary": templateValue(tab.lastCompletionSummary, fallback: NSLocalizedString("workflow.dev.summary.none", comment: "")),
+                "review_summary": templateValue(reviewSummary ?? "", fallback: NSLocalizedString("workflow.review.summary.none", comment: "")),
+                "changed_files": templateFileList(tab.fileChanges.suffix(8).map(\.path), fallback: NSLocalizedString("workflow.files.none", comment: ""))
             ]
         )
     }
@@ -1713,14 +1722,14 @@ class SessionManager: ObservableObject {
                 "project_name": sourceTab.projectName,
                 "project_path": sourceTab.projectPath,
                 "report_path": reportPath,
-                "request": templateValue(sourceTab.workflowRequirementText, fallback: "요구사항 정보가 없습니다."),
-                "plan_summary": templateValue(sourceTab.workflowPlanSummary, fallback: "기획 요약 없음"),
-                "design_summary": templateValue(sourceTab.workflowDesignSummary, fallback: "디자인 요약 없음"),
-                "dev_summary": templateValue(sourceTab.lastCompletionSummary, fallback: "개발 완료 요약 없음"),
-                "review_summary": templateValue(sourceTab.workflowReviewSummary, fallback: "리뷰 요약 없음"),
-                "qa_summary": templateValue(qaSummary ?? "", fallback: "QA 요약 없음"),
-                "validation_summary": templateValue(validationSummary ?? "", fallback: "추가 검증 요약 없음"),
-                "changed_files": templateFileList(sourceTab.fileChanges.map(\.path), fallback: "- 변경 파일 없음")
+                "request": templateValue(sourceTab.workflowRequirementText, fallback: NSLocalizedString("workflow.request.none", comment: "")),
+                "plan_summary": templateValue(sourceTab.workflowPlanSummary, fallback: NSLocalizedString("workflow.plan.summary.none", comment: "")),
+                "design_summary": templateValue(sourceTab.workflowDesignSummary, fallback: NSLocalizedString("workflow.design.summary.none", comment: "")),
+                "dev_summary": templateValue(sourceTab.lastCompletionSummary, fallback: NSLocalizedString("workflow.dev.completion.none", comment: "")),
+                "review_summary": templateValue(sourceTab.workflowReviewSummary, fallback: NSLocalizedString("workflow.review.summary.report.none", comment: "")),
+                "qa_summary": templateValue(qaSummary ?? "", fallback: NSLocalizedString("workflow.qa.summary.none", comment: "")),
+                "validation_summary": templateValue(validationSummary ?? "", fallback: NSLocalizedString("workflow.validation.none", comment: "")),
+                "changed_files": templateFileList(sourceTab.fileChanges.map(\.path), fallback: NSLocalizedString("workflow.files.changed.none", comment: ""))
             ]
         )
     }
@@ -1731,11 +1740,11 @@ class SessionManager: ObservableObject {
             context: [
                 "project_name": sourceTab.projectName,
                 "project_path": sourceTab.projectPath,
-                "request": templateValue(sourceTab.workflowRequirementText, fallback: "요구사항 정보가 없습니다."),
-                "dev_summary": templateValue(sourceTab.lastCompletionSummary, fallback: "개발 완료 요약 없음"),
-                "qa_summary": templateValue(qaSummary ?? "", fallback: "QA 요약 없음"),
-                "validation_summary": templateValue(validationSummary ?? "", fallback: "추가 검증 요약 없음"),
-                "changed_files": templateFileList(sourceTab.fileChanges.map(\.path), fallback: "- 변경 파일 없음")
+                "request": templateValue(sourceTab.workflowRequirementText, fallback: NSLocalizedString("workflow.request.none", comment: "")),
+                "dev_summary": templateValue(sourceTab.lastCompletionSummary, fallback: NSLocalizedString("workflow.dev.completion.none", comment: "")),
+                "qa_summary": templateValue(qaSummary ?? "", fallback: NSLocalizedString("workflow.qa.summary.none", comment: "")),
+                "validation_summary": templateValue(validationSummary ?? "", fallback: NSLocalizedString("workflow.validation.none", comment: "")),
+                "changed_files": templateFileList(sourceTab.fileChanges.map(\.path), fallback: NSLocalizedString("workflow.files.changed.none", comment: ""))
             ]
         )
     }
@@ -1894,13 +1903,13 @@ class SessionManager: ObservableObject {
     private func showInterruptedSessionsAlert(_ sessions: [SavedSession], recoveryBundles: [URL]) {
         let alert = NSAlert()
         let names = sessions.map { $0.projectName }.joined(separator: ", ")
-        alert.messageText = "중단된 작업 \(sessions.count)개를 복원했습니다"
-        alert.informativeText = "앱이 비정상 종료되어 완료되지 못한 작업:\n\(names)\n\n자동 재실행과 자동 롤백은 하지 않았습니다. 현재 변경사항은 그대로 두었고, 복구 폴더를 함께 생성했습니다."
+        alert.messageText = String(format: NSLocalizedString("recovery.alert.title", comment: ""), sessions.count)
+        alert.informativeText = String(format: NSLocalizedString("recovery.alert.message", comment: ""), names)
         alert.alertStyle = .warning
         if !recoveryBundles.isEmpty {
-            alert.addButton(withTitle: "복구 폴더 보기")
+            alert.addButton(withTitle: NSLocalizedString("recovery.show.folder", comment: ""))
         }
-        alert.addButton(withTitle: "확인")
+        alert.addButton(withTitle: NSLocalizedString("recovery.ok", comment: ""))
 
         let response = alert.runModal()
         if !recoveryBundles.isEmpty && response == .alertFirstButtonReturn {
@@ -1925,9 +1934,10 @@ class SessionManager: ObservableObject {
             activeTabId = tabs.first?.id
         }
 
-        // 사용자 세션은 모드 전환 시 재시작
+        // 사용자 세션은 모드 전환 시 재시작 (안전하게 상태 리셋 후)
         for tab in manualTabs {
-            if !tab.isProcessing && !tab.isCompleted {
+            if !tab.isCompleted {
+                tab.forceStop()
                 tab.start()
             }
         }

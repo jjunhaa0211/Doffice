@@ -1266,20 +1266,20 @@ struct PixelStripView: View {
                 bubbleColor = Theme.purple.opacity(0.15)
                 textColor = Theme.purple
             case .reading:
-                txt = "📖 읽는 중"
+                txt = "📖 " + NSLocalizedString("activity.reading", comment: "")
                 bubbleColor = Theme.accent.opacity(0.12)
                 textColor = Theme.accent
             case .writing:
-                txt = "✏️ 작성 중"
+                txt = "✏️ " + NSLocalizedString("activity.writing", comment: "")
                 bubbleColor = Theme.green.opacity(0.12)
                 textColor = Theme.green
             case .searching:
-                txt = "🔍 검색"
+                txt = "🔍 " + NSLocalizedString("activity.searching", comment: "")
                 bubbleColor = Theme.cyan.opacity(0.12)
                 textColor = Theme.cyan
             case .running:
                 let spinner = ["⠋","⠙","⠸","⠴","⠦","⠇"][frame / 3 % 6]
-                txt = "\(spinner) 실행"
+                txt = "\(spinner) " + NSLocalizedString("activity.running", comment: "")
                 bubbleColor = Theme.yellow.opacity(0.12)
                 textColor = Theme.yellow
             case .done:
@@ -1287,7 +1287,7 @@ struct PixelStripView: View {
                 bubbleColor = Theme.green.opacity(0.12)
                 textColor = Theme.green
             case .error:
-                txt = "⚠️ 에러"
+                txt = "⚠️ " + NSLocalizedString("activity.error", comment: "")
                 bubbleColor = Theme.red.opacity(0.15)
                 textColor = Theme.red
             default: txt = ""; bubbleColor = .clear; textColor = .clear
@@ -1400,7 +1400,7 @@ struct PixelStripView: View {
 
         if !breakTabs.isEmpty {
             context.draw(
-                Text("\(breakTabs.count)명 휴식 중")
+                Text(String(format: NSLocalizedString("pixel.break.resting.count", comment: ""), breakTabs.count))
                     .font(Theme.mono(6, weight: .medium))
                     .foregroundColor(Theme.textDim),
                 at: CGPoint(x: b.rx + b.roomW * 0.4, y: floorY + 22)
@@ -1462,12 +1462,12 @@ struct PixelStripView: View {
                 HStack(spacing: 10) {
                     HStack(spacing: 6) {
                         Image(systemName: "hand.draw.fill").font(.system(size: Theme.iconSize(10))).foregroundColor(Theme.yellow)
-                        Text("가구 배치 모드").font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.textOnAccent)
+                        Text(NSLocalizedString("pixel.furniture.edit.mode", comment: "")).font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.textOnAccent)
                     }
-                    Text("— 드래그하여 이동").font(Theme.mono(9)).foregroundColor(Theme.textOnAccent.opacity(0.6))
+                    Text(NSLocalizedString("pixel.furniture.drag.hint", comment: "")).font(Theme.mono(9)).foregroundColor(Theme.textOnAccent.opacity(0.6))
                     Spacer()
                     Button(action: { settings.isEditMode = false }) {
-                        Text("완료").font(Theme.mono(11, weight: .bold)).foregroundColor(Theme.yellow)
+                        Text(NSLocalizedString("pixel.furniture.done", comment: "")).font(Theme.mono(11, weight: .bold)).foregroundColor(Theme.yellow)
                             .padding(.horizontal, 12).padding(.vertical, 4)
                             .background(RoundedRectangle(cornerRadius: 6).fill(Theme.yellow.opacity(0.2))
                                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.yellow.opacity(0.5), lineWidth: 1)))
@@ -1486,16 +1486,21 @@ struct PixelStripView: View {
         let h = item.height
         let isDragging = draggingId == item.id
 
+        let strokeColor: Color = isDragging ? Theme.yellow : Theme.accent
+        let fillColor: Color = isDragging ? Theme.yellow.opacity(0.1) : Theme.accent.opacity(0.05)
+
         return RoundedRectangle(cornerRadius: 3)
-            .stroke(isDragging ? Theme.yellow : Theme.accent, style: StrokeStyle(lineWidth: isDragging ? 2 : 1, dash: [3, 3]))
-            .background(RoundedRectangle(cornerRadius: 3).fill(isDragging ? Theme.yellow.opacity(0.1) : Theme.accent.opacity(0.05)))
+            .stroke(strokeColor, style: StrokeStyle(lineWidth: isDragging ? 2 : 1, dash: [3, 3]))
+            .background(RoundedRectangle(cornerRadius: 3).fill(fillColor))
             .frame(width: w + 8, height: h + 8)
             .overlay(
                 VStack(spacing: 1) {
                     Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
-                        .font(.system(size: Theme.iconSize(7))).foregroundColor(isDragging ? Theme.yellow : Theme.accent)
-                    Text(item.name).font(Theme.mono(6, weight: .bold))
-                        .foregroundColor(isDragging ? Theme.yellow : Theme.accent)
+                        .font(.system(size: Theme.iconSize(7)))
+                        .foregroundColor(strokeColor)
+                    Text(item.name)
+                        .font(Theme.mono(6, weight: .bold))
+                        .foregroundColor(strokeColor)
                 }
             )
             .position(x: pos.x + w / 2, y: pos.y + h / 2)

@@ -90,7 +90,7 @@ struct OnboardingView: View {
                 .foregroundColor(Theme.textDim)
 
             Button(action: completeOnboarding) {
-                Text("건너뛰기")
+                Text(NSLocalizedString("onboard.skip", comment: ""))
                     .font(Theme.mono(9, weight: .bold))
                     .foregroundColor(Theme.textDim)
                     .padding(.horizontal, 10).padding(.vertical, 5)
@@ -109,7 +109,7 @@ struct OnboardingView: View {
                 Button(action: { withAnimation(.spring(response: 0.35)) { currentStep -= 1 } }) {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left").font(.system(size: 10, weight: .bold))
-                        Text("이전").font(Theme.mono(11, weight: .bold))
+                        Text(NSLocalizedString("onboard.previous", comment: "")).font(Theme.mono(11, weight: .bold))
                     }
                     .foregroundColor(Theme.textSecondary)
                     .padding(.horizontal, 18).padding(.vertical, 10)
@@ -124,7 +124,7 @@ struct OnboardingView: View {
             if currentStep < totalSteps - 1 {
                 Button(action: { withAnimation(.spring(response: 0.35)) { currentStep += 1 } }) {
                     HStack(spacing: 4) {
-                        Text("다음").font(Theme.mono(11, weight: .bold))
+                        Text(NSLocalizedString("onboard.next", comment: "")).font(Theme.mono(11, weight: .bold))
                         Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
                     }
                     .foregroundColor(.white)
@@ -136,7 +136,7 @@ struct OnboardingView: View {
             } else {
                 Button(action: completeOnboarding) {
                     HStack(spacing: 6) {
-                        Text("시작하기").font(Theme.mono(12, weight: .black))
+                        Text(NSLocalizedString("onboard.start", comment: "")).font(Theme.mono(12, weight: .black))
                         Image(systemName: "arrow.right").font(.system(size: 12, weight: .bold))
                     }
                     .foregroundColor(.white)
@@ -177,16 +177,16 @@ struct OnboardingView: View {
                 Text(NSLocalizedString("app.name", comment: ""))
                     .font(Theme.mono(28, weight: .black))
                     .foregroundColor(Theme.textPrimary)
-                Text("Claude Code 시각적 관리 도구")
+                Text(NSLocalizedString("onboard.subtitle", comment: ""))
                     .font(Theme.mono(13))
                     .foregroundColor(Theme.textSecondary)
             }
 
             // 핵심 가치 3개
             HStack(spacing: 12) {
-                valueChip(icon: "eye.fill", label: "시각화", color: Theme.accent)
-                valueChip(icon: "bolt.fill", label: "자동화", color: Theme.green)
-                valueChip(icon: "person.3.fill", label: "협업", color: Theme.purple)
+                valueChip(icon: "eye.fill", label: NSLocalizedString("onboard.visualization", comment: ""), color: Theme.accent)
+                valueChip(icon: "bolt.fill", label: NSLocalizedString("onboard.automation", comment: ""), color: Theme.green)
+                valueChip(icon: "person.3.fill", label: NSLocalizedString("onboard.collaboration", comment: ""), color: Theme.purple)
             }
             .padding(.top, 4)
 
@@ -204,27 +204,27 @@ struct OnboardingView: View {
             stepHeader(
                 icon: "terminal.fill",
                 color: Theme.green,
-                title: "세션 관리",
-                subtitle: "Claude Code를 탭처럼 관리하세요"
+                title: NSLocalizedString("onboard.session.title", comment: ""),
+                subtitle: NSLocalizedString("onboard.session.subtitle", comment: "")
             )
 
             VStack(spacing: 8) {
                 tipCard(
                     icon: "plus.circle.fill",
                     title: "Cmd+T",
-                    desc: "새 세션을 만듭니다. 프로젝트 경로, 모델, 권한을 설정할 수 있어요.",
+                    desc: NSLocalizedString("onboard.session.new.desc", comment: ""),
                     accent: Theme.green
                 )
                 tipCard(
                     icon: "number",
                     title: "Cmd+1~9",
-                    desc: "세션 간 빠른 전환. 여러 프로젝트를 동시에 작업할 때 유용합니다.",
+                    desc: NSLocalizedString("onboard.session.switch.desc", comment: ""),
                     accent: Theme.accent
                 )
                 tipCard(
                     icon: "magnifyingglass",
                     title: "Cmd+P",
-                    desc: "커맨드 팔레트. 세션 검색, 뷰 전환, 설정 등 모든 기능에 빠르게 접근합니다.",
+                    desc: NSLocalizedString("onboard.session.palette.desc", comment: ""),
                     accent: Theme.cyan
                 )
             }
@@ -243,20 +243,20 @@ struct OnboardingView: View {
             stepHeader(
                 icon: "building.2.fill",
                 color: Theme.purple,
-                title: "오피스 뷰",
-                subtitle: "캐릭터들이 일하는 모습을 지켜보세요"
+                title: NSLocalizedString("onboard.office.title", comment: ""),
+                subtitle: NSLocalizedString("onboard.office.subtitle", comment: "")
             )
 
             // 오피스 미리보기 카드
             VStack(spacing: 12) {
                 HStack(spacing: 20) {
-                    miniCharacterCard(name: "기획자", icon: "list.bullet.clipboard", color: Theme.purple, status: "계획 정리 중")
-                    miniCharacterCard(name: "개발자", icon: "hammer.fill", color: Theme.accent, status: "코드 작성 중")
-                    miniCharacterCard(name: "QA", icon: "checkmark.shield", color: Theme.green, status: "테스트 중")
-                    miniCharacterCard(name: "보고자", icon: "doc.text.fill", color: Theme.orange, status: "문서 작성")
+                    miniCharacterCard(name: NSLocalizedString("onboard.office.planner", comment: ""), icon: "list.bullet.clipboard", color: Theme.purple, status: NSLocalizedString("onboard.office.planning", comment: ""))
+                    miniCharacterCard(name: NSLocalizedString("onboard.office.developer", comment: ""), icon: "hammer.fill", color: Theme.accent, status: NSLocalizedString("onboard.office.coding", comment: ""))
+                    miniCharacterCard(name: NSLocalizedString("onboard.office.qa", comment: ""), icon: "checkmark.shield", color: Theme.green, status: NSLocalizedString("onboard.office.testing", comment: ""))
+                    miniCharacterCard(name: NSLocalizedString("onboard.office.reporter", comment: ""), icon: "doc.text.fill", color: Theme.orange, status: NSLocalizedString("onboard.office.writing", comment: ""))
                 }
 
-                Text("각 세션은 직업을 가진 캐릭터로 표현됩니다.\n자동 파이프라인으로 기획 → 개발 → 리뷰 → QA → 보고까지 한 번에!")
+                Text(NSLocalizedString("onboard.office.desc", comment: ""))
                     .font(Theme.mono(9))
                     .foregroundColor(Theme.textDim)
                     .multilineTextAlignment(.center)
@@ -281,19 +281,19 @@ struct OnboardingView: View {
             stepHeader(
                 icon: "keyboard.fill",
                 color: Theme.cyan,
-                title: "주요 단축키",
-                subtitle: "키보드로 빠르게 조작하세요"
+                title: NSLocalizedString("onboard.shortcuts.title", comment: ""),
+                subtitle: NSLocalizedString("onboard.shortcuts.subtitle", comment: "")
             )
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                shortcutCard(key: "⌘T", label: "새 세션")
-                shortcutCard(key: "⌘W", label: "세션 닫기")
-                shortcutCard(key: "⌘P", label: "커맨드 팔레트")
-                shortcutCard(key: "⌘J", label: "확인 센터")
-                shortcutCard(key: "⌘R", label: "새로고침")
-                shortcutCard(key: "⌘K", label: "터미널 지우기")
-                shortcutCard(key: "⌘.", label: "작업 취소")
-                shortcutCard(key: "⌘1~9", label: "세션 전환")
+                shortcutCard(key: "⌘T", label: NSLocalizedString("onboard.shortcut.new", comment: ""))
+                shortcutCard(key: "⌘W", label: NSLocalizedString("onboard.shortcut.close", comment: ""))
+                shortcutCard(key: "⌘P", label: NSLocalizedString("onboard.shortcut.palette", comment: ""))
+                shortcutCard(key: "⌘J", label: NSLocalizedString("onboard.shortcut.center", comment: ""))
+                shortcutCard(key: "⌘R", label: NSLocalizedString("onboard.shortcut.refresh", comment: ""))
+                shortcutCard(key: "⌘K", label: NSLocalizedString("onboard.shortcut.clear", comment: ""))
+                shortcutCard(key: "⌘.", label: NSLocalizedString("onboard.shortcut.cancel", comment: ""))
+                shortcutCard(key: "⌘1~9", label: NSLocalizedString("onboard.shortcut.switch", comment: ""))
             }
 
             Spacer()
@@ -319,19 +319,19 @@ struct OnboardingView: View {
             }
 
             VStack(spacing: 8) {
-                Text("준비 완료!")
+                Text(NSLocalizedString("onboard.ready.title", comment: ""))
                     .font(Theme.mono(24, weight: .black))
                     .foregroundColor(Theme.textPrimary)
-                Text("Cmd+T로 첫 세션을 만들어보세요")
+                Text(NSLocalizedString("onboard.ready.subtitle", comment: ""))
                     .font(Theme.mono(12))
                     .foregroundColor(Theme.textSecondary)
             }
 
             // 빠른 시작 팁
             VStack(spacing: 6) {
-                quickTip(icon: "gearshape.fill", text: "설정에서 언제든 이 튜토리얼을 다시 볼 수 있습니다")
-                quickTip(icon: "paintbrush.fill", text: "다크/라이트 모드, 폰트 크기 등을 설정에서 조정하세요")
-                quickTip(icon: "star.fill", text: "작업을 하면 레벨이 오르고 업적을 달성할 수 있어요")
+                quickTip(icon: "gearshape.fill", text: NSLocalizedString("onboard.tip.tutorial", comment: ""))
+                quickTip(icon: "paintbrush.fill", text: NSLocalizedString("onboard.tip.theme", comment: ""))
+                quickTip(icon: "star.fill", text: NSLocalizedString("onboard.tip.level", comment: ""))
             }
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bgCard.opacity(0.6)))

@@ -79,6 +79,13 @@ enum OutputMode: String, CaseIterable, Identifiable {
     case full = "전체", realtime = "실시간", resultOnly = "결과만"
     var id: String { rawValue }
     var icon: String { switch self { case .full: return "📋"; case .realtime: return "⚡"; case .resultOnly: return "📌" } }
+    var displayName: String {
+        switch self {
+        case .full: return NSLocalizedString("output.mode.full", comment: "")
+        case .realtime: return NSLocalizedString("output.mode.realtime", comment: "")
+        case .resultOnly: return NSLocalizedString("output.mode.resultOnly", comment: "")
+        }
+    }
 }
 
 enum WorkerState: String {
@@ -187,9 +194,9 @@ enum ParallelTaskState: String {
 
     var label: String {
         switch self {
-        case .running: return "진행"
-        case .completed: return "완료"
-        case .failed: return "실패"
+        case .running: return NSLocalizedString("task.status.running", comment: "")
+        case .completed: return NSLocalizedString("task.status.completed", comment: "")
+        case .failed: return NSLocalizedString("task.status.failed", comment: "")
         }
     }
 
@@ -234,11 +241,11 @@ enum WorkflowStageState: String {
 
     var label: String {
         switch self {
-        case .queued: return "대기"
-        case .running: return "진행"
-        case .completed: return "완료"
-        case .failed: return "재작업"
-        case .skipped: return "건너뜀"
+        case .queued: return NSLocalizedString("workflow.stage.queued", comment: "")
+        case .running: return NSLocalizedString("workflow.stage.running", comment: "")
+        case .completed: return NSLocalizedString("workflow.stage.completed", comment: "")
+        case .failed: return NSLocalizedString("workflow.stage.failed", comment: "")
+        case .skipped: return NSLocalizedString("workflow.stage.skipped", comment: "")
         }
     }
 
@@ -276,12 +283,25 @@ class SessionGroup: ObservableObject, Identifiable {
 
 class ClaudeInstallChecker {
     static let shared = ClaudeInstallChecker()
-    var isInstalled = false, version = "", path = "", errorInfo = ""
+    private let lock = NSLock()
+    private var _isInstalled = false
+    private var _version = ""
+    private var _path = ""
+    private var _errorInfo = ""
+
+    var isInstalled: Bool { lock.lock(); defer { lock.unlock() }; return _isInstalled }
+    var version: String { lock.lock(); defer { lock.unlock() }; return _version }
+    var path: String { lock.lock(); defer { lock.unlock() }; return _path }
+    var errorInfo: String { lock.lock(); defer { lock.unlock() }; return _errorInfo }
+
     func check() {
+        lock.lock()
+        defer { lock.unlock() }
+
         // 1) Try `which claude` with our enriched PATH
         if let p = TerminalTab.shellSync("which claude 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines), !p.isEmpty {
-            isInstalled = true; path = p
-            version = TerminalTab.shellSync("claude --version 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            _isInstalled = true; _path = p
+            _version = TerminalTab.shellSync("claude --version 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return
         }
 
@@ -297,22 +317,22 @@ class ClaudeInstallChecker {
 
         for candidate in allCandidates {
             if FileManager.default.isExecutableFile(atPath: candidate) {
-                isInstalled = true; path = candidate
-                version = TerminalTab.shellSync("\"\(candidate)\" --version 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                _isInstalled = true; _path = candidate
+                _version = TerminalTab.shellSync("\"\(candidate)\" --version 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 return
             }
         }
 
         // 3) Fallback: try login shell with timeout (prevents hang)
         if let p = TerminalTab.shellSyncLoginWithTimeout("which claude 2>/dev/null", timeout: 3)?.trimmingCharacters(in: .whitespacesAndNewlines), !p.isEmpty {
-            isInstalled = true; path = p
-            version = TerminalTab.shellSyncLoginWithTimeout("\"\(p)\" --version 2>/dev/null", timeout: 3)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            _isInstalled = true; _path = p
+            _version = TerminalTab.shellSyncLoginWithTimeout("\"\(p)\" --version 2>/dev/null", timeout: 3)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return
         }
 
         // Not found
-        isInstalled = false
-        errorInfo = "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"
+        _isInstalled = false
+        _errorInfo = "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"
     }
 }
 
@@ -429,18 +449,19 @@ class TokenTracker: ObservableObject {
 
         if billingDay <= 0 {
             // 미설정이면 이번 달 1일부터
-            return cal.date(from: DateComponents(year: year, month: month, day: 1))!
+            return cal.date(from: DateComponents(year: year, month: month, day: 1)) ?? now
         }
         if todayDay >= billingDay {
             // 이번 달 결제일 이후
-            return cal.date(from: DateComponents(year: year, month: month, day: billingDay))!
+            return cal.date(from: DateComponents(year: year, month: month, day: billingDay)) ?? now
         } else {
             // 아직 결제일 전 → 지난달 결제일부터
-            let lastMonth = cal.date(byAdding: .month, value: -1, to: now)!
+            guard let lastMonth = cal.date(byAdding: .month, value: -1, to: now) else { return now }
             let lmYear = cal.component(.year, from: lastMonth)
             let lmMonth = cal.component(.month, from: lastMonth)
-            let maxDay = cal.range(of: .day, in: .month, for: lastMonth)!.upperBound - 1
-            return cal.date(from: DateComponents(year: lmYear, month: lmMonth, day: min(billingDay, maxDay)))!
+            guard let dayRange = cal.range(of: .day, in: .month, for: lastMonth) else { return now }
+            let maxDay = dayRange.upperBound - 1
+            return cal.date(from: DateComponents(year: lmYear, month: lmMonth, day: min(billingDay, maxDay))) ?? now
         }
     }
 
@@ -460,7 +481,7 @@ class TokenTracker: ObservableObject {
         cacheTimestamp = now
 
         let cal = Calendar.current
-        let weekAgo = cal.date(byAdding: .day, value: -7, to: now)!
+        let weekAgo = cal.date(byAdding: .day, value: -7, to: now) ?? now
         let weekRecords = history.filter { dateFormatter.date(from: $0.date).map { $0 >= weekAgo } ?? false }
         cachedWeekTokens = weekRecords.reduce(0) { $0 + $1.totalTokens }
         cachedWeekCost = weekRecords.reduce(0) { $0 + $1.cost }
@@ -483,8 +504,9 @@ class TokenTracker: ObservableObject {
         let billingDay = max(1, AppSettings.shared.billingDay)
         let cal = Calendar.current
         let nextBilling = cal.date(byAdding: .month, value: 1, to: billingPeriodStart)
-            ?? cal.date(byAdding: .day, value: 30, to: billingPeriodStart)!
-        let end = df.string(from: cal.date(byAdding: .day, value: -1, to: nextBilling)!)
+            ?? cal.date(byAdding: .day, value: 30, to: billingPeriodStart)
+            ?? Date()
+        let end = df.string(from: cal.date(byAdding: .day, value: -1, to: nextBilling) ?? nextBilling)
         return "\(start) ~ \(end)"
     }
 
@@ -535,7 +557,7 @@ class TokenTracker: ObservableObject {
     var weeklyUsagePercent: Double { Double(weekTokens) / Double(safeWeeklyLimit) }
 
     private func protectionUsageSummary() -> String {
-        "오늘 \(formatTokens(todayTokens))/\(formatTokens(safeDailyLimit)), 이번 주 \(formatTokens(weekTokens))/\(formatTokens(safeWeeklyLimit)) 사용 중입니다."
+        String(format: NSLocalizedString("token.protection.summary", comment: ""), formatTokens(todayTokens), formatTokens(safeDailyLimit), formatTokens(weekTokens), formatTokens(safeWeeklyLimit))
     }
 
     func startBlockReason(isAutomation: Bool) -> String? {
@@ -543,7 +565,7 @@ class TokenTracker: ObservableObject {
             weeklyRemaining <= effectiveGlobalWeeklyReserve ||
             dailyUsagePercent >= 0.985 ||
             weeklyUsagePercent >= 0.985 {
-            return "전체 토큰 보호선을 넘겨 새 작업을 잠시 막았습니다. \(protectionUsageSummary()) 설정 > 토큰에서 한도를 올리거나 토큰 이력을 초기화하면 바로 다시 입력할 수 있습니다."
+            return String(format: NSLocalizedString("token.protection.global.block", comment: ""), protectionUsageSummary())
         }
 
         if isAutomation &&
@@ -551,7 +573,7 @@ class TokenTracker: ObservableObject {
              weeklyRemaining <= effectiveAutomationWeeklyReserve ||
              dailyUsagePercent >= 0.82 ||
              weeklyUsagePercent >= 0.82) {
-            return "자동 보조 작업은 토큰 보호를 위해 잠시 제한되었습니다. \(protectionUsageSummary())"
+            return String(format: NSLocalizedString("token.protection.sub.block", comment: ""), protectionUsageSummary())
         }
 
         return nil
@@ -559,12 +581,12 @@ class TokenTracker: ObservableObject {
 
     func runningStopReason(isAutomation: Bool, currentTabTokens: Int, tokenLimit: Int) -> String? {
         if currentTabTokens >= tokenLimit {
-            return "세션 토큰 한도에 도달해 자동 중단했습니다."
+            return NSLocalizedString("token.protection.session.limit", comment: "")
         }
 
         if dailyRemaining <= effectiveEmergencyDailyReserve ||
             weeklyRemaining <= effectiveEmergencyWeeklyReserve {
-            return "전체 토큰 보호선을 넘겨 현재 작업을 중단했습니다. \(protectionUsageSummary())"
+            return String(format: NSLocalizedString("token.protection.global.stop", comment: ""), protectionUsageSummary())
         }
 
         if isAutomation &&
@@ -572,13 +594,13 @@ class TokenTracker: ObservableObject {
              weeklyRemaining <= effectiveGlobalWeeklyReserve ||
              dailyUsagePercent >= 0.94 ||
              weeklyUsagePercent >= 0.94) {
-            return "자동 보조 작업 토큰 보호선에 도달해 중단했습니다. \(protectionUsageSummary())"
+            return String(format: NSLocalizedString("token.protection.sub.stop", comment: ""), protectionUsageSummary())
         }
 
         // 비용 제한 체크
         let settings = AppSettings.shared
         if settings.dailyCostLimit > 0 && todayCost >= settings.dailyCostLimit {
-            return "일일 비용 제한($\(String(format: "%.2f", settings.dailyCostLimit)))에 도달해 중단했습니다. 오늘 사용: $\(String(format: "%.2f", todayCost))"
+            return String(format: NSLocalizedString("token.protection.daily.cost", comment: ""), String(format: "%.2f", settings.dailyCostLimit), String(format: "%.2f", todayCost))
         }
 
         return nil
@@ -588,17 +610,26 @@ class TokenTracker: ObservableObject {
         let settings = AppSettings.shared
         guard settings.costWarningAt80 else { return nil }
         if settings.perSessionCostLimit > 0 && tabCost >= settings.perSessionCostLimit * 0.8 {
-            return "세션 비용이 제한의 80%에 도달했습니다: $\(String(format: "%.2f", tabCost)) / $\(String(format: "%.2f", settings.perSessionCostLimit))"
+            return String(format: NSLocalizedString("token.protection.session.cost.warn", comment: ""), String(format: "%.2f", tabCost), String(format: "%.2f", settings.perSessionCostLimit))
         }
         if settings.dailyCostLimit > 0 && todayCost >= settings.dailyCostLimit * 0.8 {
-            return "일일 비용이 제한의 80%에 도달했습니다: $\(String(format: "%.2f", todayCost)) / $\(String(format: "%.2f", settings.dailyCostLimit))"
+            return String(format: NSLocalizedString("token.protection.daily.cost.warn", comment: ""), String(format: "%.2f", todayCost), String(format: "%.2f", settings.dailyCostLimit))
         }
         return nil
     }
 
     // MARK: - Persistence
 
+    /// 30일 이상 된 기록을 런타임에서도 주기적으로 제거
+    private func pruneHistoryIfNeeded() {
+        guard history.count > 35 else { return } // 30일 + 여유
+        let cal = Calendar.current
+        let cutoff = cal.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+        history = history.filter { dateFormatter.date(from: $0.date).map { $0 >= cutoff } ?? false }
+    }
+
     private func scheduleSave(delay: TimeInterval = 0.75) {
+        pruneHistoryIfNeeded()
         saveWorkItem?.cancel()
         let snapshot = history
         let key = saveKey
@@ -616,7 +647,7 @@ class TokenTracker: ObservableObject {
               let loaded = try? JSONDecoder().decode([DayRecord].self, from: data) else { return }
         // 최근 30일만 유지
         let cal = Calendar.current
-        let cutoff = cal.date(byAdding: .day, value: -30, to: Date())!
+        let cutoff = cal.date(byAdding: .day, value: -30, to: Date()) ?? Date()
         history = loaded.filter { dateFormatter.date(from: $0.date).map { $0 >= cutoff } ?? false }
     }
 
@@ -647,7 +678,7 @@ class TokenTracker: ObservableObject {
         let now = Date()
         var result: [DayRecord] = []
         for offset in (0..<7).reversed() {
-            let day = cal.date(byAdding: .day, value: -offset, to: now)!
+            guard let day = cal.date(byAdding: .day, value: -offset, to: now) else { continue }
             let key = dateFormatter.string(from: day)
             if let record = history.first(where: { $0.date == key }) {
                 result.append(record)
@@ -770,12 +801,18 @@ class TerminalTab: ObservableObject, Identifiable {
     }
 
     enum TimelineEventType: String {
-        case started = "시작"
-        case prompt = "명령"
-        case toolUse = "도구"
-        case fileChange = "파일"
-        case error = "에러"
-        case completed = "완료"
+        case started, prompt, toolUse, fileChange, error, completed
+
+        var displayName: String {
+            switch self {
+            case .started: return NSLocalizedString("timeline.event.started", comment: "")
+            case .prompt: return NSLocalizedString("timeline.event.prompt", comment: "")
+            case .toolUse: return NSLocalizedString("timeline.event.toolUse", comment: "")
+            case .fileChange: return NSLocalizedString("timeline.event.fileChange", comment: "")
+            case .error: return NSLocalizedString("timeline.event.error", comment: "")
+            case .completed: return NSLocalizedString("timeline.event.completed", comment: "")
+            }
+        }
     }
 
     @Published var timeline: [TimelineEvent] = []
@@ -1000,23 +1037,23 @@ class TerminalTab: ObservableObject, Identifiable {
     }
 
     func appendRestorationNotice(from saved: SavedSession, recoveryBundleURL: URL?) {
-        var details: [String] = ["자동으로 다시 실행하지 않았습니다."]
+        var details: [String] = [NSLocalizedString("tab.restore.not.rerun", comment: "")]
 
         if let lastPrompt = saved.lastPrompt, !lastPrompt.isEmpty {
-            details.append("마지막 입력: \(String(lastPrompt.prefix(180)))")
+            details.append(String(format: NSLocalizedString("tab.restore.last.input", comment: ""), String(lastPrompt.prefix(180))))
         } else if let initialPrompt = saved.initialPrompt, !initialPrompt.isEmpty {
-            details.append("초기 입력: \(String(initialPrompt.prefix(180)))")
+            details.append(String(format: NSLocalizedString("tab.restore.initial.input", comment: ""), String(initialPrompt.prefix(180))))
         }
 
         if let recoveryBundleURL {
-            details.append("복구 폴더: \(recoveryBundleURL.path)")
+            details.append(String(format: NSLocalizedString("tab.restore.recovery.folder", comment: ""), recoveryBundleURL.path))
         }
 
         if saved.sessionId != nil && (saved.continueSession ?? false) {
-            details.append("다음 입력부터 이전 대화를 이어서 보낼 수 있습니다.")
+            details.append(NSLocalizedString("tab.restore.continue.hint", comment: ""))
         }
 
-        let title = saved.wasProcessing == true ? "중단된 세션 복원" : "이전 세션 복원"
+        let title = saved.wasProcessing == true ? NSLocalizedString("tab.restore.interrupted", comment: "") : NSLocalizedString("tab.restore.previous", comment: "")
         appendBlock(.status(message: title), content: details.joined(separator: "\n"))
     }
 
@@ -1045,6 +1082,11 @@ class TerminalTab: ObservableObject, Identifiable {
         // Raw terminal mode: SwiftTerm이 자체 관리
         if AppSettings.shared.rawTerminalMode {
             if !isRawMode { // 이미 raw 모드면 재시작 안 함
+                // 이전 Claude 프로세스가 남아있으면 정리
+                currentProcess?.terminate()
+                currentProcess = nil
+                isProcessing = false
+                claudeActivity = .idle
                 isClaude = false
                 startRawTerminal()
             }
@@ -1061,7 +1103,7 @@ class TerminalTab: ObservableObject, Identifiable {
 
         let checker = ClaudeInstallChecker.shared; checker.check()
         if !checker.isInstalled {
-            appendBlock(.error(message: "Claude Code 미설치"), content: "Claude Code CLI를 찾을 수 없습니다.\n\n설치: npm install -g @anthropic-ai/claude-code\n\nPATH가 설정되지 않았을 수 있습니다.\n'which claude'로 경로를 확인하거나,\nnvm/fnm 사용 시 .zshrc 설정을 확인하세요.")
+            appendBlock(.error(message: NSLocalizedString("tab.claude.not.installed", comment: "")), content: NSLocalizedString("tab.claude.not.installed.detail", comment: ""))
             startError = "Claude Code not installed"
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .workmanClaudeNotInstalled, object: nil)
@@ -1087,8 +1129,8 @@ class TerminalTab: ObservableObject, Identifiable {
     /// Raw terminal mode: SwiftTerm이 PTY를 관리하므로 상태만 설정
     private func startRawTerminal() {
         isRawMode = true
-        isProcessing = true
-        claudeActivity = .running
+        isProcessing = false
+        claudeActivity = .idle
         // PTY 생성/프로세스 실행은 SwiftTermContainer에서 처리
     }
 
@@ -1126,7 +1168,7 @@ class TerminalTab: ObservableObject, Identifiable {
         }
 
         if let reason = TokenTracker.shared.startBlockReason(isAutomation: isAutomationTab) {
-            appendBlock(.status(message: "토큰 보호 모드"), content: reason)
+            appendBlock(.status(message: NSLocalizedString("tab.token.protection", comment: "")), content: reason)
             claudeActivity = .idle
             return
         }
@@ -1141,6 +1183,7 @@ class TerminalTab: ObservableObject, Identifiable {
 
         appendBlock(.userPrompt, content: prompt)
         timeline.append(TimelineEvent(timestamp: Date(), type: .prompt, detail: String(prompt.prefix(50)) + (prompt.count > 50 ? "..." : "")))
+        trimTimelineIfNeeded()
         initialPrompt = nil
         lastPromptText = prompt
         isProcessing = true
@@ -1216,8 +1259,13 @@ class TerminalTab: ObservableObject, Identifiable {
             if !self.customAgentsJSON.isEmpty {
                 cmd += " --agents \(self.shellEscape(self.customAgentsJSON))"
             }
-            // 플러그인
-            for pluginDir in self.pluginDirs where !pluginDir.isEmpty {
+            // 플러그인 (수동 + PluginManager 자동 주입)
+            var allPluginDirs = self.pluginDirs.filter { !$0.isEmpty }
+            let managedPaths = PluginManager.shared.activePluginPaths
+            for path in managedPaths where !allPluginDirs.contains(path) {
+                allPluginDirs.append(path)
+            }
+            for pluginDir in allPluginDirs {
                 cmd += " --plugin-dir \(self.shellEscape(pluginDir))"
             }
             // 크롬
@@ -1247,13 +1295,13 @@ class TerminalTab: ObservableObject, Identifiable {
             cmd += " -- \(self.shellEscape(prompt))"
 
             // 이미지 첨부 초기화
-            DispatchQueue.main.async { self.attachedImages.removeAll() }
+            DispatchQueue.main.async { [weak self] in self?.attachedImages.removeAll() }
 
             // 프로젝트 경로 존재 여부 확인
             let projectDirURL = URL(fileURLWithPath: path)
             if !FileManager.default.fileExists(atPath: projectDirURL.path) {
                 DispatchQueue.main.async {
-                    self.appendBlock(.error(message: "프로젝트 경로 없음"), content: "경로를 찾을 수 없습니다: \(path)\n디렉토리가 삭제되었거나 외장 드라이브가 분리되었을 수 있습니다.")
+                    self.appendBlock(.error(message: NSLocalizedString("tab.project.path.missing", comment: "")), content: String(format: NSLocalizedString("tab.project.path.missing.detail", comment: ""), path))
                     self.isProcessing = false
                     self.claudeActivity = .idle
                 }
@@ -1274,8 +1322,8 @@ class TerminalTab: ObservableObject, Identifiable {
             proc.standardError = errPipe
 
             // 프로세스 참조를 메인 스레드에서 안전하게 설정
-            DispatchQueue.main.sync {
-                self.currentProcess = proc
+            DispatchQueue.main.async { [weak self] in
+                self?.currentProcess = proc
             }
 
             // 프로세스 ID를 캡처하여 이후 검증용으로 사용
@@ -1344,8 +1392,8 @@ class TerminalTab: ObservableObject, Identifiable {
                 watchdog.cancel()
             } catch {
                 print("[도피스] 프로세스 실행 실패: \(error)")
-                DispatchQueue.main.async {
-                    self.appendBlock(.error(message: "프로세스 실행 실패"), content: "Claude Code를 실행할 수 없습니다.\n\n오류: \(error.localizedDescription)\n\nPATH가 올바르게 설정되어 있는지 확인하세요.\n터미널에서 'which claude'를 실행해 경로를 확인할 수 있습니다.")
+                DispatchQueue.main.async { [weak self] in
+                    self?.appendBlock(.error(message: NSLocalizedString("tab.process.launch.failed", comment: "")), content: String(format: NSLocalizedString("tab.process.launch.failed.detail", comment: ""), error.localizedDescription))
                 }
             }
 
@@ -1438,13 +1486,13 @@ class TerminalTab: ObservableObject, Identifiable {
                         let cmd = toolInput["command"] as? String ?? ""
                         // 보안: 위험 명령 감지
                         if let match = DangerousCommandDetector.shared.check(command: cmd) {
-                            dangerousCommandWarning = "⚠️ \(match.pattern.severity.rawValue): \(match.pattern.description)\n→ \(match.matchedText)"
+                            dangerousCommandWarning = "⚠️ \(match.pattern.severity.displayName): \(match.pattern.description)\n→ \(match.matchedText)"
                             AuditLog.shared.log(.dangerousCommand, tabId: id, projectName: projectName, detail: cmd, isDangerous: true)
                         }
                         // 감사 로그
                         AuditLog.shared.log(.bashCommand, tabId: id, projectName: projectName, detail: cmd)
                         let desc = toolInput["description"] as? String
-                        let header = desc != nil ? "\(cmd)  // \(desc!)" : cmd
+                        let header = desc.map { "\(cmd)  // \($0)" } ?? cmd
                         appendBlock(.toolUse(name: "Bash", input: cmd), content: header)
                         timeline.append(TimelineEvent(timestamp: Date(), type: .toolUse, detail: "Bash: \(String(cmd.prefix(40)))"))
                     case "Read":
@@ -1452,7 +1500,7 @@ class TerminalTab: ObservableObject, Identifiable {
                         let file = toolInput["file_path"] as? String ?? ""
                         // 보안: 민감 파일 감지
                         if let match = SensitiveFileShield.shared.check(filePath: file, action: "Read") {
-                            sensitiveFileWarning = "🔒 민감 파일 접근: \(match.patternMatched)\n→ \(file)"
+                            sensitiveFileWarning = String(format: NSLocalizedString("sensitive.file.read", comment: ""), match.patternMatched, file)
                             AuditLog.shared.log(.sensitiveFileAccess, tabId: id, projectName: projectName, detail: "Read: \(file)", isDangerous: true)
                         }
                         AuditLog.shared.log(.fileRead, tabId: id, projectName: projectName, detail: file)
@@ -1463,7 +1511,7 @@ class TerminalTab: ObservableObject, Identifiable {
                         claudeActivity = .writing
                         let file = toolInput["file_path"] as? String ?? ""
                         if let match = SensitiveFileShield.shared.check(filePath: file, action: "Write") {
-                            sensitiveFileWarning = "🔒 민감 파일 쓰기: \(match.patternMatched)\n→ \(file)"
+                            sensitiveFileWarning = String(format: NSLocalizedString("sensitive.file.write", comment: ""), match.patternMatched, file)
                             AuditLog.shared.log(.sensitiveFileAccess, tabId: id, projectName: projectName, detail: "Write: \(file)", isDangerous: true)
                         }
                         AuditLog.shared.log(.fileWrite, tabId: id, projectName: projectName, detail: file)
@@ -1475,7 +1523,7 @@ class TerminalTab: ObservableObject, Identifiable {
                         claudeActivity = .writing
                         let file = toolInput["file_path"] as? String ?? ""
                         if let match = SensitiveFileShield.shared.check(filePath: file, action: "Edit") {
-                            sensitiveFileWarning = "🔒 민감 파일 수정: \(match.patternMatched)\n→ \(file)"
+                            sensitiveFileWarning = String(format: NSLocalizedString("sensitive.file.edit", comment: ""), match.patternMatched, file)
                             AuditLog.shared.log(.sensitiveFileAccess, tabId: id, projectName: projectName, detail: "Edit: \(file)", isDangerous: true)
                         }
                         AuditLog.shared.log(.fileEdit, tabId: id, projectName: projectName, detail: file)
@@ -1725,22 +1773,22 @@ class TerminalTab: ObservableObject, Identifiable {
 
         let retryMode = retryPermissionMode(for: denial.toolName)
         let retrySummary = retryMode == .acceptEdits
-            ? "이번 한 번만 수정 권한으로 재시도합니다."
-            : "이번 한 번만 전체 권한으로 재시도합니다."
+            ? NSLocalizedString("tab.permission.retry.edit", comment: "")
+            : NSLocalizedString("tab.permission.retry.full", comment: "")
 
         lastPermissionFingerprint = fingerprint
         let approvalCommand = command
         pendingApproval = PendingApproval(
             command: approvalCommand,
-            reason: "\(approvalReasonPrefix(for: denial.toolName)) 권한이 필요합니다. 승인하면 \(retrySummary)",
+            reason: String(format: NSLocalizedString("tab.permission.needed", comment: ""), approvalReasonPrefix(for: denial.toolName), retrySummary),
             onApprove: { [weak self] in
                 self?.pendingPermissionDenial = nil
-                self?.appendBlock(.status(message: "권한 승인됨 · 다시 시도합니다"))
+                self?.appendBlock(.status(message: NSLocalizedString("tab.permission.approved", comment: "")))
                 self?.sendPrompt(self?.approvalRetryPrompt(for: denial.toolName) ?? "Permission granted. Please continue the previous task.", permissionOverride: retryMode)
             },
             onDeny: { [weak self] in
                 self?.pendingPermissionDenial = nil
-                self?.appendBlock(.status(message: "권한 요청이 거부되었습니다"))
+                self?.appendBlock(.status(message: NSLocalizedString("tab.permission.denied", comment: "")))
             }
         )
         // 세션 알림: 승인 필요
@@ -1769,13 +1817,13 @@ class TerminalTab: ObservableObject, Identifiable {
     private func approvalReasonPrefix(for toolName: String) -> String {
         switch toolName {
         case "Write", "Edit", "NotebookEdit":
-            return "파일 수정"
+            return NSLocalizedString("tab.approval.file.edit", comment: "")
         case "Bash":
-            return "명령 실행"
+            return NSLocalizedString("tab.approval.command.run", comment: "")
         case "WebFetch":
-            return "웹 가져오기"
+            return NSLocalizedString("tab.approval.web.fetch", comment: "")
         case "WebSearch":
-            return "웹 검색"
+            return NSLocalizedString("tab.approval.web.search", comment: "")
         default:
             return toolName
         }
@@ -1886,7 +1934,7 @@ class TerminalTab: ObservableObject, Identifiable {
             }
         }
 
-        return "병렬 작업"
+        return NSLocalizedString("tab.parallel.task", comment: "")
     }
 
     private func parallelTaskAssigneeId(seed: String) -> String {
@@ -1939,14 +1987,16 @@ class TerminalTab: ObservableObject, Identifiable {
 
     func cancelProcessing() {
         if isRawMode {
-            // Raw mode: Ctrl+C 전송
+            // Raw mode: Ctrl+C 전송 + 상태 리셋
             sendRawSignal(3) // ETX (Ctrl+C)
+            isProcessing = false
+            claudeActivity = .idle
             return
         }
         currentProcess?.terminate(); currentProcess = nil
         isProcessing = false; claudeActivity = .idle
         finalizeParallelTasks(as: .failed)
-        appendBlock(.status(message: "취소됨"))
+        appendBlock(.status(message: NSLocalizedString("tab.cancelled", comment: "")))
     }
 
     func startSleepWork(task: String, tokenBudget: Int?) {
@@ -1955,7 +2005,7 @@ class TerminalTab: ObservableObject, Identifiable {
         sleepWorkStartTokens = tokensUsed
         sleepWorkCompleted = false
         sleepWorkExceeded = false
-        AuditLog.shared.log(.sleepWorkStart, tabId: id, projectName: projectName, detail: "예산: \(tokenBudget.map { "\($0) tokens" } ?? "무제한")")
+        AuditLog.shared.log(.sleepWorkStart, tabId: id, projectName: projectName, detail: "\(NSLocalizedString("models.budget.label", comment: "")): \(tokenBudget.map { "\($0) tokens" } ?? NSLocalizedString("models.budget.unlimited", comment: ""))")
         sendPrompt(task)
     }
 
@@ -1970,13 +2020,17 @@ class TerminalTab: ObservableObject, Identifiable {
             proc.terminate()
             let pid = proc.processIdentifier
             DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) {
-                if proc.isRunning { kill(pid, SIGKILL) }
+                if proc.isRunning {
+                    // 프로세스 그룹 전체에 SIGKILL (자식 프로세스 포함)
+                    kill(-pid, SIGKILL)
+                    kill(pid, SIGKILL)
+                }
             }
         }
         currentProcess = nil
         isProcessing = false; claudeActivity = .idle; isRunning = false
         finalizeParallelTasks(as: .failed)
-        appendBlock(.status(message: "강제 중지됨"))
+        appendBlock(.status(message: NSLocalizedString("tab.force.stopped", comment: "")))
     }
 
     /// 작업을 강제 중지하고 git 변경사항을 작업 전 상태로 롤백
@@ -1996,13 +2050,21 @@ class TerminalTab: ObservableObject, Identifiable {
             _ = Self.shellSync("git -C \"\(p)\" clean -f -- \"\(filePath)\" 2>/dev/null")
         }
         if let recoveryBundleURL {
-            appendBlock(.status(message: "작업 취소 및 변경사항 롤백 완료"), content: "백업 폴더: \(recoveryBundleURL.path)")
+            appendBlock(.status(message: NSLocalizedString("tab.cancel.revert.done", comment: "")), content: String(format: NSLocalizedString("tab.cancel.revert.backup", comment: ""), recoveryBundleURL.path))
         } else {
-            appendBlock(.status(message: "작업 취소 및 변경사항 롤백 완료"))
+            appendBlock(.status(message: NSLocalizedString("tab.cancel.revert.done", comment: "")))
         }
     }
 
     func clearBlocks() { blocks.removeAll() }
+
+    private static let maxTimelineEvents = 500
+
+    private func trimTimelineIfNeeded() {
+        if timeline.count > Self.maxTimelineEvents {
+            timeline.removeFirst(timeline.count - Self.maxTimelineEvents)
+        }
+    }
 
     private func trimBlocksIfNeeded() {
         let overflow = blocks.count - Self.maxRetainedBlocks
@@ -2067,18 +2129,18 @@ class TerminalTab: ObservableObject, Identifiable {
 
         let elapsed = Int(Date().timeIntervalSince(startTime))
         let timeStr: String
-        if elapsed < 60 { timeStr = "\(elapsed)초" }
-        else if elapsed < 3600 { timeStr = "\(elapsed / 60)분 \(elapsed % 60)초" }
-        else { timeStr = "\(elapsed / 3600)시간 \((elapsed % 3600) / 60)분" }
+        if elapsed < 60 { timeStr = String(format: NSLocalizedString("time.seconds", comment: ""), elapsed) }
+        else if elapsed < 3600 { timeStr = String(format: NSLocalizedString("time.minutes.seconds", comment: ""), elapsed / 60, elapsed % 60) }
+        else { timeStr = String(format: NSLocalizedString("time.hours.minutes", comment: ""), elapsed / 3600, (elapsed % 3600) / 60) }
 
         let fileCount = Set(fileChanges.map(\.fileName)).count
         var details: [String] = []
         details.append("⏱ \(timeStr)")
         if totalCost > 0 { details.append("💰 $\(String(format: "%.4f", totalCost))") }
         if tokensUsed > 0 { details.append("🔤 \(tokensUsed >= 1000 ? String(format: "%.1fk", Double(tokensUsed)/1000) : "\(tokensUsed)") tokens") }
-        if fileCount > 0 { details.append("📄 \(fileCount)개 파일 수정") }
-        if commandCount > 0 { details.append("⚙ \(commandCount)개 명령") }
-        if errorCount > 0 { details.append("⚠ \(errorCount)개 에러") }
+        if fileCount > 0 { details.append(String(format: "📄 " + NSLocalizedString("notif.files.modified", comment: ""), fileCount)) }
+        if commandCount > 0 { details.append(String(format: "⚙ " + NSLocalizedString("notif.commands", comment: ""), commandCount)) }
+        if errorCount > 0 { details.append(String(format: "⚠ " + NSLocalizedString("notif.errors", comment: ""), errorCount)) }
 
         content.body = details.joined(separator: " · ")
         content.sound = .default
@@ -2103,7 +2165,8 @@ class TerminalTab: ObservableObject, Identifiable {
             let log = Self.shellSync("git -C \"\(p)\" log -1 --format='%s|||%cr' 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines)
             var msg = ""; var age = ""
             if let l = log { let pp = l.components(separatedBy: "|||"); if pp.count >= 2 { msg = pp[0]; age = pp[1] } }
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
                 self.gitInfo = GitInfo(branch: br, changedFiles: ch, lastCommit: String(msg.prefix(40)), lastCommitAge: age, isGitRepo: !br.isEmpty)
                 self.branch = br
             }
@@ -2183,7 +2246,7 @@ class TerminalTab: ObservableObject, Identifiable {
                 isProcessing = false
                 claudeActivity = .idle
                 AuditLog.shared.log(.sleepWorkEnd, tabId: id, projectName: projectName, detail: "예산 2배 초과로 중단: \(used)/\(budget) tokens")
-                appendBlock(.status(message: "슬립워크 중단"), content: "토큰 예산의 2배를 초과했습니다. 다음에 이어서 작업할지 확인해주세요.")
+                appendBlock(.status(message: NSLocalizedString("tab.sleepwork.stopped", comment: "")), content: NSLocalizedString("tab.sleepwork.stopped.detail", comment: ""))
                 return
             }
         }
@@ -2208,7 +2271,7 @@ class TerminalTab: ObservableObject, Identifiable {
         isProcessing = false
         claudeActivity = .error
         finalizeParallelTasks(as: .failed)
-        appendBlock(.status(message: "토큰 보호로 중단"), content: reason)
+        appendBlock(.status(message: NSLocalizedString("tab.token.protection.stopped", comment: "")), content: reason)
     }
 
     /// Cached login shell PATH (resolved once at first call)
@@ -2730,8 +2793,9 @@ enum ClaudeUsageFetcher {
             let ch = raw[i]
             if ch == "\u{1b}" {
                 // ESC 시퀀스 스킵
-                i = raw.index(after: i)
-                guard i < raw.endIndex else { break }
+                let nextIdx = raw.index(after: i)
+                guard nextIdx < raw.endIndex else { break }
+                i = nextIdx
                 let next = raw[i]
                 if next == "[" || next == "]" {
                     // CSI / OSC 시퀀스: 종료 문자까지 스킵
@@ -2744,7 +2808,9 @@ enum ClaudeUsageFetcher {
                     }
                 } else {
                     // 단일 ESC + 문자
-                    i = raw.index(after: i)
+                    let afterNext = raw.index(after: i)
+                    guard afterNext <= raw.endIndex else { break }
+                    i = afterNext
                 }
             } else if ch.asciiValue ?? 32 < 32 && ch != "\n" {
                 // 제어 문자 스킵 (\r, \t 등)

@@ -28,81 +28,14 @@ struct WorkManApp: App {
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 900, height: 600)
         .commands {
-            CommandGroup(after: .toolbar) {
-                Button("Restart Session") {
-                    NotificationCenter.default.post(name: .workmanRestartSession, object: nil)
-                }
-                .keyboardShortcut("r", modifiers: .command)
-            }
-
+            // 단축키는 ShortcutManager의 NSEvent 모니터가 동적으로 처리
+            // 메뉴 항목은 표시용으로 유지하되 단축키 힌트를 동적으로 표시
             CommandGroup(after: .newItem) {
-                Button("New Session") {
-                    NotificationCenter.default.post(name: .workmanNewTab, object: nil)
+                ForEach(ShortcutAction.allCases) { action in
+                    Button(action.localizedName) {
+                        NotificationCenter.default.post(name: action.notificationName, object: nil)
+                    }
                 }
-                .keyboardShortcut("t", modifiers: .command)
-
-                Button("Close Session") {
-                    NotificationCenter.default.post(name: .workmanCloseTab, object: nil)
-                }
-                .keyboardShortcut("w", modifiers: .command)
-
-                Divider()
-
-                Button("Next Tab") {
-                    NotificationCenter.default.post(name: .workmanNextTab, object: nil)
-                }
-                .keyboardShortcut("]", modifiers: [.command, .shift])
-
-                Button("Previous Tab") {
-                    NotificationCenter.default.post(name: .workmanPreviousTab, object: nil)
-                }
-                .keyboardShortcut("[", modifiers: [.command, .shift])
-
-                Divider()
-
-                Button("Cancel Processing") {
-                    NotificationCenter.default.post(name: .workmanCancelProcessing, object: nil)
-                }
-                .keyboardShortcut(".", modifiers: .command)
-
-                Button("Clear Terminal") {
-                    NotificationCenter.default.post(name: .workmanClearTerminal, object: nil)
-                }
-                .keyboardShortcut("k", modifiers: .command)
-
-                Button("Command Palette") {
-                    NotificationCenter.default.post(name: .workmanCommandPalette, object: nil)
-                }
-                .keyboardShortcut("p", modifiers: .command)
-
-                Button("Action Center") {
-                    NotificationCenter.default.post(name: .workmanActionCenter, object: nil)
-                }
-                .keyboardShortcut("j", modifiers: .command)
-
-                Divider()
-
-                Button("Toggle Split View") {
-                    NotificationCenter.default.post(name: .workmanToggleSplit, object: nil)
-                }
-                .keyboardShortcut("\\", modifiers: .command)
-
-                Button("Toggle Office View") {
-                    NotificationCenter.default.post(name: .workmanToggleOffice, object: nil)
-                }
-                .keyboardShortcut("o", modifiers: [.command, .shift])
-
-                Button("Toggle Terminal View") {
-                    NotificationCenter.default.post(name: .workmanToggleTerminal, object: nil)
-                }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
-
-                Divider()
-
-                Button("Export Session Log") {
-                    NotificationCenter.default.post(name: .workmanExportLog, object: nil)
-                }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
 
                 Divider()
 
@@ -150,6 +83,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 사용자 언어 설정 적용
         AppSettings.shared.applyLanguage()
 
+        // 동적 단축키 이벤트 모니터 설치
+        ShortcutManager.shared.installEventMonitor()
+
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         menuBarManager.setup()
 
@@ -165,6 +101,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 } else {
                     print("[도피스] ⚠️ Claude Code not installed")
                 }
+            }
+        }
+
+        // 윈도우 복원 실패 시 새 창 강제 생성
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.ensureMainWindowVisible()
+        }
+    }
+
+    /// 보이는 창이 하나도 없으면 메인 창을 강제로 생성/표시
+    private func ensureMainWindowVisible() {
+        NSApp.activate(ignoringOtherApps: true)
+
+        let hasVisibleWindow = NSApp.windows.contains { $0.isVisible && !$0.isMiniaturized }
+        if hasVisibleWindow { return }
+
+        // 기존 창이 있으면 보이게 만들기
+        for window in NSApp.windows where window.contentView != nil {
+            window.makeKeyAndOrderFront(nil)
+        }
+
+        // 그래도 보이는 창이 없으면 새 창 요청
+        if !NSApp.windows.contains(where: { $0.isVisible }) {
+            if NSApp.sendAction(Selector(("newWindowForTab:")), to: nil, from: nil) {
+                // 새 창이 생성됨
+            } else {
+                // fallback: 직접 창 열기 시도
+                NSApp.sendAction(#selector(NSDocumentController.newDocument(_:)), to: nil, from: nil)
             }
         }
     }
@@ -228,6 +192,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             "workman.office.layout.cozy.v1",
             "workman.office.layout.startup.v1",
             "workman.office.layout.enterprise.v1",
+            // 단축키
+            "workman.customShortcuts",
         ]
 
         var migratedCount = 0
@@ -256,22 +222,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// 시그널 수신 시 안전하게 세션 저장 후 종료
+    /// 주의: signal handler 내에서는 async-signal-safe 함수만 호출 가능하므로,
+    /// 실제 저장은 DispatchSource를 통해 메인 스레드에서 처리
     private func setupCrashRecovery() {
-        // SIGTERM, SIGINT 등 시그널 수신 시 세션 저장
         let signals: [Int32] = [SIGTERM, SIGINT, SIGHUP]
         for sig in signals {
-            signal(sig) { _ in
+            // 기본 시그널 핸들러를 무시하고 DispatchSource로 처리
+            signal(sig, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            source.setEventHandler {
                 SessionManager.shared.saveSessions(immediately: true)
                 exit(0)
             }
+            source.resume()
+            // source가 해제되지 않도록 유지
+            _signalSources.append(source)
         }
 
         // NSException (Objective-C 예외) 핸들러
         NSSetUncaughtExceptionHandler { exception in
-            print("[WorkMan] ⚠️ Uncaught exception: \(exception.name) — \(exception.reason ?? "unknown")")
+            print("[WorkMan] Uncaught exception: \(exception.name) — \(exception.reason ?? "unknown")")
+            // 예외 핸들러에서는 최소한의 작업만 수행 — 저장은 best-effort
             SessionManager.shared.saveSessions(immediately: true)
         }
     }
+    private var _signalSources: [DispatchSourceSignal] = []
 
     func applicationWillTerminate(_ notification: Notification) {
         SessionManager.shared.saveSessions(immediately: true)
@@ -285,12 +261,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard !runningTabs.isEmpty else { return .terminateNow }
 
         let alert = NSAlert()
-        alert.messageText = "진행 중인 작업이 \(runningTabs.count)개 있습니다"
-        alert.informativeText = "앱을 종료하면 현재 진행 중인 작업은 완료되지 않습니다.\n자동 롤백은 하지 않고, 복구 폴더를 만든 뒤 안전하게 중단할 수 있습니다."
+        alert.messageText = String(format: NSLocalizedString("quit.running.title", comment: ""), runningTabs.count)
+        alert.informativeText = NSLocalizedString("quit.running.message", comment: "")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "백업 후 중단하고 종료")
-        alert.addButton(withTitle: "그대로 종료")
-        alert.addButton(withTitle: "취소")
+        alert.addButton(withTitle: NSLocalizedString("quit.backup.and.quit", comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("quit.force", comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("cancel", comment: ""))
 
         let response = alert.runModal()
         switch response {
@@ -318,10 +294,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // Feature 3: 메뉴바에서 창 다시 열기
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
-            // 창이 없으면 새로 열기
-            for window in NSApp.windows {
-                window.makeKeyAndOrderFront(self)
-            }
+            ensureMainWindowVisible()
         }
         return true
     }

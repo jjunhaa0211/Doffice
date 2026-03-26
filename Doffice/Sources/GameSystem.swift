@@ -71,7 +71,7 @@ struct WorkerLevel {
     }
 
     static func titleAndBadge(for level: Int) -> (title: String, badge: String) {
-        let tier = titleTiers.last(where: { $0.minLevel <= level }) ?? titleTiers[0]
+        let tier = titleTiers.last(where: { $0.minLevel <= level }) ?? titleTiers.first ?? TitleTier(minLevel: 1, title: "인턴", badge: "🐣")
         return (tier.title, tier.badge)
     }
 
@@ -564,7 +564,12 @@ class AchievementManager: ObservableObject {
     }
 
     func unlock(_ id: String) {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.unlock(id) }
+            return
+        }
         guard let idx = achievements.firstIndex(where: { $0.id == id && !$0.unlocked }) else { return }
+        guard idx >= 0 && idx < achievements.count else { return }
         achievements[idx].unlocked = true
         achievements[idx].unlockedAt = Date()
         unlockedCount += 1
@@ -603,7 +608,8 @@ class AchievementManager: ObservableObject {
         let today = dayFormatter.string(from: Date())
         guard today != lastLoginRewardDate else { return nil }
 
-        let yesterday = dayFormatter.string(from: Calendar.current.date(byAdding: .day, value: -1, to: Date())!)
+        guard let yesterdayDate = Calendar.current.date(byAdding: .day, value: -1, to: Date()) else { return nil }
+        let yesterday = dayFormatter.string(from: yesterdayDate)
         if lastLoginRewardDate == yesterday {
             loginStreak += 1
         } else {
@@ -623,12 +629,12 @@ class AchievementManager: ObservableObject {
         var milestoneLabel = ""
 
         switch loginStreak {
-        case 7:   bonusXP = 50;   isMilestone = true; milestoneEmoji = "🎉"; milestoneLabel = "일주일 개근!"
-        case 14:  bonusXP = 100;  isMilestone = true; milestoneEmoji = "🔥"; milestoneLabel = "2주 연속!"
-        case 30:  bonusXP = 200;  isMilestone = true; milestoneEmoji = "👑"; milestoneLabel = "한 달 개근!"
-        case 60:  bonusXP = 300;  isMilestone = true; milestoneEmoji = "💎"; milestoneLabel = "두 달 연속!"
-        case 100: bonusXP = 500;  isMilestone = true; milestoneEmoji = "🏆"; milestoneLabel = "100일 달성!"
-        case 365: bonusXP = 1000; isMilestone = true; milestoneEmoji = "🌟"; milestoneLabel = "1년 개근!"
+        case 7:   bonusXP = 50;   isMilestone = true; milestoneEmoji = "🎉"; milestoneLabel = NSLocalizedString("game.milestone.week", comment: "")
+        case 14:  bonusXP = 100;  isMilestone = true; milestoneEmoji = "🔥"; milestoneLabel = NSLocalizedString("game.milestone.2weeks", comment: "")
+        case 30:  bonusXP = 200;  isMilestone = true; milestoneEmoji = "👑"; milestoneLabel = NSLocalizedString("game.milestone.month", comment: "")
+        case 60:  bonusXP = 300;  isMilestone = true; milestoneEmoji = "💎"; milestoneLabel = NSLocalizedString("game.milestone.2months", comment: "")
+        case 100: bonusXP = 500;  isMilestone = true; milestoneEmoji = "🏆"; milestoneLabel = NSLocalizedString("game.milestone.100days", comment: "")
+        case 365: bonusXP = 1000; isMilestone = true; milestoneEmoji = "🌟"; milestoneLabel = NSLocalizedString("game.milestone.year", comment: "")
         default: break
         }
         if bonusXP > 0 { addXP(bonusXP) }
@@ -796,6 +802,12 @@ class AchievementManager: ObservableObject {
     private func recordActiveDay() {
         let today = dayFormatter.string(from: Date())
         activeDays.insert(today)
+        // 메모리 절약: 400일 초과 시 오래된 날짜 제거 (365일 업적 체크 + 여유)
+        if activeDays.count > 400 {
+            let sorted = activeDays.sorted()
+            let toRemove = sorted.prefix(activeDays.count - 400)
+            for d in toRemove { activeDays.remove(d) }
+        }
         if activeDays.count >= 30 { unlock("active_days_30") }
         if activeDays.count >= 60 { unlock("active_days_60") }
         if activeDays.count >= 90 { unlock("active_days_90") }
@@ -1342,7 +1354,7 @@ struct AchievementCollectionView: View {
                         .foregroundColor(Theme.textDim.opacity(0.5))
                 }
                 .buttonStyle(.plain)
-                .help("닫기 (Esc)")
+                .help(NSLocalizedString("game.close.hint", comment: ""))
             }
 
             // Line 2: Wide progress bar
@@ -1368,13 +1380,13 @@ struct AchievementCollectionView: View {
                 Text("·").foregroundColor(Theme.textDim)
                 inlineStat(label: "XP", value: "\(mgr.totalXP)", color: Theme.yellow)
                 Text("·").foregroundColor(Theme.textDim)
-                inlineStat(label: "명령", value: "\(mgr.commandCount)", color: Theme.accent)
+                inlineStat(label: NSLocalizedString("game.stat.commands", comment: ""), value: "\(mgr.commandCount)", color: Theme.accent)
                 Text("·").foregroundColor(Theme.textDim)
-                inlineStat(label: "토큰", value: formatTokens(mgr.totalTokensUsed), color: Theme.cyan)
+                inlineStat(label: NSLocalizedString("game.stat.tokens", comment: ""), value: formatTokens(mgr.totalTokensUsed), color: Theme.cyan)
                 Text("·").foregroundColor(Theme.textDim)
-                inlineStat(label: "활동", value: "\(mgr.activeDays.count)일", color: Theme.orange)
+                inlineStat(label: NSLocalizedString("game.stat.activity", comment: ""), value: "\(mgr.activeDays.count)\(NSLocalizedString("game.stat.days.suffix", comment: ""))", color: Theme.orange)
                 Spacer()
-                Text("\(completionPercent)% 달성")
+                Text(String(format: NSLocalizedString("game.completion.percent", comment: ""), completionPercent))
                     .font(Theme.mono(11, weight: .black))
                     .foregroundColor(Theme.yellow)
             }
@@ -1404,7 +1416,7 @@ struct AchievementCollectionView: View {
             Button(action: { withAnimation(.easeInOut(duration: 0.15)) { showUnlockedOnly.toggle() } }) {
                 HStack(spacing: 5) {
                     Image(systemName: showUnlockedOnly ? "eye.fill" : "eye").font(.system(size: Theme.iconSize(11)))
-                    Text(showUnlockedOnly ? "달성만" : "전부 보기")
+                    Text(showUnlockedOnly ? NSLocalizedString("game.filter.unlocked", comment: "") : NSLocalizedString("game.filter.all", comment: ""))
                         .font(Theme.mono(11, weight: .medium))
                 }
                 .foregroundColor(showUnlockedOnly ? Theme.accent : Theme.textDim)
@@ -1501,7 +1513,7 @@ struct AchievementCollectionView: View {
             if unlocked == total && total > 0 {
                 HStack(spacing: 3) {
                     Image(systemName: "checkmark.seal.fill").font(.system(size: Theme.iconSize(9))).foregroundColor(Theme.green)
-                    Text("COMPLETE").font(Theme.mono(7, weight: .heavy)).foregroundColor(Theme.green).tracking(1)
+                    Text(NSLocalizedString("game.section.complete", comment: "")).font(Theme.mono(7, weight: .heavy)).foregroundColor(Theme.green).tracking(1)
                 }
             }
         }

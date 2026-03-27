@@ -1169,7 +1169,7 @@ struct BrowserSplitView: View {
                     )
 
                 browserContent
-                    .frame(width: geo.size.width * (1 - splitRatio) - 3)
+                    .frame(width: max(0, geo.size.width * (1 - splitRatio) - 3))
             }
         }
     }

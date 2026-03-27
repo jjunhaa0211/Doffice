@@ -74,9 +74,9 @@ public class PluginEffectEngine: ObservableObject {
     // v2 이펙트 모델
 
     public struct TypewriterState: Identifiable {
-        public let id = UUID()
+        public let id: UUID
         public let fullText: String
-        public var displayedCount: Int = 0
+        public var displayedCount: Int
         public let colorHex: String
         public let fontSize: CGFloat
         public let position: String        // "top" | "center" | "bottom"
@@ -85,8 +85,10 @@ public class PluginEffectEngine: ObservableObject {
             String(fullText.prefix(displayedCount))
         }
 
-        public init(fullText: String, colorHex: String, fontSize: CGFloat, position: String) {
+        public init(id: UUID = UUID(), fullText: String, displayedCount: Int = 0, colorHex: String, fontSize: CGFloat, position: String) {
+            self.id = id
             self.fullText = fullText
+            self.displayedCount = displayedCount
             self.colorHex = colorHex
             self.fontSize = fontSize
             self.position = position
@@ -94,14 +96,15 @@ public class PluginEffectEngine: ObservableObject {
     }
 
     public struct ProgressBarState: Identifiable {
-        public let id = UUID()
-        public var progress: Double        // 0.0 ~ 1.0
+        public let id: UUID
+        public let progress: Double        // 0.0 ~ 1.0
         public let label: String
         public let barColorHex: String
         public let trackColorHex: String
         public let duration: Double        // 자동 진행 시간
 
-        public init(progress: Double, label: String, barColorHex: String, trackColorHex: String, duration: Double) {
+        public init(id: UUID = UUID(), progress: Double, label: String, barColorHex: String, trackColorHex: String, duration: Double) {
+            self.id = id
             self.progress = progress
             self.label = label
             self.barColorHex = barColorHex
@@ -304,29 +307,35 @@ public class PluginEffectEngine: ObservableObject {
 
     private func executeTypewriter(_ config: [String: EffectValue]) {
         let text = config["text"]?.stringValue ?? "Hello, World!"
-        let speed = config["speed"]?.doubleValue ?? 0.05    // 글자당 초
+        let speed = config["speed"]?.doubleValue ?? 0.05
         let colorHex = config["colorHex"]?.stringValue ?? "3291ff"
         let fontSize = CGFloat(config["fontSize"]?.doubleValue ?? 16.0)
         let position = config["position"]?.stringValue ?? "center"
         let holdDuration = config["holdDuration"]?.doubleValue ?? 2.0
 
-        var state = TypewriterState(fullText: text, colorHex: colorHex, fontSize: fontSize, position: position)
-        typewriterText = state
+        let initialState = TypewriterState(fullText: text, colorHex: colorHex, fontSize: fontSize, position: position)
+        let stateId = initialState.id
+        typewriterText = initialState
 
         typewriterTimer?.invalidate()
         var charIndex = 0
         typewriterTimer = Timer.scheduledTimer(withTimeInterval: speed, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
             charIndex += 1
+            // 새 struct를 생성하여 @Published 변경 트리거
+            var updated = TypewriterState(fullText: text, colorHex: colorHex, fontSize: fontSize, position: position)
+            updated.displayedCount = charIndex
             DispatchQueue.main.async {
-                state.displayedCount = charIndex
-                self?.typewriterText = state
+                guard self.typewriterText?.id == stateId else { timer.invalidate(); return }
+                self.typewriterText = updated
             }
             if charIndex >= text.count {
                 timer.invalidate()
-                // hold 후 페이드 아웃
                 DispatchQueue.main.asyncAfter(deadline: .now() + holdDuration) { [weak self] in
                     withAnimation(.easeOut(duration: 0.5)) {
-                        self?.typewriterText = nil
+                        if self?.typewriterText?.id == stateId {
+                            self?.typewriterText = nil
+                        }
                     }
                 }
             }
@@ -341,28 +350,36 @@ public class PluginEffectEngine: ObservableObject {
         let trackColor = config["trackColorHex"]?.stringValue ?? "2a2d35"
         let duration = config["duration"]?.doubleValue ?? 3.0
 
-        let state = ProgressBarState(
+        let initialState = ProgressBarState(
             progress: 0,
             label: label,
             barColorHex: barColor,
             trackColorHex: trackColor,
             duration: duration
         )
-        progressBarState = state
+        let stateId = initialState.id
+        progressBarState = initialState
 
         // 0 → 1 애니메이션 (0.05초 간격)
-        let steps = Int(duration / 0.05)
+        let steps = max(Int(duration / 0.05), 1)
         for i in 1...steps {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.05) { [weak self] in
-                guard self?.progressBarState?.id == state.id else { return }
-                self?.progressBarState?.progress = min(Double(i) / Double(steps), 1.0)
+                guard let self = self, self.progressBarState?.id == stateId else { return }
+                // 새 struct를 생성하여 @Published 변경 트리거
+                self.progressBarState = ProgressBarState(
+                    progress: min(Double(i) / Double(steps), 1.0),
+                    label: label,
+                    barColorHex: barColor,
+                    trackColorHex: trackColor,
+                    duration: duration
+                )
             }
         }
 
         // 완료 후 제거
         DispatchQueue.main.asyncAfter(deadline: .now() + duration + 1.0) { [weak self] in
             withAnimation(.easeOut(duration: 0.3)) {
-                if self?.progressBarState?.id == state.id {
+                if self?.progressBarState?.id == stateId {
                     self?.progressBarState = nil
                 }
             }

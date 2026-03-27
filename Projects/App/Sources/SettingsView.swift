@@ -1753,7 +1753,7 @@ struct SettingsView: View {
                     extensionToggles(for: plugin)
 
                     // 충돌 경고
-                    let conflicts = pluginManager.detectConflicts().filter { $0.pluginA == plugin.name || $0.pluginB == plugin.name }
+                    let conflicts = pluginManager.conflicts(for: plugin.name)
                     if !conflicts.isEmpty {
                         ForEach(Array(conflicts.enumerated()), id: \.offset) { _, conflict in
                             HStack(spacing: 4) {

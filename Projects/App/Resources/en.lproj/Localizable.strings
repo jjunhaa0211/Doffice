@@ -2579,3 +2579,31 @@
 /* Plugin v2 - Extension Toggle */
 "plugin.extension.enable" = "Enabled";
 "plugin.extension.disable" = "Disabled";
+
+/* Onboarding - New Steps */
+
+"onboard.viewmodes.title" = "View Modes";
+"onboard.viewmodes.subtitle" = "Switch layouts to match your workflow";
+"onboard.viewmode.split" = "Office + Terminal side by side";
+"onboard.viewmode.grid" = "All sessions in a card grid";
+"onboard.viewmode.single" = "Focus on one session";
+"onboard.viewmode.office" = "Full-screen pixel art office";
+"onboard.tools.title" = "Dev Tools";
+"onboard.tools.subtitle" = "Git client and browser are built in";
+"onboard.git.graph" = "Commit graph visualization";
+"onboard.git.stage" = "Stage / Commit / Branch";
+"onboard.git.diff" = "Diff viewer";
+"onboard.browser.tabs" = "Multi-tab browser";
+"onboard.browser.search" = "Search directly from URL bar";
+"onboard.browser.bookmark" = "Bookmarks & Dev shortcuts";
+"onboard.plugin.title" = "Plugin Marketplace";
+"onboard.plugin.subtitle" = "Add characters, themes, furniture & achievements";
+"onboard.plugin.characters" = "Character Packs";
+"onboard.plugin.characters.desc" = "Hire new pixel characters";
+"onboard.plugin.themes" = "Theme Presets";
+"onboard.plugin.themes.desc" = "Change all app colors at once";
+"onboard.plugin.furniture" = "Office Furniture";
+"onboard.plugin.furniture.desc" = "Place new furniture in your office";
+"onboard.plugin.achievements" = "Achievements";
+"onboard.plugin.achievements.desc" = "Unlock new challenges";
+"onboard.plugin.hint" = "Install from Settings > Plugins";

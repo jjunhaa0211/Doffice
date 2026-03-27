@@ -407,6 +407,8 @@ public class PluginHost: ObservableObject {
             self.achievements = newAchievements.filter { !disabled.contains($0.id) }
             self.bossLines = newBossLines
             self.startStatusBarTimers()
+            // 충돌 캐시 갱신
+            PluginManager.shared.detectConflicts()
         }
     }
 
@@ -656,6 +658,9 @@ public class PluginManager: ObservableObject {
     // 매니페스트 캐시 (detectConflicts 성능 개선)
     /// Manifest cache shared with PluginHost to avoid redundant disk I/O + JSON decoding
     var manifestCache: [String: PluginManifest] = [:]  // pluginPath → manifest
+
+    // 충돌 감지 캐시 (pluginRow마다 재계산 방지)
+    @Published public var cachedConflicts: [PluginConflict] = []
 
     // 핫 리로드
     private var fileWatchers: [String: DispatchSourceFileSystemObject] = [:]
@@ -1133,7 +1138,13 @@ public class PluginManager: ObservableObject {
                 }
             }
         }
+        cachedConflicts = conflicts
         return conflicts
+    }
+
+    /// 특정 플러그인에 해당하는 충돌만 반환 (캐시 사용)
+    public func conflicts(for pluginName: String) -> [PluginConflict] {
+        cachedConflicts.filter { $0.pluginA == pluginName || $0.pluginB == pluginName }
     }
 
     public struct PluginConflict {

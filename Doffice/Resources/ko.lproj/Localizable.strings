@@ -2529,3 +2529,31 @@
 "quit.force" = "그대로 종료";
 "plugin.error.brew.not.supported" = "iOS에서는 Homebrew를 지원하지 않습니다. URL 또는 마켓플레이스를 이용해주세요.";
 "plugin.themes.label" = "플러그인 테마";
+
+/* Onboarding - New Steps */
+
+"onboard.viewmodes.title" = "화면 모드";
+"onboard.viewmodes.subtitle" = "작업 스타일에 맞게 화면을 전환하세요";
+"onboard.viewmode.split" = "오피스 + 터미널을 동시에";
+"onboard.viewmode.grid" = "모든 세션을 카드 그리드로";
+"onboard.viewmode.single" = "하나의 세션에 집중";
+"onboard.viewmode.office" = "픽셀 아트 오피스 전체 화면";
+"onboard.tools.title" = "개발 도구";
+"onboard.tools.subtitle" = "Git과 브라우저가 내장되어 있습니다";
+"onboard.git.graph" = "커밋 그래프 시각화";
+"onboard.git.stage" = "Stage / Commit / Branch";
+"onboard.git.diff" = "Diff 뷰어";
+"onboard.browser.tabs" = "멀티 탭 브라우저";
+"onboard.browser.search" = "URL 바에서 바로 검색";
+"onboard.browser.bookmark" = "북마크 & Dev 바로가기";
+"onboard.plugin.title" = "플러그인 마켓플레이스";
+"onboard.plugin.subtitle" = "캐릭터, 테마, 가구, 업적을 추가하세요";
+"onboard.plugin.characters" = "캐릭터 팩";
+"onboard.plugin.characters.desc" = "새로운 픽셀 캐릭터를 고용하세요";
+"onboard.plugin.themes" = "테마 프리셋";
+"onboard.plugin.themes.desc" = "앱 전체 색상을 한 번에 변경";
+"onboard.plugin.furniture" = "오피스 가구";
+"onboard.plugin.furniture.desc" = "오피스에 새 가구를 배치하세요";
+"onboard.plugin.achievements" = "도전 과제";
+"onboard.plugin.achievements.desc" = "새로운 업적에 도전하세요";
+"onboard.plugin.hint" = "설정 > 플러그인에서 설치할 수 있습니다";

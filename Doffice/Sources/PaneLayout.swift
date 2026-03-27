@@ -128,7 +128,7 @@ struct PaneSplitView: View {
                     HStack(spacing: 0) {
                         ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
                             paneContent(child.node)
-                                .frame(width: totalSize * child.proportion - (index > 0 ? 2 : 0))
+                                .frame(width: max(0, totalSize * child.proportion - (index > 0 ? 2 : 0)))
 
                             if index < children.count - 1 {
                                 PaneDivider(axis: .horizontal)
@@ -139,7 +139,7 @@ struct PaneSplitView: View {
                     VStack(spacing: 0) {
                         ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
                             paneContent(child.node)
-                                .frame(height: totalSize * child.proportion - (index > 0 ? 2 : 0))
+                                .frame(height: max(0, totalSize * child.proportion - (index > 0 ? 2 : 0)))
 
                             if index < children.count - 1 {
                                 PaneDivider(axis: .vertical)

@@ -2531,3 +2531,31 @@
 "quit.force" = "そのまま終了";
 "plugin.error.brew.not.supported" = "iOSではHomebrewはサポートされていません。URLまたはマーケットプレイスをご利用ください。";
 "plugin.themes.label" = "プラグインテーマ";
+
+/* Onboarding - New Steps */
+
+"onboard.viewmodes.title" = "画面モード";
+"onboard.viewmodes.subtitle" = "作業スタイルに合わせて画面を切り替えましょう";
+"onboard.viewmode.split" = "オフィス + ターミナルを同時に";
+"onboard.viewmode.grid" = "全セッションをカードグリッドで";
+"onboard.viewmode.single" = "1つのセッションに集中";
+"onboard.viewmode.office" = "ピクセルアートオフィス全画面";
+"onboard.tools.title" = "開発ツール";
+"onboard.tools.subtitle" = "GitとブラウザがJava内蔵されています";
+"onboard.git.graph" = "コミットグラフの可視化";
+"onboard.git.stage" = "Stage / Commit / Branch";
+"onboard.git.diff" = "Diffビューア";
+"onboard.browser.tabs" = "マルチタブブラウザ";
+"onboard.browser.search" = "URLバーから直接検索";
+"onboard.browser.bookmark" = "ブックマーク & Devショートカット";
+"onboard.plugin.title" = "プラグインマーケット";
+"onboard.plugin.subtitle" = "キャラクター、テーマ、家具、実績を追加しよう";
+"onboard.plugin.characters" = "キャラクターパック";
+"onboard.plugin.characters.desc" = "新しいピクセルキャラを雇いましょう";
+"onboard.plugin.themes" = "テーマプリセット";
+"onboard.plugin.themes.desc" = "アプリ全体の色を一度に変更";
+"onboard.plugin.furniture" = "オフィス家具";
+"onboard.plugin.furniture.desc" = "オフィスに新しい家具を配置しよう";
+"onboard.plugin.achievements" = "チャレンジ";
+"onboard.plugin.achievements.desc" = "新しい実績に挑戦しよう";
+"onboard.plugin.hint" = "設定 > プラグインからインストールできます";

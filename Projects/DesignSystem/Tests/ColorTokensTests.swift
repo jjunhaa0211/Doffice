@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import DesignSystem
 
@@ -102,9 +103,9 @@ final class ColorTokensTests: XCTestCase {
     }
 
     func testCustomThemeOverridesBg() {
-        let custom = CustomThemeConfig(bgHex: "123456")
+        let custom = CustomThemeConfig(bgHex: "FF0000")
         let color = ColorTokens.bg(dark: true, custom: custom)
-        XCTAssertEqual(color.hexString, "123456")
+        XCTAssertEqual(color.hexString, "FF0000")
     }
 
     func testCustomThemeNilFallsBackToDefault() {

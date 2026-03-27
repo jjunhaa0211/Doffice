@@ -42,6 +42,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0F708BB592F173C2660727CA"
+               BuildableName = "DesignSystemTests.xctest"
+               BlueprintName = "DesignSystemTests"
+               ReferencedContainer = "container:Projects/DesignSystem/DesignSystem.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "5CC8C7C004C4591B513168F5"
                BuildableName = "Doffice.app"
                BlueprintName = "Doffice"
@@ -84,6 +98,17 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0F708BB592F173C2660727CA"
+               BuildableName = "DesignSystemTests.xctest"
+               BlueprintName = "DesignSystemTests"
+               ReferencedContainer = "container:Projects/DesignSystem/DesignSystem.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
          <TestableReference
             skipped = "NO"
             parallelizable = "NO">

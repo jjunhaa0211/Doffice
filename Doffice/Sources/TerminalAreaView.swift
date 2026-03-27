@@ -3610,7 +3610,7 @@ struct NewTabSheet: View {
             sessionConfigBottomBar
         }
         .frame(width: max(560, min(560 * AppSettings.shared.fontSizeScale, 800)),
-               height: max(660, min(660 * AppSettings.shared.fontSizeScale, NSScreen.main?.visibleFrame.height ?? 800)))
+               height: min(720, (NSScreen.main?.visibleFrame.height ?? 800) * 0.85))
         .background(Theme.bg)
         .sheet(isPresented: $showSavePreset) {
             SavePresetSheet(draft: currentDraftSnapshot())

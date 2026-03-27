@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <Group
+      location = "group:Projects"
+      name = "Projects">
+      <FileRef
+         location = "group:App/Doffice.xcodeproj">
+      </FileRef>
+      <FileRef
+         location = "group:DesignSystem/DesignSystem.xcodeproj">
+      </FileRef>
+      <FileRef
+         location = "group:DofficeKit/DofficeKit.xcodeproj">
+      </FileRef>
+   </Group>
+</Workspace>

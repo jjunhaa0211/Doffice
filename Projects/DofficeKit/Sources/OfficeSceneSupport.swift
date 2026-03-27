@@ -1,10 +1,11 @@
 import SwiftUI
+import DesignSystem
 
 // ═══════════════════════════════════════════════════════
 // MARK: - Office Scene Theme Support
 // ═══════════════════════════════════════════════════════
 
-enum OfficeSceneBackdropKind {
+public enum OfficeSceneBackdropKind {
     case bright
     case sunset
     case night
@@ -17,30 +18,30 @@ enum OfficeSceneBackdropKind {
     case volcano
 }
 
-struct OfficeScenePalette {
-    let backdropTop: String
-    let backdropBottom: String
-    let backdropGlow: String
-    let wallBase: String
-    let wallHighlight: String
-    let wallBright: String
-    let wallShadow: String
-    let trim: String
-    let trimHighlight: String
-    let windowFrame: String
-    let windowSill: String
-    let windowGlow: String
-    let beamColor: String
-    let beamOpacity: Double
-    let outdoorAccent: String
-    let outdoorAccent2: String
-    let officeFloor: [String]
-    let pantryFloor: [String]
-    let carpetFloor: [String]
-    let labelOpacity: Double
+public struct OfficeScenePalette {
+    public let backdropTop: String
+    public let backdropBottom: String
+    public let backdropGlow: String
+    public let wallBase: String
+    public let wallHighlight: String
+    public let wallBright: String
+    public let wallShadow: String
+    public let trim: String
+    public let trimHighlight: String
+    public let windowFrame: String
+    public let windowSill: String
+    public let windowGlow: String
+    public let beamColor: String
+    public let beamOpacity: Double
+    public let outdoorAccent: String
+    public let outdoorAccent2: String
+    public let officeFloor: [String]
+    public let pantryFloor: [String]
+    public let carpetFloor: [String]
+    public let labelOpacity: Double
 
     // Memberwise init (커스텀 init이 있으면 자동 생성 안 됨)
-    init(backdropTop: String, backdropBottom: String, backdropGlow: String,
+    public init(backdropTop: String, backdropBottom: String, backdropGlow: String,
          wallBase: String, wallHighlight: String, wallBright: String, wallShadow: String,
          trim: String, trimHighlight: String,
          windowFrame: String, windowSill: String, windowGlow: String,
@@ -58,7 +59,7 @@ struct OfficeScenePalette {
         self.labelOpacity = labelOpacity
     }
 
-    init(theme: BackgroundTheme, dark: Bool) {
+    public init(theme: BackgroundTheme, dark: Bool) {
         let floorOverride = theme.floorColors
 
         switch theme.officeSceneBackdropKind {
@@ -331,27 +332,27 @@ struct OfficeScenePalette {
 // ═══════════════════════════════════════════════════════
 
 public final class OfficeSceneStore: ObservableObject {
-    static let shared = OfficeSceneStore()
+    public static let shared = OfficeSceneStore()
 
-    let map: OfficeMap
-    let controller: OfficeCharacterController
-    @Published var defaultLayout: OfficeLayoutSnapshot
-    @Published var currentPreset: OfficePreset
-    @Published var cameraCenter: CGPoint
-    @Published var cameraZoom: CGFloat = 1
-    @Published var followingCharacterId: String?
-    @Published var followZoomLevel: CGFloat = 1.85  // 팔로우 줌 배율 (1.2 ~ 3.0)
-    @Published var backgroundSnapshot: CGImage?
+    public let map: OfficeMap
+    public let controller: OfficeCharacterController
+    @Published public var defaultLayout: OfficeLayoutSnapshot
+    @Published public var currentPreset: OfficePreset
+    @Published public var cameraCenter: CGPoint
+    @Published public var cameraZoom: CGFloat = 1
+    @Published public var followingCharacterId: String?
+    @Published public var followZoomLevel: CGFloat = 1.85  // 팔로우 줌 배율 (1.2 ~ 3.0)
+    @Published public var backgroundSnapshot: CGImage?
 
-    @Published var frame: Int = 0
-    @Published var needsRedraw: Bool = false
-    var chromeScreenshots: [String: CGImage] = [:]  // Canvas가 frame 타이머로 읽으므로 @Published 불필요
+    @Published public var frame: Int = 0
+    @Published public var needsRedraw: Bool = false
+    public var chromeScreenshots: [String: CGImage] = [:]  // Canvas가 frame 타이머로 읽으므로 @Published 불필요
 
     /// Cached palette — invalidated when theme or dark mode changes.
     private var _cachedPalette: OfficeScenePalette?
     private var _cachedPaletteKey: Int = -1
 
-    func cachedPalette(theme: BackgroundTheme, dark: Bool) -> OfficeScenePalette {
+    public func cachedPalette(theme: BackgroundTheme, dark: Bool) -> OfficeScenePalette {
         let key = theme.hashValue ^ (dark ? 1 : 0)
         if key == _cachedPaletteKey, let cached = _cachedPalette {
             return cached
@@ -384,7 +385,7 @@ public final class OfficeSceneStore: ObservableObject {
         self.controller = OfficeCharacterController(map: officeMap)
     }
 
-    func advance(with tabs: [TerminalTab], activeTabId: String?, focusMode: Bool, fps: Double = OfficeConstants.fps) {
+    public func advance(with tabs: [TerminalTab], activeTabId: String?, focusMode: Bool, fps: Double = OfficeConstants.fps) {
         let now = Date().timeIntervalSinceReferenceDate
         let effectiveFPS = max(fps, 1)
         let elapsed = now - lastAdvanceTime
@@ -407,14 +408,14 @@ public final class OfficeSceneStore: ObservableObject {
         needsRedraw = changed
     }
 
-    func refreshLayout(with tabs: [TerminalTab]) {
+    public func refreshLayout(with tabs: [TerminalTab]) {
         controller.refreshLayout(with: tabs)
         lastSyncSignature = syncSignature(for: tabs)
         invalidateBackgroundSnapshot()
         objectWillChange.send()
     }
 
-    func applyPreset(_ preset: OfficePreset, with tabs: [TerminalTab]) {
+    public func applyPreset(_ preset: OfficePreset, with tabs: [TerminalTab]) {
         currentPreset = preset
         let baseLayout = OfficeMap.defaultLayoutSnapshot(preset: preset)
         defaultLayout = baseLayout
@@ -431,11 +432,11 @@ public final class OfficeSceneStore: ObservableObject {
         objectWillChange.send()
     }
 
-    func saveCurrentLayout() {
+    public func saveCurrentLayout() {
         OfficeLayoutStore.shared.saveLayout(from: map, preset: currentPreset)
     }
 
-    func resetCurrentLayout(with tabs: [TerminalTab]) {
+    public func resetCurrentLayout(with tabs: [TerminalTab]) {
         map.applyLayoutSnapshot(defaultLayout)
         controller.refreshLayout(with: tabs)
         lastSyncSignature = syncSignature(for: tabs)
@@ -445,7 +446,7 @@ public final class OfficeSceneStore: ObservableObject {
     }
 
     @MainActor
-    func prepareBackgroundSnapshot(theme: BackgroundTheme, dark: Bool) {
+    public func prepareBackgroundSnapshot(theme: BackgroundTheme, dark: Bool) {
         let signature = staticBackgroundSignature(theme: theme, dark: dark)
         if backgroundSnapshotSignature == signature, backgroundSnapshot != nil { return }
         if isPreparingBackgroundSnapshot { return }
@@ -471,7 +472,7 @@ public final class OfficeSceneStore: ObservableObject {
     }
 
     @MainActor
-    func refreshChromeScreenshots(for tabs: [TerminalTab], activeTabId: String? = nil) async {
+    public func refreshChromeScreenshots(for tabs: [TerminalTab], activeTabId: String? = nil) async {
         let chromeTabs = tabs.filter {
             $0.enableChrome && ($0.isProcessing || $0.id == activeTabId)
         }
@@ -495,7 +496,7 @@ public final class OfficeSceneStore: ObservableObject {
         }
     }
 
-    func suspend() {
+    public func suspend() {
         chromeScreenshots.removeAll()
         lastChromeCaptureTime = 0
         lastSyncSignature = nil
@@ -627,7 +628,7 @@ private struct OfficeStaticBackgroundSnapshotView: View {
     }
 }
 
-func resolvedOfficeSceneTheme(_ settings: AppSettings) -> BackgroundTheme {
+public func resolvedOfficeSceneTheme(_ settings: AppSettings) -> BackgroundTheme {
     let selected = BackgroundTheme(rawValue: settings.backgroundTheme) ?? .auto
     guard selected == .auto else { return selected }
 
@@ -642,7 +643,7 @@ func resolvedOfficeSceneTheme(_ settings: AppSettings) -> BackgroundTheme {
 }
 
 extension BackgroundTheme {
-    var officeSceneBackdropKind: OfficeSceneBackdropKind {
+    public var officeSceneBackdropKind: OfficeSceneBackdropKind {
         switch self {
         case .sunny, .clearSky: return .bright
         case .sunset, .goldenHour, .dusk, .autumn: return .sunset
@@ -663,18 +664,18 @@ extension BackgroundTheme {
 // MARK: - Office Overlay Data
 // ═══════════════════════════════════════════════════════
 
-struct OfficeToolBadge {
-    let label: String
-    let tint: Color
+public struct OfficeToolBadge {
+    public let label: String
+    public let tint: Color
 
-    init(label: String, tint: Color) {
+    public init(label: String, tint: Color) {
         self.label = label
         self.tint = tint
     }
 }
 
 extension ClaudeActivity {
-    var officeDisplayLabel: String {
+    public var officeDisplayLabel: String {
         switch self {
         case .idle: return "Idle"
         case .thinking: return "Thinking"
@@ -689,7 +690,7 @@ extension ClaudeActivity {
 }
 
 extension TerminalTab {
-    var officeLatestToolBadge: OfficeToolBadge? {
+    public var officeLatestToolBadge: OfficeToolBadge? {
         if pendingApproval != nil {
             return OfficeToolBadge(label: "WAIT", tint: Theme.yellow)
         }
@@ -718,7 +719,7 @@ extension TerminalTab {
         return nil
     }
 
-    var officeActivityTint: Color {
+    public var officeActivityTint: Color {
         switch claudeActivity {
         case .thinking: return Theme.purple
         case .reading: return Theme.accent
@@ -731,19 +732,19 @@ extension TerminalTab {
         }
     }
 
-    var officeRecentFileNames: [String] {
+    public var officeRecentFileNames: [String] {
         Array(fileChanges.suffix(3)).reversed().map(\.fileName)
     }
 
-    var officeLatestFileName: String? {
+    public var officeLatestFileName: String? {
         fileChanges.last?.fileName
     }
 
-    var officeCompactTokenText: String {
+    public var officeCompactTokenText: String {
         compactOfficeCount(tokensUsed)
     }
 
-    var officeSelectionSubtitle: String {
+    public var officeSelectionSubtitle: String {
         if let pendingApproval {
             return pendingApproval.reason.isEmpty ? "Approval pending" : pendingApproval.reason
         }

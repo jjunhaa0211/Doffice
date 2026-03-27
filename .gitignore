@@ -28,3 +28,8 @@ Carthage/
 # User state
 *.xcuserstate
 UserInterfaceState.xcuserstate
+
+# Tuist
+Tuist/Dependencies/SwiftPackageManager/.build/
+**/Derived/
+*.xcodeproj/xcuserdata/

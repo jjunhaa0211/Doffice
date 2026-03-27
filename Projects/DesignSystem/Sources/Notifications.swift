@@ -1,0 +1,26 @@
+import SwiftUI
+
+public extension Notification.Name {
+    static let workmanRefresh = Notification.Name("workmanRefresh")
+    static let workmanNewTab = Notification.Name("workmanNewTab")
+    static let workmanCloseTab = Notification.Name("workmanCloseTab")
+    static let workmanSelectTab = Notification.Name("workmanSelectTab")
+    static let workmanToggleSplit = Notification.Name("workmanToggleSplit")
+    static let workmanExportLog = Notification.Name("workmanExportLog")
+    static let workmanRestartSession = Notification.Name("workmanRestartSession")
+    static let workmanNextTab = Notification.Name("workmanNextTab")
+    static let workmanPreviousTab = Notification.Name("workmanPreviousTab")
+    static let workmanCancelProcessing = Notification.Name("workmanCancelProcessing")
+    static let workmanClearTerminal = Notification.Name("workmanClearTerminal")
+    static let workmanToggleOffice = Notification.Name("workmanToggleOffice")
+    static let workmanToggleTerminal = Notification.Name("workmanToggleTerminal")
+    static let workmanClaudeNotInstalled = Notification.Name("workmanClaudeNotInstalled")
+    static let workmanTabCycleCompleted = Notification.Name("workmanTabCycleCompleted")
+    static let workmanRoleNotice = Notification.Name("workmanRoleNotice")
+    static let workmanSessionStoreDidChange = Notification.Name("workmanSessionStoreDidChange")
+    static let workmanScrollToBlock = Notification.Name("workmanScrollToBlock")
+    static let workmanCommandPalette = Notification.Name("workmanCommandPalette")
+    static let workmanActionCenter = Notification.Name("workmanActionCenter")
+    static let workmanOpenBrowser = Notification.Name("workmanOpenBrowser")
+    static let workmanToggleBrowser = Notification.Name("workmanToggleBrowser")
+}

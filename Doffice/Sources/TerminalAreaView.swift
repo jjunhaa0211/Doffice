@@ -13,10 +13,9 @@ struct TerminalAreaView: View {
 
     init() {}
 
-    /// 세션 1개일 때 자동 Single 모드, focusSingleTab이면 Single로 전환
+    /// focusSingleTab이면 Single로 전환, 그 외 사용자 선택 존중
     private var effectiveViewMode: ViewMode {
         if viewMode == .git || viewMode == .browser { return viewMode }
-        if manager.userVisibleTabs.count <= 1 { return .single }
         if manager.focusSingleTab { return .single }
         return viewMode
     }

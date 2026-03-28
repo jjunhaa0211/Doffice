@@ -167,7 +167,8 @@ public struct GitPanelView: View {
     }
 
     private var canRunDirectCommit: Bool {
-        !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !git.isCommitting &&
+            !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             (selectedCommitCount > 0 || !git.workingDirStaged.isEmpty)
     }
 
@@ -1408,6 +1409,7 @@ public struct GitPanelView: View {
                                             .background(RoundedRectangle(cornerRadius: 4).fill(Theme.orange.opacity(0.08)))
                                     }
                                     .buttonStyle(.plain)
+                                    .disabled(git.isCommitting)
                                     .padding(.trailing, 6)
                                 }
                             }
@@ -1442,6 +1444,7 @@ public struct GitPanelView: View {
                                         .background(RoundedRectangle(cornerRadius: 4).fill(Theme.green.opacity(0.08)))
                                 }
                                 .buttonStyle(.plain)
+                                .disabled(git.isCommitting)
                             }
 
                             ForEach(git.workingDirUnstaged) { f in
@@ -1486,6 +1489,7 @@ public struct GitPanelView: View {
                                             .background(RoundedRectangle(cornerRadius: 4).fill(Theme.green.opacity(0.08)))
                                     }
                                     .buttonStyle(.plain)
+                                    .disabled(git.isCommitting)
                                     .padding(.trailing, 2)
 
                                     Button(action: {

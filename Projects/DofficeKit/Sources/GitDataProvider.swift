@@ -174,6 +174,7 @@ public class GitDataProvider: ObservableObject {
 
     private var projectPath: String = ""
     private var refreshTimer: AnyCancellable?
+    @Published public var isCommitting = false
 
     // Git availability check (cached)
     private static var gitAvailable: Bool?
@@ -488,12 +489,17 @@ public class GitDataProvider: ObservableObject {
     }
 
     public func commitSelectedFiles(message: String, selectedPaths: [String], completion: ((Bool) -> Void)? = nil) {
+        guard !isCommitting else {
+            completion?(false)
+            return
+        }
         let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedMessage.isEmpty else {
             lastError = "Commit message cannot be empty"
             completion?(false)
             return
         }
+        isCommitting = true
 
         let stagedPaths = Set(workingDirStaged.map(\.path))
         let unstagedOnlyPaths = Set(workingDirUnstaged.map(\.path)).subtracting(stagedPaths)
@@ -559,6 +565,7 @@ public class GitDataProvider: ObservableObject {
             }
 
             DispatchQueue.main.async {
+                self?.isCommitting = false
                 if let commandError {
                     self?.lastError = commandError
                 } else if let restoreWarning {

@@ -164,6 +164,7 @@ public struct OfficeSceneView: View {
         }
         .background(viewportBackground)
         .clipped()
+        .clipShape(Rectangle())
         .task(id: "\(sceneTheme.rawValue)-\(settings.isDarkMode)-\(store.currentPreset.rawValue)") {
             await MainActor.run {
                 store.prepareBackgroundSnapshot(theme: sceneTheme, dark: settings.isDarkMode)

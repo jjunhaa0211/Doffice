@@ -352,6 +352,7 @@ struct MainView: View {
             ZStack(alignment: .bottomTrailing) {
                 OfficeSceneView()
                     .frame(height: officeHeight)
+                    .clipped()
 
                 // 오피스 시점 + 확장/축소 버튼
                 HStack(spacing: 3) {

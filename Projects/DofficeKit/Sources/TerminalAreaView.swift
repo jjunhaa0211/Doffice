@@ -3118,10 +3118,12 @@ public final class NewSessionPreferencesStore: ObservableObject {
     @Published public private(set) var favoriteProjects: [NewSessionProjectRecord] = []
     @Published public private(set) var recentProjects: [NewSessionProjectRecord] = []
     @Published public private(set) var lastDraft: NewSessionDraftSnapshot?
+    @Published public private(set) var trustedProjectPaths: [String] = []
 
     private let favoritesKey = "workman.new-session.favorite-projects"
     private let recentsKey = "workman.new-session.recent-projects"
     private let lastDraftKey = "workman.new-session.last-draft"
+    private let trustedProjectPathsKey = "workman.new-session.trusted-project-paths"
 
     private init() {
         load()
@@ -3199,6 +3201,42 @@ public final class NewSessionPreferencesStore: ObservableObject {
         lastDraft = draft
         saveRecents()
         saveLastDraft()
+        trust(projectPath: projectPath)
+    }
+
+    public func isTrusted(projectPath: String) -> Bool {
+        let normalized = normalizeProjectPath(projectPath)
+        guard !normalized.isEmpty else { return true }
+        if trustedProjectPaths.contains(where: {
+            normalized == $0 || normalized.hasPrefix($0 + "/")
+        }) {
+            return true
+        }
+
+        let knownProjectPaths = (recentProjects + favoriteProjects).map(\.path).map(normalizeProjectPath)
+        if knownProjectPaths.contains(where: {
+            !$0.isEmpty && (normalized == $0 || normalized.hasPrefix($0 + "/"))
+        }) {
+            return true
+        }
+
+        return implicitTrustedRoots().contains {
+            normalized == $0 || normalized.hasPrefix($0 + "/")
+        }
+    }
+
+    public func trust(projectPath: String) {
+        let normalized = normalizeProjectPath(projectPath)
+        guard !normalized.isEmpty else { return }
+
+        if trustedProjectPaths.contains(where: { normalized == $0 || normalized.hasPrefix($0 + "/") }) {
+            return
+        }
+
+        trustedProjectPaths.removeAll { $0.hasPrefix(normalized + "/") }
+        trustedProjectPaths.insert(normalized, at: 0)
+        trustedProjectPaths = Array(trustedProjectPaths.prefix(64))
+        saveTrustedProjectPaths()
     }
 
     private func mergeProject(into merged: inout [String: NewSessionProjectRecord], project: NewSessionProjectRecord) {
@@ -3222,6 +3260,31 @@ public final class NewSessionPreferencesStore: ObservableObject {
         }
     }
 
+    private func normalizeProjectPath(_ rawPath: String) -> String {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let expanded = NSString(string: trimmed).expandingTildeInPath
+        let baseURL = URL(fileURLWithPath: expanded, isDirectory: true)
+        return baseURL.standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    private func implicitTrustedRoots() -> [String] {
+        let home = NSHomeDirectory()
+        let candidates = [
+            home + "/develop",
+            home + "/Developer",
+            home + "/workspace",
+            home + "/workspaces",
+            home + "/code",
+            home + "/src"
+        ]
+
+        return candidates
+            .map(normalizeProjectPath)
+            .filter { !$0.isEmpty && FileManager.default.fileExists(atPath: $0) }
+    }
+
     private func load() {
         let decoder = JSONDecoder()
         if let data = UserDefaults.standard.data(forKey: favoritesKey),
@@ -3235,6 +3298,11 @@ public final class NewSessionPreferencesStore: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: lastDraftKey),
            let decoded = try? decoder.decode(NewSessionDraftSnapshot.self, from: data) {
             lastDraft = decoded
+        }
+        if let storedPaths = UserDefaults.standard.array(forKey: trustedProjectPathsKey) as? [String] {
+            trustedProjectPaths = storedPaths
+                .map(normalizeProjectPath)
+                .filter { !$0.isEmpty }
         }
     }
 
@@ -3258,6 +3326,10 @@ public final class NewSessionPreferencesStore: ObservableObject {
             UserDefaults.standard.set(data, forKey: lastDraftKey)
         }
     }
+
+    private func saveTrustedProjectPaths() {
+        UserDefaults.standard.set(trustedProjectPaths, forKey: trustedProjectPathsKey)
+    }
 }
 
 private extension Array {
@@ -3277,8 +3349,6 @@ public struct NewTabSheet: View {
     @State private var terminalCount = 1
     @State private var tasks: [String] = [""]
 
-    // 폴더 신뢰 확인
-    @State private var trustedProjectPath: String?
     @State private var showTrustPrompt = false
     @State private var didBootstrap = false
     @State private var pathError: String?
@@ -3365,13 +3435,22 @@ public struct NewTabSheet: View {
     }
 
     public var body: some View {
-        Group {
+        ZStack {
+            sessionConfigView
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(!showTrustPrompt)
+
             if showTrustPrompt {
-                trustPromptView
-            } else {
-                sessionConfigView
+                Color.black.opacity(0.38)
+                    .overlay {
+                        trustPromptView
+                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    }
+                    .zIndex(1)
             }
         }
+        .frame(width: preferredSheetWidth, height: preferredSheetHeight)
+        .background(Theme.bg)
         .onAppear {
             bootstrapFromLastDraftIfNeeded()
         }
@@ -3496,11 +3575,16 @@ public struct NewTabSheet: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 20)
         }
-        .frame(
-            width: min(max(440, 460 * min(max(settings.fontSizeScale, 1.0), 1.06)), max(420, sheetVisibleFrame.width - 140)),
-            height: min(max(340, 360 * min(max(settings.fontSizeScale, 1.0), 1.04)), max(320, sheetVisibleFrame.height - 180))
+        .frame(width: min(520, preferredSheetWidth - 72))
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(Theme.bgCard)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(Theme.border.opacity(0.45), lineWidth: 1)
+                )
         )
-        .background(Theme.bgCard)
+        .shadow(color: .black.opacity(0.28), radius: 24, y: 10)
     }
 
     // MARK: - 세션 설정 화면
@@ -3528,8 +3612,7 @@ public struct NewTabSheet: View {
 
             sessionConfigBottomBar
         }
-        .frame(width: preferredSheetWidth, height: preferredSheetHeight)
-        .background(Theme.bg)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $showSavePreset) {
             SavePresetSheet(draft: currentDraftSnapshot())
                 .dofficeSheetPresentation()
@@ -3636,10 +3719,6 @@ public struct NewTabSheet: View {
                     }
                     .onChange(of: projectPath) { _, _ in
                         pathError = nil
-                        let normalized = normalizedProjectPath(projectPath)
-                        if trustedProjectPath != normalized {
-                            trustedProjectPath = nil
-                        }
                     }
                     if let error = pathError {
                         Text(error)
@@ -4471,7 +4550,15 @@ public struct NewTabSheet: View {
     private var isCurrentProjectTrusted: Bool {
         let normalized = normalizedProjectPath(projectPath)
         guard !normalized.isEmpty else { return true }
-        return trustedProjectPath == normalized
+
+        if preferences.isTrusted(projectPath: normalized) {
+            return true
+        }
+
+        return manager.userVisibleTabs.contains { tab in
+            let tabPath = normalizedProjectPath(tab.projectPath)
+            return !tabPath.isEmpty && (normalized == tabPath || normalized.hasPrefix(tabPath + "/"))
+        }
     }
 
     private func validateSelectedProjectPath() -> Bool {
@@ -4505,7 +4592,7 @@ public struct NewTabSheet: View {
     private func approveFolderTrustAndLaunch() {
         guard !isCreatingSessions else { return }
 
-        trustedProjectPath = normalizedProjectPath(projectPath)
+        preferences.trust(projectPath: projectPath)
         withAnimation(sheetAnimation) {
             showTrustPrompt = false
         }

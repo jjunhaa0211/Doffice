@@ -1271,6 +1271,12 @@ public struct EventStreamView: View {
                                 .help(m.desc)
                         }
                     }
+                } else if tab.provider == .gemini {
+                    settingGroup("Output") {
+                        ForEach(OutputMode.allCases) { m in
+                            settingChip(m.rawValue, isSelected: tab.outputMode == m, color: Theme.cyan) { tab.outputMode = m }
+                        }
+                    }
                 } else {
                     settingGroup("Sandbox") {
                         ForEach(CodexSandboxMode.allCases) { mode in
@@ -2028,6 +2034,8 @@ public struct EventStreamView: View {
         case .gpt52: return Theme.green
         case .gpt51CodexMax: return Theme.red
         case .gpt51CodexMini: return Theme.yellow
+        case .gemini25Pro: return Theme.cyan
+        case .gemini25Flash: return Theme.green
         }
     }
 
@@ -2035,6 +2043,7 @@ public struct EventStreamView: View {
         switch provider {
         case .claude: return Theme.accent
         case .codex: return Theme.orange
+        case .gemini: return Theme.cyan
         }
     }
 
@@ -3422,6 +3431,32 @@ public struct NewTabSheet: View {
             return NSLocalizedString("terminal.trust.warning", comment: "")
         case .codex:
             return "Codex가 이 폴더의 파일을 읽고, 수정하고, 실행할 수 있습니다."
+        case .gemini:
+            return "Gemini가 이 폴더의 파일을 읽고, 수정하고, 실행할 수 있습니다."
+        }
+    }
+
+    private func providerSubtitle(_ provider: AgentProvider) -> String {
+        switch provider {
+        case .claude: return "Claude Code CLI"
+        case .codex: return "Codex CLI"
+        case .gemini: return "Gemini CLI"
+        }
+    }
+
+    private func providerSymbol(_ provider: AgentProvider) -> String {
+        switch provider {
+        case .claude: return "bubble.left.and.bubble.right.fill"
+        case .codex: return "terminal.fill"
+        case .gemini: return "diamond.fill"
+        }
+    }
+
+    private func providerChipTint(_ provider: AgentProvider) -> Color {
+        switch provider {
+        case .claude: return Theme.accent
+        case .codex: return Theme.orange
+        case .gemini: return Theme.cyan
         }
     }
 
@@ -3754,9 +3789,9 @@ public struct NewTabSheet: View {
                         ForEach(AgentProvider.allCases) { provider in
                             selectionChip(
                                 title: provider.displayName,
-                                subtitle: provider == .claude ? "Claude Code CLI" : "Codex CLI",
-                                symbol: provider == .claude ? "bubble.left.and.bubble.right.fill" : "terminal.fill",
-                                tint: provider == .claude ? Theme.accent : Theme.orange,
+                                subtitle: providerSubtitle(provider),
+                                symbol: providerSymbol(provider),
+                                tint: providerChipTint(provider),
                                 selected: selectedProvider == provider
                             ) {
                                 selectProvider(provider)
@@ -4322,6 +4357,8 @@ public struct NewTabSheet: View {
         case .gpt52: return Theme.green
         case .gpt51CodexMax: return Theme.red
         case .gpt51CodexMini: return Theme.yellow
+        case .gemini25Pro: return Theme.cyan
+        case .gemini25Flash: return Theme.green
         }
     }
 

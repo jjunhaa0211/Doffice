@@ -61,6 +61,7 @@ public enum ClaudeActivity: String {
 public enum AgentProvider: String, CaseIterable, Identifiable {
     case claude
     case codex
+    case gemini
 
     public var id: String { rawValue }
 
@@ -68,6 +69,7 @@ public enum AgentProvider: String, CaseIterable, Identifiable {
         switch self {
         case .claude: return "Claude"
         case .codex: return "Codex"
+        case .gemini: return "Gemini"
         }
     }
 
@@ -75,6 +77,7 @@ public enum AgentProvider: String, CaseIterable, Identifiable {
         switch self {
         case .claude: return "claude"
         case .codex: return "codex"
+        case .gemini: return "gemini"
         }
     }
 
@@ -82,6 +85,7 @@ public enum AgentProvider: String, CaseIterable, Identifiable {
         switch self {
         case .claude: return .sonnet
         case .codex: return .gpt54
+        case .gemini: return .gemini25Pro
         }
     }
 
@@ -93,6 +97,7 @@ public enum AgentProvider: String, CaseIterable, Identifiable {
         switch self {
         case .claude: return ClaudeInstallChecker.shared
         case .codex: return CodexInstallChecker.shared
+        case .gemini: return GeminiInstallChecker.shared
         }
     }
 
@@ -100,6 +105,7 @@ public enum AgentProvider: String, CaseIterable, Identifiable {
         switch self {
         case .claude: return NSLocalizedString("tab.claude.not.installed", comment: "")
         case .codex: return "Codex CLI not found"
+        case .gemini: return "Gemini CLI not found"
         }
     }
 
@@ -109,6 +115,8 @@ public enum AgentProvider: String, CaseIterable, Identifiable {
             return NSLocalizedString("tab.claude.not.installed.detail", comment: "")
         case .codex:
             return "Codex CLI를 찾을 수 없습니다.\n\n설치 후 `which codex`로 경로를 확인해주세요."
+        case .gemini:
+            return "Gemini CLI를 찾을 수 없습니다.\n\n설치: npm install -g @anthropic-ai/gemini-cli\n설치 후 `which gemini`로 경로를 확인해주세요."
         }
     }
 
@@ -118,6 +126,8 @@ public enum AgentProvider: String, CaseIterable, Identifiable {
             return "Claude CLI를 확인해주세요"
         case .codex:
             return "Codex 모델을 확인해주세요"
+        case .gemini:
+            return "Gemini CLI를 확인해주세요"
         }
     }
 
@@ -127,6 +137,8 @@ public enum AgentProvider: String, CaseIterable, Identifiable {
             return "Claude를 선택하려면 터미널에서 `which claude`로 설치 여부를 확인해주세요."
         case .codex:
             return "Codex를 선택하려면 터미널에서 `which codex`로 설치 여부를 확인하고, 사용할 수 있는 모델이 보이는지 확인해주세요."
+        case .gemini:
+            return "Gemini를 선택하려면 터미널에서 `which gemini`로 설치 여부를 확인해주세요."
         }
     }
 
@@ -140,6 +152,7 @@ public enum AgentProvider: String, CaseIterable, Identifiable {
         switch self {
         case .claude: return "claude"
         case .codex: return "codex"
+        case .gemini: return "gemini"
         }
     }
 }
@@ -155,6 +168,8 @@ public enum AgentModel: String, CaseIterable, Identifiable {
     case gpt52 = "gpt-5.2"
     case gpt51CodexMax = "gpt-5.1-codex-max"
     case gpt51CodexMini = "gpt-5.1-codex-mini"
+    case gemini25Pro = "gemini-2.5-pro"
+    case gemini25Flash = "gemini-2.5-flash"
 
     public var id: String { rawValue }
 
@@ -164,6 +179,8 @@ public enum AgentModel: String, CaseIterable, Identifiable {
             return .claude
         case .gpt54, .gpt54Mini, .gpt53Codex, .gpt52Codex, .gpt52, .gpt51CodexMax, .gpt51CodexMini:
             return .codex
+        case .gemini25Pro, .gemini25Flash:
+            return .gemini
         }
     }
 
@@ -179,6 +196,8 @@ public enum AgentModel: String, CaseIterable, Identifiable {
         case .gpt52: return "○"
         case .gpt51CodexMax: return "◆"
         case .gpt51CodexMini: return "◇"
+        case .gemini25Pro: return "💎"
+        case .gemini25Flash: return "⚡"
         }
     }
 
@@ -194,12 +213,14 @@ public enum AgentModel: String, CaseIterable, Identifiable {
         case .gpt52: return "GPT-5.2"
         case .gpt51CodexMax: return "GPT-5.1-Codex-Max"
         case .gpt51CodexMini: return "GPT-5.1-Codex-Mini"
+        case .gemini25Pro: return "Gemini 2.5 Pro"
+        case .gemini25Flash: return "Gemini 2.5 Flash"
         }
     }
 
     public var isRecommended: Bool {
         switch self {
-        case .sonnet, .gpt54:
+        case .sonnet, .gpt54, .gemini25Pro:
             return true
         default:
             return false
@@ -611,6 +632,19 @@ public enum CodexInstallChecker {
             NSHomeDirectory() + "/.npm-global/bin/codex",
         ],
         installHint: "Codex CLI not found. Install Codex Desktop or add the codex binary to PATH."
+    )
+}
+
+public enum GeminiInstallChecker {
+    public static let shared = CLIInstallChecker(
+        executableName: "gemini",
+        knownExecutablePaths: [
+            "/usr/local/bin/gemini",
+            "/opt/homebrew/bin/gemini",
+            NSHomeDirectory() + "/.npm-global/bin/gemini",
+            NSHomeDirectory() + "/.local/bin/gemini",
+        ],
+        installHint: "Gemini CLI not found. Install with: npm install -g @anthropic-ai/gemini-cli"
     )
 }
 
@@ -1219,6 +1253,8 @@ public class TerminalTab: ObservableObject, Identifiable {
             return "\(resolvedModel.icon) \(resolvedLabel) · \(effortLevel.icon) \(effortLevel.rawValue) · v\(version)"
         case .codex:
             return "\(resolvedModel.icon) \(resolvedLabel) · \(codexSandboxMode.icon) \(codexSandboxMode.shortLabel) · \(codexApprovalPolicy.icon) \(codexApprovalPolicy.shortLabel) · v\(version)"
+        case .gemini:
+            return "\(resolvedModel.icon) \(resolvedLabel) · v\(version)"
         }
     }
 
@@ -1513,6 +1549,17 @@ public class TerminalTab: ObservableObject, Identifiable {
             }
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 self?.sendPromptWithCodex(prompt, path: path, images: images)
+            }
+            return
+        }
+
+        if provider == .gemini {
+            let images = attachedImages
+            DispatchQueue.main.async { [weak self] in
+                self?.attachedImages.removeAll()
+            }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.sendPromptWithGemini(prompt, path: path, images: images)
             }
             return
         }
@@ -1870,6 +1917,137 @@ public class TerminalTab: ObservableObject, Identifiable {
             print("[도피스] Codex 프로세스 실행 실패: \(error)")
             DispatchQueue.main.async { [weak self] in
                 self?.appendBlock(.error(message: "Codex launch failed"), content: error.localizedDescription)
+            }
+        }
+
+        outPipe.fileHandleForReading.readabilityHandler = nil
+        errPipe.fileHandleForReading.readabilityHandler = nil
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            let isStillCurrentProcess = self.currentProcess.map { ObjectIdentifier($0) == procId } ?? true
+            guard isStillCurrentProcess else { return }
+
+            self.currentProcess = nil
+            if self.isProcessing {
+                self.isProcessing = false
+                self.claudeActivity = self.claudeActivity == .error ? .error : .done
+                self.finalizeParallelTasks(as: self.claudeActivity == .error ? .failed : .completed)
+            }
+        }
+    }
+
+    // MARK: - Gemini CLI
+
+    private func sendPromptWithGemini(_ prompt: String, path: String, images: [URL]) {
+        let projectDirURL = URL(fileURLWithPath: path)
+        if !FileManager.default.fileExists(atPath: projectDirURL.path) {
+            DispatchQueue.main.async {
+                self.appendBlock(.error(message: NSLocalizedString("tab.project.path.missing", comment: "")), content: String(format: NSLocalizedString("tab.project.path.missing.detail", comment: ""), path))
+                self.isProcessing = false
+                self.claudeActivity = .idle
+            }
+            return
+        }
+
+        var cmd = "gemini -p --output-format stream-json --verbose"
+        cmd += " --model \(shellEscape(selectedModel.rawValue))"
+
+        if !systemPrompt.isEmpty {
+            cmd += " --system-prompt \(shellEscape(systemPrompt))"
+        }
+
+        for dir in additionalDirs where !dir.isEmpty {
+            cmd += " --add-dir \(shellEscape(dir))"
+        }
+        for imageURL in images {
+            cmd += " -i \(shellEscape(imageURL.path))"
+        }
+
+        cmd += " -- \(shellEscape(prompt))"
+
+        let proc = Process()
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        proc.arguments = ["-f", "-c", cmd]
+        proc.currentDirectoryURL = projectDirURL
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = Self.buildFullPATH()
+        env["TERM"] = "dumb"
+        env["NO_COLOR"] = "1"
+        proc.environment = env
+        proc.standardOutput = outPipe
+        proc.standardError = errPipe
+
+        DispatchQueue.main.async { [weak self] in
+            self?.currentProcess = proc
+        }
+        let procId = ObjectIdentifier(proc)
+
+        // Stream stdout — treat as plain text (Gemini may or may not support stream-json)
+        var outputBuffer = ""
+        outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
+            outputBuffer += chunk
+
+            // Try JSON streaming first (if Gemini supports it)
+            while let nl = outputBuffer.range(of: "\n") {
+                let line = String(outputBuffer[..<nl.lowerBound])
+                outputBuffer = String(outputBuffer[nl.upperBound...])
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+
+                if let data = trimmed.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    // Claude-compatible JSON stream
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self,
+                              self.currentProcess.map({ ObjectIdentifier($0) == procId }) ?? false
+                        else { return }
+                        self.handleStreamEvent(json)
+                    }
+                } else {
+                    // Plain text fallback
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self,
+                              self.currentProcess.map({ ObjectIdentifier($0) == procId }) ?? false
+                        else { return }
+                        self.claudeActivity = .writing
+                        self.appendBlock(.text, content: line)
+                    }
+                }
+            }
+        }
+
+        errPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty, let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !text.isEmpty else { return }
+            // Stderr from Gemini — show as status or ignore noise
+            if text.contains("error") || text.contains("Error") {
+                DispatchQueue.main.async { [weak self] in
+                    self?.appendBlock(.error(message: "Gemini"), content: text)
+                    self?.claudeActivity = .error
+                }
+            }
+        }
+
+        do {
+            try proc.run()
+
+            let watchdog = DispatchWorkItem { [weak proc] in
+                guard let p = proc, p.isRunning else { return }
+                p.terminate()
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 1800, execute: watchdog)
+
+            proc.waitUntilExit()
+            watchdog.cancel()
+        } catch {
+            DispatchQueue.main.async { [weak self] in
+                self?.appendBlock(.error(message: "Gemini launch failed"), content: error.localizedDescription)
             }
         }
 

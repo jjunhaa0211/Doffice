@@ -425,6 +425,23 @@ public struct FileChangeRecord: Identifiable {
     }
 }
 
+// 프롬프트 히스토리 (되돌리기 기능)
+public struct PromptHistoryEntry: Identifiable {
+    public let id = UUID()
+    public let timestamp: Date
+    public let promptText: String
+    public let gitCommitHashBefore: String?
+    public var fileChanges: [FileChangeRecord]
+    public var isCompleted: Bool = false
+
+    public init(timestamp: Date, promptText: String, gitCommitHashBefore: String?, fileChanges: [FileChangeRecord] = []) {
+        self.timestamp = timestamp
+        self.promptText = promptText
+        self.gitCommitHashBefore = gitCommitHashBefore
+        self.fileChanges = fileChanges
+    }
+}
+
 public enum ParallelTaskState: String {
     case running
     case completed
@@ -1110,6 +1127,9 @@ public class TerminalTab: ObservableObject, Identifiable {
     @Published public var attachedImages: [URL] = []  // 첨부된 이미지 경로들
     @Published public var completedPromptCount: Int = 0
     @Published public var parallelTasks: [ParallelTaskRecord] = []
+    @Published public var promptHistory: [PromptHistoryEntry] = []
+    private var pendingHistoryPreHash: String?
+    private var pendingHistoryFileChangeStartIndex: Int = 0
 
     // 세션 타임라인
     public struct TimelineEvent: Identifiable {
@@ -1548,6 +1568,23 @@ public class TerminalTab: ObservableObject, Identifiable {
         claudeActivity = .thinking
         lastActivityTime = Date()
 
+        // 히스토리 스냅샷: 프롬프트 전 git 상태 캡처
+        pendingHistoryFileChangeStartIndex = fileChanges.count
+        let projPath = projectPath
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let hash = Self.shellSync("git -C \"\(projPath)\" rev-parse HEAD 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines)
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.pendingHistoryPreHash = (hash?.isEmpty ?? true) ? nil : hash
+                let entry = PromptHistoryEntry(
+                    timestamp: Date(),
+                    promptText: prompt,
+                    gitCommitHashBefore: self.pendingHistoryPreHash
+                )
+                self.promptHistory.append(entry)
+            }
+        }
+
         let path = FileManager.default.fileExists(atPath: projectPath) ? projectPath : NSHomeDirectory()
         let effectivePermissionMode = permissionOverride ?? permissionMode
 
@@ -1577,7 +1614,7 @@ public class TerminalTab: ObservableObject, Identifiable {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
 
-            var cmd = "claude -p --output-format stream-json --verbose"
+            var cmd = "\(self.resolvedExecutableCommand(for: .claude)) -p --output-format stream-json --verbose"
 
             // 권한 모드
             cmd += " --permission-mode \(effectivePermissionMode.rawValue)"
@@ -1830,12 +1867,13 @@ public class TerminalTab: ObservableObject, Identifiable {
             return
         }
 
+        let codexExecutable = resolvedExecutableCommand(for: .codex)
         var cmd: String
         let shouldResume = !(sessionId ?? "").isEmpty
         if shouldResume {
-            cmd = "codex exec resume --json"
+            cmd = "\(codexExecutable) exec resume --json"
         } else {
-            cmd = "codex exec --json"
+            cmd = "\(codexExecutable) exec --json"
         }
 
         cmd += " \(codexConfigOverride("sandbox_mode", value: codexSandboxMode.rawValue))"
@@ -1987,21 +2025,27 @@ public class TerminalTab: ObservableObject, Identifiable {
             return
         }
 
-        var cmd = "gemini -p --output-format stream-json --verbose"
-        cmd += " --model \(shellEscape(selectedModel.rawValue))"
+        var cmd = "\(resolvedExecutableCommand(for: .gemini)) --output-format stream-json"
+        cmd += " -m \(shellEscape(selectedModel.rawValue))"
 
-        if !systemPrompt.isEmpty {
-            cmd += " --system-prompt \(shellEscape(systemPrompt))"
+        // 승인 모드
+        switch permissionMode {
+        case .bypassPermissions:
+            cmd += " --yolo"
+        case .acceptEdits:
+            cmd += " --approval-mode auto_edit"
+        case .plan:
+            cmd += " --approval-mode plan"
+        default:
+            break
         }
 
         for dir in additionalDirs where !dir.isEmpty {
-            cmd += " --add-dir \(shellEscape(dir))"
-        }
-        for imageURL in images {
-            cmd += " -i \(shellEscape(imageURL.path))"
+            cmd += " --include-directories \(shellEscape(dir))"
         }
 
-        cmd += " -- \(shellEscape(prompt))"
+        // 프롬프트 (-p는 프롬프트를 인자로 직접 받음)
+        cmd += " -p \(shellEscape(prompt))"
 
         let proc = Process()
         let outPipe = Pipe()
@@ -2024,37 +2068,45 @@ public class TerminalTab: ObservableObject, Identifiable {
         }
         let procId = ObjectIdentifier(proc)
 
-        // Stream stdout — treat as plain text (Gemini may or may not support stream-json)
-        var outputBuffer = ""
+        // Stream stdout — JSON stream 또는 plain text fallback
+        var jsonBuffer = ""
+        let bufferQueue = DispatchQueue(label: "com.doffice.gemini.jsonBuffer")
+
         outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
-            outputBuffer += chunk
+            bufferQueue.sync {
+                jsonBuffer += chunk
 
-            // Try JSON streaming first (if Gemini supports it)
-            while let nl = outputBuffer.range(of: "\n") {
-                let line = String(outputBuffer[..<nl.lowerBound])
-                outputBuffer = String(outputBuffer[nl.upperBound...])
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { continue }
+                if jsonBuffer.utf8.count > 1_048_576 {
+                    jsonBuffer = ""
+                    return
+                }
 
-                if let data = trimmed.data(using: .utf8),
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    // Claude-compatible JSON stream
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self = self,
-                              self.currentProcess.map({ ObjectIdentifier($0) == procId }) ?? false
-                        else { return }
-                        self.handleStreamEvent(json)
-                    }
-                } else {
-                    // Plain text fallback
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self = self,
-                              self.currentProcess.map({ ObjectIdentifier($0) == procId }) ?? false
-                        else { return }
-                        self.claudeActivity = .writing
-                        self.appendBlock(.text, content: line)
+                while let nl = jsonBuffer.range(of: "\n") {
+                    let line = String(jsonBuffer[..<nl.lowerBound])
+                    jsonBuffer = String(jsonBuffer[nl.upperBound...])
+                    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { continue }
+
+                    if let lineData = trimmed.data(using: .utf8),
+                       let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any] {
+                        // stream-json 형태 파싱
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self = self,
+                                  self.currentProcess.map({ ObjectIdentifier($0) == procId }) ?? false
+                            else { return }
+                            self.handleStreamEvent(json)
+                        }
+                    } else {
+                        // Plain text fallback
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self = self,
+                                  self.currentProcess.map({ ObjectIdentifier($0) == procId }) ?? false
+                            else { return }
+                            self.claudeActivity = .writing
+                            self.appendBlock(.thought, content: line)
+                        }
                     }
                 }
             }
@@ -2062,13 +2114,15 @@ public class TerminalTab: ObservableObject, Identifiable {
 
         errPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty, let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !text.isEmpty else { return }
-            // Stderr from Gemini — show as status or ignore noise
-            if text.contains("error") || text.contains("Error") {
-                DispatchQueue.main.async { [weak self] in
-                    self?.appendBlock(.error(message: "Gemini"), content: text)
-                    self?.claudeActivity = .error
+            guard !data.isEmpty,
+                  let rawText = String(data: data, encoding: .utf8) else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self,
+                      self.currentProcess.map({ ObjectIdentifier($0) == procId }) ?? false
+                else { return }
+                let text = self.sanitizeTerminalText(rawText)
+                if !text.isEmpty && !text.hasPrefix("{") {
+                    self.appendBlock(.error(message: "stderr"), content: text)
                 }
             }
         }
@@ -2116,6 +2170,130 @@ public class TerminalTab: ObservableObject, Identifiable {
                 self.claudeActivity = self.claudeActivity == .error ? .error : .done
                 self.finalizeParallelTasks(as: self.claudeActivity == .error ? .failed : .completed)
             }
+        }
+    }
+
+    // MARK: - Gemini Stream Event Handler
+
+    private func handleGeminiStreamEvent(_ json: [String: Any]) {
+        guard isRunning, !json.isEmpty else { return }
+        let type = json["type"] as? String ?? ""
+
+        switch type {
+        case "init":
+            if let sid = json["session_id"] as? String { sessionId = sid }
+            if let model = json["model"] as? String {
+                updateReportedModel(model)
+            }
+
+        case "message":
+            let role = json["role"] as? String ?? ""
+            let content = json["content"] as? String ?? ""
+            guard !content.isEmpty else { return }
+
+            if role == "assistant" {
+                claudeActivity = .writing
+                // delta=true 이면 스트리밍 조각 → 마지막 thought 블록에 연결
+                let isDelta = json["delta"] as? Bool ?? false
+                if isDelta, let lastIdx = blocks.indices.last,
+                   case .thought = blocks[lastIdx].blockType {
+                    blocks[lastIdx].content += content
+                } else {
+                    appendBlock(.thought, content: content)
+                }
+            }
+
+        case "tool_use":
+            let toolName = json["tool_name"] as? String ?? ""
+            let toolId = json["tool_id"] as? String ?? UUID().uuidString
+            let params = json["parameters"] as? [String: Any] ?? [:]
+
+            guard !seenToolUseIds.contains(toolId) else { return }
+            seenToolUseIds.insert(toolId)
+
+            switch toolName {
+            case "shell", "bash", "execute_command":
+                claudeActivity = .running
+                commandCount += 1
+                let cmd = params["command"] as? String ?? params["cmd"] as? String ?? ""
+                appendBlock(.toolUse(name: "Bash", input: cmd), content: cmd)
+                timeline.append(TimelineEvent(timestamp: Date(), type: .toolUse, detail: "Bash: \(String(cmd.prefix(40)))"))
+            case "read_file":
+                claudeActivity = .reading
+                let file = params["file_path"] as? String ?? ""
+                appendBlock(.toolUse(name: "Read", input: file), content: (file as NSString).lastPathComponent)
+            case "write_file", "create_file":
+                claudeActivity = .writing
+                let file = params["file_path"] as? String ?? ""
+                recordFileChange(path: file, action: "Write")
+                appendBlock(.fileChange(path: file, action: "Write"), content: (file as NSString).lastPathComponent)
+                timeline.append(TimelineEvent(timestamp: Date(), type: .fileChange, detail: "Write: \((file as NSString).lastPathComponent)"))
+            case "edit_file", "replace_in_file":
+                claudeActivity = .writing
+                let file = params["file_path"] as? String ?? ""
+                recordFileChange(path: file, action: "Edit")
+                appendBlock(.fileChange(path: file, action: "Edit"), content: (file as NSString).lastPathComponent)
+                timeline.append(TimelineEvent(timestamp: Date(), type: .fileChange, detail: "Edit: \((file as NSString).lastPathComponent)"))
+            case "glob", "list_directory", "grep", "search":
+                claudeActivity = .searching
+                let pattern = params["pattern"] as? String ?? params["dir_path"] as? String ?? toolName
+                appendBlock(.toolUse(name: toolName, input: pattern), content: pattern)
+            default:
+                claudeActivity = .running
+                let preview = toolPreview(toolName: toolName, toolInput: params)
+                appendBlock(.toolUse(name: toolName, input: preview), content: preview)
+            }
+
+        case "tool_result":
+            let output = json["output"] as? String ?? ""
+            let status = json["status"] as? String ?? ""
+            if status == "error" {
+                appendBlock(.toolError, content: output)
+                errorCount += 1
+            } else if !output.isEmpty {
+                appendBlock(.toolOutput, content: String(output.prefix(2000)))
+            }
+
+        case "result":
+            let stats = json["stats"] as? [String: Any] ?? [:]
+            let totalTokens = stats["total_tokens"] as? Int ?? 0
+            let inputTokens = stats["input_tokens"] as? Int ?? 0
+            let outputTokens = stats["output_tokens"] as? Int ?? 0
+            let durationMs = stats["duration_ms"] as? Int ?? 0
+
+            let diffIn = max(0, inputTokens - inputTokensUsed)
+            let diffOut = max(0, outputTokens - outputTokensUsed)
+            if diffIn > 0 || diffOut > 0 {
+                TokenTracker.shared.recordTokens(input: diffIn, output: diffOut)
+            }
+            inputTokensUsed = inputTokens
+            outputTokensUsed = outputTokens
+            tokensUsed = totalTokens
+
+            appendBlock(.completion(cost: 0, duration: durationMs), content: "완료")
+            timeline.append(TimelineEvent(timestamp: Date(), type: .completed, detail: "작업 완료"))
+
+            isProcessing = false
+            claudeActivity = .done
+            completedPromptCount += 1
+            finalizeParallelTasks(as: .completed)
+            finalizePromptHistory()
+            generateSummary()
+            sendCompletionNotification()
+            seenToolUseIds.removeAll()
+
+            NotificationCenter.default.post(
+                name: .dofficeTabCycleCompleted,
+                object: self,
+                userInfo: [
+                    "tabId": id,
+                    "completedPromptCount": completedPromptCount,
+                    "resultText": lastResultText
+                ]
+            )
+
+        default:
+            break
         }
     }
 
@@ -2440,6 +2618,7 @@ public class TerminalTab: ObservableObject, Identifiable {
             lastResultText = resultText
             completedPromptCount += 1
             finalizeParallelTasks(as: .completed)
+            finalizePromptHistory()
             generateSummary()
             seenToolUseIds.removeAll()
             if let denial = pendingPermissionDenial {
@@ -2919,6 +3098,54 @@ public class TerminalTab: ObservableObject, Identifiable {
 
     public func clearBlocks() { blocks.removeAll() }
 
+    // MARK: - 프롬프트 히스토리 (되돌리기)
+
+    private func finalizePromptHistory() {
+        guard !promptHistory.isEmpty else { return }
+        let lastIndex = promptHistory.count - 1
+        let changesForThisPrompt = Array(fileChanges.suffix(from: min(pendingHistoryFileChangeStartIndex, fileChanges.count)))
+        promptHistory[lastIndex].fileChanges = changesForThisPrompt
+        promptHistory[lastIndex].isCompleted = true
+        // 히스토리 100개 제한
+        if promptHistory.count > 100 {
+            promptHistory.removeFirst(promptHistory.count - 100)
+        }
+    }
+
+    public func revertToBeforePrompt(_ entry: PromptHistoryEntry) {
+        guard let commitHash = entry.gitCommitHashBefore, gitInfo.isGitRepo else {
+            appendBlock(.status(message: NSLocalizedString("history.no.git.diff", comment: "")))
+            return
+        }
+        let p = projectPath
+        for file in entry.fileChanges where file.action == "Write" || file.action == "Edit" {
+            _ = Self.shellSync("git -C \"\(p)\" checkout \(commitHash) -- \"\(file.path)\" 2>/dev/null")
+        }
+        // 새로 생성된 파일 삭제
+        let newFiles = entry.fileChanges.filter { $0.action == "Write" }
+        for file in newFiles {
+            // checkout이 복원한 경우엔 이미 처리됨. 커밋에 없던 파일은 clean
+            _ = Self.shellSync("git -C \"\(p)\" clean -f -- \"\(file.path)\" 2>/dev/null")
+        }
+        appendBlock(.status(message: NSLocalizedString("history.reverted", comment: "")))
+        refreshGitInfo()
+    }
+
+    public func loadDiffForHistoryEntry(_ entry: PromptHistoryEntry) -> String {
+        guard let before = entry.gitCommitHashBefore else {
+            // git 커밋이 없으면 변경된 파일 목록만 반환
+            if entry.fileChanges.isEmpty { return NSLocalizedString("history.no.git.diff", comment: "") }
+            return entry.fileChanges.map { "\($0.action): \($0.path)" }.joined(separator: "\n")
+        }
+        let p = projectPath
+        // 현재 워킹 트리와 before 커밋 사이의 diff
+        let diff = Self.shellSync("git -C \"\(p)\" diff \(before) -- \(entry.fileChanges.map { "\"\($0.path)\"" }.joined(separator: " ")) 2>/dev/null")
+        if let diff = diff, !diff.isEmpty { return diff }
+        // diff가 비어있으면 파일 목록 반환
+        if entry.fileChanges.isEmpty { return NSLocalizedString("history.no.git.diff", comment: "") }
+        return entry.fileChanges.map { "\($0.action): \($0.path)" }.joined(separator: "\n")
+    }
+
     private static let maxTimelineEvents = 500
 
     private func trimTimelineIfNeeded() {
@@ -3064,6 +3291,14 @@ public class TerminalTab: ObservableObject, Identifiable {
 
     private func shellEscape(_ str: String) -> String { "'" + str.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 
+    private func resolvedExecutableCommand(for provider: AgentProvider) -> String {
+        let checker = provider.installChecker
+        checker.check(force: true)
+        let executablePath = checker.path.trimmingCharacters(in: .whitespacesAndNewlines)
+        let executable = executablePath.isEmpty ? provider.executableName : executablePath
+        return shellEscape(executable)
+    }
+
     private func effectiveAllowedTools() -> String {
         let raw = allowedTools
             .split(separator: ",")
@@ -3150,6 +3385,9 @@ public class TerminalTab: ObservableObject, Identifiable {
 
         // npm global 설치 경로들
         paths += ["/usr/local/opt/node/bin", home + "/.npm-global/bin"]
+
+        // Codex Desktop bundle CLI
+        paths.append("/Applications/Codex.app/Contents/Resources")
 
         // nvm 설치 경로 — glob 직접 해결
         let nvmBase = home + "/.nvm/versions/node"

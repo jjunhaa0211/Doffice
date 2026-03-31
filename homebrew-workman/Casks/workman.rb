@@ -1,5 +1,5 @@
 cask "workman" do
-  version "0.0.39"
+  version "0.0.40"
   sha256 :no_check
 
   url "https://github.com/jjunhaa0211/MyWorkStudio/releases/download/v#{version}/WorkManApp.zip"

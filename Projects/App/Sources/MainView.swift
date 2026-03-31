@@ -1401,6 +1401,9 @@ private struct NotificationHandlersModifier: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .workmanCloseTab)) { _ in
                 if let id = manager.activeTabId { manager.removeTab(id) }
             }
+            .onDeleteCommand {
+                if let id = manager.activeTabId { manager.removeTab(id) }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .workmanSelectTab)) { notif in
                 let tabs = manager.userVisibleTabs
                 if let i = notif.object as? Int, i >= 1, i <= tabs.count { manager.selectTab(tabs[i-1].id) }

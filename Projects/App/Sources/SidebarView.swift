@@ -234,19 +234,16 @@ struct SidebarView: View {
                                                 .font(.system(size: 14))
                                                 .foregroundColor(selectedTabIds.contains(tab.id) ? Theme.accent : Theme.textDim)
                                                 .padding(.leading, 6)
+                                                .contentShape(Rectangle())
+                                                .onTapGesture {
+                                                    if selectedTabIds.contains(tab.id) {
+                                                        selectedTabIds.remove(tab.id)
+                                                    } else {
+                                                        selectedTabIds.insert(tab.id)
+                                                    }
+                                                }
                                         }
                                     }
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        if isMultiSelectMode {
-                                            if selectedTabIds.contains(tab.id) {
-                                                selectedTabIds.remove(tab.id)
-                                            } else {
-                                                selectedTabIds.insert(tab.id)
-                                            }
-                                        }
-                                    }
-                                    .allowsHitTesting(isMultiSelectMode ? true : false)
                             } else {
                                 SessionGroupCard(group: group)
                                     .overlay(alignment: .leading) {

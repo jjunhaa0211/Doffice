@@ -656,14 +656,14 @@ public class TokenTracker: ObservableObject {
     public static let shared = TokenTracker()
     public static let recommendedDailyLimit = 500_000
     public static let recommendedWeeklyLimit = 2_500_000
-    private let saveKey = "WorkManTokenHistory"
+    private let saveKey = "DofficeTokenHistory"
     private let automationDailyReserve = 100_000
     private let automationWeeklyReserve = 300_000
     private let globalDailyReserve = 12_000
     private let globalWeeklyReserve = 40_000
     private let emergencyDailyReserve = 6_000
     private let emergencyWeeklyReserve = 20_000
-    private let persistenceQueue = DispatchQueue(label: "workman.token-tracker", qos: .utility)
+    private let persistenceQueue = DispatchQueue(label: "doffice.token-tracker", qos: .utility)
     private var saveWorkItem: DispatchWorkItem?
 
     public struct DayRecord: Codable {
@@ -1157,6 +1157,9 @@ public class TerminalTab: ObservableObject, Identifiable {
     // Conversation continuity
     private var sessionId: String?
     private var currentProcess: Process?
+    private var currentOutPipe: Pipe?
+    private var currentErrPipe: Pipe?
+    private var cancelledProcessIds: Set<ObjectIdentifier> = []
     private var activeToolBlockIndex: Int?
     private var seenToolUseIds: Set<String> = []  // 중복 방지
     private var toolUseContexts: [String: ToolUseContext] = [:]
@@ -1451,9 +1454,10 @@ public class TerminalTab: ObservableObject, Identifiable {
         if !checker.isInstalled {
             appendBlock(.error(message: provider.installTitle), content: provider.installDetail)
             startError = "\(provider.displayName) CLI not installed"
+            isRunning = false
             if provider == .claude {
                 DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .workmanClaudeNotInstalled, object: nil)
+                    NotificationCenter.default.post(name: .dofficeClaudeNotInstalled, object: nil)
                 }
             }
             return
@@ -1510,8 +1514,13 @@ public class TerminalTab: ObservableObject, Identifiable {
 
         guard !isProcessing else { return }
 
-        // 이전 프로세스가 남아있으면 안전하게 정리
+        // 이전 프로세스 및 취소 상태 정리
+        cancelledProcessIds.removeAll()
         if let prev = currentProcess, prev.isRunning {
+            currentOutPipe?.fileHandleForReading.readabilityHandler = nil
+            currentErrPipe?.fileHandleForReading.readabilityHandler = nil
+            currentOutPipe = nil
+            currentErrPipe = nil
             prev.terminate()
             currentProcess = nil
         }
@@ -1559,7 +1568,8 @@ public class TerminalTab: ObservableObject, Identifiable {
                 self?.attachedImages.removeAll()
             }
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                self?.sendPromptWithGemini(prompt, path: path, images: images)
+                guard let self = self else { return }
+                self.sendPromptWithGemini(prompt, path: path, images: images)
             }
             return
         }
@@ -1692,9 +1702,11 @@ public class TerminalTab: ObservableObject, Identifiable {
             proc.standardOutput = outPipe
             proc.standardError = errPipe
 
-            // 프로세스 참조를 메인 스레드에서 안전하게 설정
+            // 프로세스 및 파이프 참조를 메인 스레드에서 안전하게 설정
             DispatchQueue.main.async { [weak self] in
                 self?.currentProcess = proc
+                self?.currentOutPipe = outPipe
+                self?.currentErrPipe = errPipe
             }
 
             // 프로세스 ID를 캡처하여 이후 검증용으로 사용
@@ -1717,7 +1729,7 @@ public class TerminalTab: ObservableObject, Identifiable {
             }
 
             var jsonBuffer = ""
-            let bufferQueue = DispatchQueue(label: "com.workman.jsonBuffer")
+            let bufferQueue = DispatchQueue(label: "com.doffice.jsonBuffer")
 
             outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
                 let data = handle.availableData
@@ -1754,7 +1766,7 @@ public class TerminalTab: ObservableObject, Identifiable {
                 // Watchdog: 30분 타임아웃 — CLI가 무한 hang 방지
                 let watchdog = DispatchWorkItem { [weak proc] in
                     guard let p = proc, p.isRunning else { return }
-                    print("[WorkMan] ⚠️ Process watchdog: 30분 타임아웃 도달, 강제 종료")
+                    print("[Doffice] ⚠️ Process watchdog: 30분 타임아웃 도달, 강제 종료")
                     p.terminate()
                 }
                 DispatchQueue.global().asyncAfter(deadline: .now() + 1800, execute: watchdog)
@@ -1765,7 +1777,11 @@ public class TerminalTab: ObservableObject, Identifiable {
                 print("[도피스] 프로세스 실행 실패: \(error)")
                 DispatchQueue.main.async { [weak self] in
                     self?.appendBlock(.error(message: NSLocalizedString("tab.process.launch.failed", comment: "")), content: String(format: NSLocalizedString("tab.process.launch.failed.detail", comment: ""), error.localizedDescription))
+                    self?.isProcessing = false
+                    self?.claudeActivity = .error
+                    self?.currentProcess = nil
                 }
+                return
             }
 
             outPipe.fileHandleForReading.readabilityHandler = nil
@@ -1773,11 +1789,18 @@ public class TerminalTab: ObservableObject, Identifiable {
 
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
+                // 취소된 프로세스면 무시
+                if self.cancelledProcessIds.contains(procId) {
+                    self.cancelledProcessIds.remove(procId)
+                    return
+                }
                 // 이 프로세스가 현재 프로세스인지 확인 (다른 프로세스가 이미 대체했을 수 있음)
                 let isStillCurrentProcess = self.currentProcess.map { ObjectIdentifier($0) == procId } ?? true
                 guard isStillCurrentProcess else { return }
 
                 self.currentProcess = nil
+                self.currentOutPipe = nil
+                self.currentErrPipe = nil
                 // result 이벤트에서 이미 isProcessing=false 했지만,
                 // 프로세스가 비정상 종료한 경우만 여기서 처리
                 if self.isProcessing {
@@ -1848,11 +1871,13 @@ public class TerminalTab: ObservableObject, Identifiable {
 
         DispatchQueue.main.async { [weak self] in
             self?.currentProcess = proc
+            self?.currentOutPipe = outPipe
+            self?.currentErrPipe = errPipe
         }
 
         let procId = ObjectIdentifier(proc)
         var jsonBuffer = ""
-        let bufferQueue = DispatchQueue(label: "com.workman.codex.jsonBuffer")
+        let bufferQueue = DispatchQueue(label: "com.doffice.codex.jsonBuffer")
 
         errPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
@@ -1906,7 +1931,7 @@ public class TerminalTab: ObservableObject, Identifiable {
 
             let watchdog = DispatchWorkItem { [weak proc] in
                 guard let p = proc, p.isRunning else { return }
-                print("[WorkMan] ⚠️ Codex process watchdog: 30분 타임아웃 도달, 강제 종료")
+                print("[Doffice] ⚠️ Codex process watchdog: 30분 타임아웃 도달, 강제 종료")
                 p.terminate()
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + 1800, execute: watchdog)
@@ -1917,7 +1942,13 @@ public class TerminalTab: ObservableObject, Identifiable {
             print("[도피스] Codex 프로세스 실행 실패: \(error)")
             DispatchQueue.main.async { [weak self] in
                 self?.appendBlock(.error(message: "Codex launch failed"), content: error.localizedDescription)
+                self?.isProcessing = false
+                self?.claudeActivity = .error
+                self?.currentProcess = nil
+                self?.currentOutPipe = nil
+                self?.currentErrPipe = nil
             }
+            return
         }
 
         outPipe.fileHandleForReading.readabilityHandler = nil
@@ -1925,10 +1956,16 @@ public class TerminalTab: ObservableObject, Identifiable {
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+            if self.cancelledProcessIds.contains(procId) {
+                self.cancelledProcessIds.remove(procId)
+                return
+            }
             let isStillCurrentProcess = self.currentProcess.map { ObjectIdentifier($0) == procId } ?? true
             guard isStillCurrentProcess else { return }
 
             self.currentProcess = nil
+            self.currentOutPipe = nil
+            self.currentErrPipe = nil
             if self.isProcessing {
                 self.isProcessing = false
                 self.claudeActivity = self.claudeActivity == .error ? .error : .done
@@ -1982,6 +2019,8 @@ public class TerminalTab: ObservableObject, Identifiable {
 
         DispatchQueue.main.async { [weak self] in
             self?.currentProcess = proc
+            self?.currentOutPipe = outPipe
+            self?.currentErrPipe = errPipe
         }
         let procId = ObjectIdentifier(proc)
 
@@ -2048,7 +2087,13 @@ public class TerminalTab: ObservableObject, Identifiable {
         } catch {
             DispatchQueue.main.async { [weak self] in
                 self?.appendBlock(.error(message: "Gemini launch failed"), content: error.localizedDescription)
+                self?.isProcessing = false
+                self?.claudeActivity = .error
+                self?.currentProcess = nil
+                self?.currentOutPipe = nil
+                self?.currentErrPipe = nil
             }
+            return
         }
 
         outPipe.fileHandleForReading.readabilityHandler = nil
@@ -2056,10 +2101,16 @@ public class TerminalTab: ObservableObject, Identifiable {
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+            if self.cancelledProcessIds.contains(procId) {
+                self.cancelledProcessIds.remove(procId)
+                return
+            }
             let isStillCurrentProcess = self.currentProcess.map { ObjectIdentifier($0) == procId } ?? true
             guard isStillCurrentProcess else { return }
 
             self.currentProcess = nil
+            self.currentOutPipe = nil
+            self.currentErrPipe = nil
             if self.isProcessing {
                 self.isProcessing = false
                 self.claudeActivity = self.claudeActivity == .error ? .error : .done
@@ -2109,7 +2160,7 @@ public class TerminalTab: ObservableObject, Identifiable {
             sendCompletionNotification()
             PluginHost.shared.fireEvent(.onSessionComplete, context: ["tabId": id])
             NotificationCenter.default.post(
-                name: .workmanTabCycleCompleted,
+                name: .dofficeTabCycleCompleted,
                 object: self,
                 userInfo: [
                     "tabId": id,
@@ -2281,7 +2332,7 @@ public class TerminalTab: ObservableObject, Identifiable {
                         AuditLog.shared.log(.fileRead, tabId: id, projectName: projectName, detail: file)
                         appendBlock(.toolUse(name: "Read", input: file), content: (file as NSString).lastPathComponent)
                         readCommandCount += 1
-                        NotificationCenter.default.post(name: .init("workmanAchievementFileRead"), object: readCommandCount)
+                        NotificationCenter.default.post(name: .init("dofficeAchievementFileRead"), object: readCommandCount)
                     case "Write":
                         claudeActivity = .writing
                         let file = toolInput["file_path"] as? String ?? ""
@@ -2293,7 +2344,7 @@ public class TerminalTab: ObservableObject, Identifiable {
                         recordFileChange(path: file, action: "Write")
                         appendBlock(.fileChange(path: file, action: "Write"), content: (file as NSString).lastPathComponent)
                         timeline.append(TimelineEvent(timestamp: Date(), type: .fileChange, detail: "Write: \((file as NSString).lastPathComponent)"))
-                        NotificationCenter.default.post(name: .init("workmanAchievementFileEdit"), object: nil)
+                        NotificationCenter.default.post(name: .init("dofficeAchievementFileEdit"), object: nil)
                     case "Edit":
                         claudeActivity = .writing
                         let file = toolInput["file_path"] as? String ?? ""
@@ -2305,17 +2356,17 @@ public class TerminalTab: ObservableObject, Identifiable {
                         recordFileChange(path: file, action: "Edit")
                         appendBlock(.fileChange(path: file, action: "Edit"), content: (file as NSString).lastPathComponent)
                         timeline.append(TimelineEvent(timestamp: Date(), type: .fileChange, detail: "Edit: \((file as NSString).lastPathComponent)"))
-                        NotificationCenter.default.post(name: .init("workmanAchievementFileEdit"), object: nil)
+                        NotificationCenter.default.post(name: .init("dofficeAchievementFileEdit"), object: nil)
                     case "Grep":
                         claudeActivity = .searching
                         let pattern = toolInput["pattern"] as? String ?? ""
                         appendBlock(.toolUse(name: "Grep", input: pattern), content: pattern)
-                        NotificationCenter.default.post(name: .init("workmanAchievementUnlock"), object: "first_grep")
+                        NotificationCenter.default.post(name: .init("dofficeAchievementUnlock"), object: "first_grep")
                     case "Glob":
                         claudeActivity = .searching
                         let pattern = toolInput["pattern"] as? String ?? ""
                         appendBlock(.toolUse(name: "Glob", input: pattern), content: pattern)
-                        NotificationCenter.default.post(name: .init("workmanAchievementUnlock"), object: "first_glob")
+                        NotificationCenter.default.post(name: .init("dofficeAchievementUnlock"), object: "first_glob")
                     case "Task":
                         claudeActivity = .thinking
                         let taskLabel = registerParallelTask(toolUseId: toolUseId, input: toolInput)
@@ -2402,7 +2453,7 @@ public class TerminalTab: ObservableObject, Identifiable {
                 sendCompletionNotification()
                 PluginHost.shared.fireEvent(.onSessionComplete, context: ["tabId": id])
                 NotificationCenter.default.post(
-                    name: .workmanTabCycleCompleted,
+                    name: .dofficeTabCycleCompleted,
                     object: self,
                     userInfo: [
                         "tabId": id,
@@ -2569,7 +2620,7 @@ public class TerminalTab: ObservableObject, Identifiable {
         )
         // 세션 알림: 승인 필요
         let tabName = workerName.isEmpty ? projectName : workerName
-        NotificationCenter.default.post(name: .init("workmanApprovalNeeded"), object: nil, userInfo: ["tabName": tabName, "tabId": id, "toolName": denial.toolName])
+        NotificationCenter.default.post(name: .init("dofficeApprovalNeeded"), object: nil, userInfo: ["tabName": tabName, "tabId": id, "toolName": denial.toolName])
     }
 
     private func retryPermissionMode(for toolName: String) -> PermissionMode {
@@ -2768,7 +2819,30 @@ public class TerminalTab: ObservableObject, Identifiable {
             claudeActivity = .idle
             return
         }
-        currentProcess?.terminate(); currentProcess = nil
+
+        // 파이프 핸들러 즉시 정리 (메인 스레드 블로킹 방지)
+        currentOutPipe?.fileHandleForReading.readabilityHandler = nil
+        currentErrPipe?.fileHandleForReading.readabilityHandler = nil
+        currentOutPipe = nil
+        currentErrPipe = nil
+
+        if let proc = currentProcess {
+            let pid = proc.processIdentifier
+            let procId = ObjectIdentifier(proc)
+            cancelledProcessIds.insert(procId)
+
+            // SIGTERM 먼저 전송
+            proc.terminate()
+
+            // 1초 후 SIGKILL 후속 (forceStop과 동일 패턴)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) {
+                if proc.isRunning {
+                    kill(-pid, SIGKILL)
+                    kill(pid, SIGKILL)
+                }
+            }
+        }
+        currentProcess = nil
         isProcessing = false; claudeActivity = .idle
         finalizeParallelTasks(as: .failed)
         appendBlock(.status(message: NSLocalizedString("tab.cancelled", comment: "")))
@@ -2791,14 +2865,26 @@ public class TerminalTab: ObservableObject, Identifiable {
             rawMasterFD = -1
             isRawMode = false
         }
-        if let proc = currentProcess, proc.isRunning {
-            proc.terminate()
-            let pid = proc.processIdentifier
-            DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) {
-                if proc.isRunning {
-                    // 프로세스 그룹 전체에 SIGKILL (자식 프로세스 포함)
-                    kill(-pid, SIGKILL)
-                    kill(pid, SIGKILL)
+
+        // 파이프 핸들러 즉시 정리
+        currentOutPipe?.fileHandleForReading.readabilityHandler = nil
+        currentErrPipe?.fileHandleForReading.readabilityHandler = nil
+        currentOutPipe = nil
+        currentErrPipe = nil
+
+        if let proc = currentProcess {
+            let procId = ObjectIdentifier(proc)
+            cancelledProcessIds.insert(procId)
+
+            if proc.isRunning {
+                proc.terminate()
+                let pid = proc.processIdentifier
+                DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) {
+                    if proc.isRunning {
+                        // 프로세스 그룹 전체에 SIGKILL (자식 프로세스 포함)
+                        kill(-pid, SIGKILL)
+                        kill(pid, SIGKILL)
+                    }
                 }
             }
         }

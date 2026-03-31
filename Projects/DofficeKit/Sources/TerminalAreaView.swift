@@ -31,7 +31,7 @@ public struct TerminalAreaView: View {
             case .browser: BrowserPanelView()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .workmanToggleBrowser)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .dofficeToggleBrowser)) { _ in
             withAnimation(.easeInOut(duration: 0.15)) { viewMode = .browser }
         }
     }
@@ -356,7 +356,7 @@ public struct EventStreamView: View {
                 return prefix + block.content
             }.joined(separator: "\n")
             let dateStr = { let f = DateFormatter(); f.dateFormat = "yyyyMMdd_HHmmss"; return f.string(from: Date()) }()
-            let path = "\(tab.projectPath)/workman_log_\(dateStr).txt"
+            let path = "\(tab.projectPath)/doffice_log_\(dateStr).txt"
             do { try text.write(toFile: path, atomically: true, encoding: .utf8)
                 tab.appendBlock(.status(message: String(format: NSLocalizedString("terminal.log.saved", comment: ""), path)))
             } catch { tab.appendBlock(.status(message: String(format: NSLocalizedString("terminal.log.save.failed", comment: ""), error.localizedDescription))) }
@@ -827,7 +827,7 @@ public struct EventStreamView: View {
         .background(Theme.bgTerminal)
     }
 
-    // MARK: - Normal Body (WorkMan UI)
+    // MARK: - Normal Body (Doffice UI)
 
     private var normalBody: some View {
         VStack(spacing: 0) {
@@ -3161,10 +3161,10 @@ public final class NewSessionPreferencesStore: ObservableObject {
     @Published public private(set) var lastDraft: NewSessionDraftSnapshot?
     @Published public private(set) var trustedProjectPaths: [String] = []
 
-    private let favoritesKey = "workman.new-session.favorite-projects"
-    private let recentsKey = "workman.new-session.recent-projects"
-    private let lastDraftKey = "workman.new-session.last-draft"
-    private let trustedProjectPathsKey = "workman.new-session.trusted-project-paths"
+    private let favoritesKey = "doffice.new-session.favorite-projects"
+    private let recentsKey = "doffice.new-session.recent-projects"
+    private let lastDraftKey = "doffice.new-session.last-draft"
+    private let trustedProjectPathsKey = "doffice.new-session.trusted-project-paths"
 
     private init() {
         load()

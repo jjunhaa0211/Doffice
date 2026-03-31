@@ -2079,7 +2079,7 @@ struct SettingsView: View {
                         Button(action: {
                             if let data = AuditLog.shared.exportJSON() {
                                 let panel = NSSavePanel()
-                                panel.nameFieldStringValue = "workman_audit_log.json"
+                                panel.nameFieldStringValue = "doffice_audit_log.json"
                                 panel.allowedContentTypes = [.json]
                                 if panel.runModal() == .OK, let url = panel.url {
                                     try? data.write(to: url)
@@ -2176,8 +2176,8 @@ struct SettingsView: View {
         var totalBytes: Int64 = 0
         // Application Support 디렉토리
         if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-            let workmanDir = appSupport.appendingPathComponent("WorkMan")
-            if let enumerator = FileManager.default.enumerator(at: workmanDir, includingPropertiesForKeys: [.fileSizeKey]) {
+            let dofficeDir = appSupport.appendingPathComponent("Doffice")
+            if let enumerator = FileManager.default.enumerator(at: dofficeDir, includingPropertiesForKeys: [.fileSizeKey]) {
                 for case let url as URL in enumerator {
                     if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
                         totalBytes += Int64(size)
@@ -2186,7 +2186,7 @@ struct SettingsView: View {
             }
         }
         // UserDefaults 추정 (대략적)
-        let udKeys = ["WorkManTokenHistory", "WorkManCharacters", "WorkManCharacterManualUnlocks", "WorkManAchievements"]
+        let udKeys = ["DofficeTokenHistory", "DofficeCharacters", "DofficeCharacterManualUnlocks", "DofficeAchievements"]
         for key in udKeys {
             if let data = UserDefaults.standard.data(forKey: key) {
                 totalBytes += Int64(data.count)
@@ -2218,14 +2218,14 @@ struct SettingsView: View {
         // 토큰 데이터 삭제
         TokenTracker.shared.clearAllEntries()
         // 업적 데이터 삭제
-        UserDefaults.standard.removeObject(forKey: "WorkManAchievements")
+        UserDefaults.standard.removeObject(forKey: "DofficeAchievements")
         // 캐릭터 데이터 삭제
-        UserDefaults.standard.removeObject(forKey: "WorkManCharacters")
+        UserDefaults.standard.removeObject(forKey: "DofficeCharacters")
         CharacterRegistry.shared.clearManualUnlocks()
-        UserDefaults.standard.removeObject(forKey: "WorkManCharacterManualUnlocks")
+        UserDefaults.standard.removeObject(forKey: "DofficeCharacterManualUnlocks")
         // 오피스 레이아웃 삭제
         for preset in OfficePreset.allCases {
-            UserDefaults.standard.removeObject(forKey: "workman.office.layout.\(preset.rawValue).v1")
+            UserDefaults.standard.removeObject(forKey: "doffice.office.layout.\(preset.rawValue).v1")
         }
         // 가구 위치 초기화
         settings.resetFurniturePositions()

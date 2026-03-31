@@ -226,7 +226,14 @@ struct SettingsView: View {
         .alert(NSLocalizedString("theme.alert.language.change", comment: ""), isPresented: $showLanguageRestartAlert) {
             Button(NSLocalizedString("settings.restart", comment: ""), role: .destructive) {
                 if let lang = pendingLanguage {
-                    settings.appLanguage = lang
+                    // Write directly to avoid triggering UI re-render
+                    UserDefaults.standard.set(lang, forKey: "appLanguage")
+                    if lang == "auto" {
+                        UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+                    } else {
+                        UserDefaults.standard.set([lang], forKey: "AppleLanguages")
+                    }
+                    UserDefaults.standard.synchronize()
                     restartApp()
                 }
             }
@@ -250,8 +257,12 @@ struct SettingsView: View {
         .alert(NSLocalizedString("theme.alert.theme.change", comment: "테마 변경"), isPresented: $showThemeRestartAlert) {
             Button(NSLocalizedString("settings.restart", comment: ""), role: .destructive) {
                 if let mode = pendingThemeMode {
-                    settings.themeMode = mode
-                    settings.requestRefreshIfNeeded()
+                    // Save to UserDefaults directly to avoid triggering
+                    // UI re-render before the app exits.
+                    UserDefaults.standard.set(mode, forKey: "themeMode")
+                    if mode == "light" { UserDefaults.standard.set(false, forKey: "isDarkMode") }
+                    else if mode == "dark" { UserDefaults.standard.set(true, forKey: "isDarkMode") }
+                    UserDefaults.standard.synchronize()
                     restartApp()
                 }
             }
@@ -262,7 +273,8 @@ struct SettingsView: View {
         .alert(NSLocalizedString("theme.alert.font.change", comment: "글꼴 크기 변경"), isPresented: $showFontRestartAlert) {
             Button(NSLocalizedString("settings.restart", comment: ""), role: .destructive) {
                 if let scale = pendingFontScale {
-                    settings.fontSizeScale = scale
+                    UserDefaults.standard.set(scale, forKey: "fontSizeScale")
+                    UserDefaults.standard.synchronize()
                     restartApp()
                 }
             }
@@ -2435,15 +2447,25 @@ struct SettingsView: View {
 
     private func restartApp() {
         SessionManager.shared.saveSessions(immediately: true)
+
+        // Schedule relaunch BEFORE exit — use a detached process so
+        // it survives our termination.
         let appPath = Bundle.main.bundlePath
-        let script = "sleep 1; open \"\(appPath)\""
+        let script = """
+        sleep 1
+        open "\(appPath)"
+        """
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/zsh")
         task.arguments = ["-c", script]
-        try? task.run()
-        // Give the shell process time to start before terminating
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            NSApplication.shared.terminate(nil)
+        task.qualityOfService = .userInitiated
+        do { try task.run() } catch { /* best effort */ }
+
+        // Use exit(0) after a short delay to let the Process start.
+        // NSApplication.terminate can be blocked by delegate callbacks,
+        // and calling it during an alert transition causes crashes.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
+            exit(0)
         }
     }
 

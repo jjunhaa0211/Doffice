@@ -543,22 +543,22 @@ struct SidebarView: View {
             .appFieldStyle()
 
             // 필터 — 컴팩트 칩, 0개인 것은 비활성 처리
-            HStack(spacing: 4) {
+            HStack(spacing: 3) {
                 ForEach(SessionStatusFilter.allCases) { filter in
                     let count = countForFilter(filter)
                     Button(action: {
                         withAnimation(sidebarAnimation) { statusFilter = filter }
                     }) {
-                        HStack(spacing: 3) {
+                        HStack(spacing: 2) {
                             Image(systemName: filter.symbol)
                                 .font(.system(size: Theme.chromeIconSize(7), weight: .semibold))
                             if statusFilter == filter || count > 0 {
                                 Text("\(count)")
-                                    .font(Theme.chrome(8, weight: .bold))
+                                    .font(Theme.chrome(7, weight: .bold))
                             }
                         }
                         .foregroundColor(statusFilter == filter ? filter.tint : Theme.textDim)
-                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .padding(.horizontal, 4).padding(.vertical, 3)
                         .background(
                             RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(statusFilter == filter ? filter.tint.opacity(0.12) : .clear)
                         )
@@ -569,10 +569,12 @@ struct SidebarView: View {
                     .buttonStyle(.plain)
                     .opacity(count > 0 || statusFilter == filter ? 1 : 0.4)
                 }
-                Spacer()
+                Spacer(minLength: 2)
                 Text("\(filteredProjectGroups.reduce(0) { $0 + $1.tabs.count })")
                     .font(Theme.chrome(8, weight: .medium))
                     .foregroundColor(Theme.textDim)
+                    .lineLimit(1)
+                    .fixedSize()
             }
         }
         .appPanelStyle(padding: 10, radius: 12, fill: Theme.bgCard.opacity(0.98), strokeOpacity: 0.2, shadow: false)

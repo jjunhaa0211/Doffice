@@ -15,6 +15,16 @@ extension TerminalTab {
 
     @discardableResult
     public func appendBlock(_ type: StreamBlock.BlockType, content: String = "") -> StreamBlock {
+        // toolEnd가 오면 직전 toolUse 블록을 완료 처리
+        if case .toolEnd = type {
+            if let toolIdx = blocks.lastIndex(where: {
+                if case .toolUse = $0.blockType { return true }
+                return false
+            }), !blocks[toolIdx].isComplete {
+                blocks[toolIdx].isComplete = true
+            }
+        }
+
         if let lastIndex = blocks.indices.last,
            !blocks[lastIndex].isComplete,
            shouldMergeBlock(existing: blocks[lastIndex].blockType, new: type),

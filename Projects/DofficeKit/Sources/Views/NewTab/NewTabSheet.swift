@@ -62,7 +62,7 @@ public struct NewTabSheet: View {
     }
 
     var sheetVisibleFrame: CGRect {
-        NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
     }
 
     var preferredSheetWidth: CGFloat {

@@ -7,6 +7,14 @@ extension TerminalTab {
     public func start() {
         isRunning = true; startTime = Date()
 
+        // Provider별 세션 토큰 한도 적용
+        let settings = AppSettings.shared
+        switch provider {
+        case .claude: if settings.claudeSessionTokenLimit > 0 { tokenLimit = settings.claudeSessionTokenLimit }
+        case .codex: if settings.codexSessionTokenLimit > 0 { tokenLimit = settings.codexSessionTokenLimit }
+        case .gemini: if settings.geminiSessionTokenLimit > 0 { tokenLimit = settings.geminiSessionTokenLimit }
+        }
+
         // Raw terminal mode: SwiftTerm이 자체 관리
         if AppSettings.shared.rawTerminalMode {
             if !isRawMode { // 이미 raw 모드면 재시작 안 함

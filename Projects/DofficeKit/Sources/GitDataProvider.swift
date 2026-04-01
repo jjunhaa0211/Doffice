@@ -166,7 +166,7 @@ public class GitDataProvider: ObservableObject {
 
     // Pagination
     @Published public var commitPage: Int = 0
-    public let commitsPerPage = 100
+    public let commitsPerPage = 200
     private var allCommitsLoaded = false
 
     // Precomputed lookup: SHA -> lane (for O(1) parent lane lookup in graph drawing)
@@ -217,7 +217,7 @@ public class GitDataProvider: ObservableObject {
         }
 
         refreshAll()
-        refreshTimer = Timer.publish(every: 8, on: .main, in: .common)
+        refreshTimer = Timer.publish(every: 10, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in self?.refreshAll() }
     }

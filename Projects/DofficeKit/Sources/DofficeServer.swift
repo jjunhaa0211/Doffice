@@ -17,9 +17,13 @@ public final class DofficeServer {
 
     // MARK: - Configuration
 
-    private let socketPath = "/tmp/doffice.sock"
+    private let socketPath: String = {
+        let dir = NSTemporaryDirectory() + "com.doffice.app/"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        return dir + "doffice.sock"
+    }()
     private let maxConnections: Int32 = 8
-    private let bufferSize = 8192
+    private let bufferSize = 65_536
 
     // MARK: - State
 

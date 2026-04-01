@@ -45,7 +45,7 @@ public class VT100Terminal: ObservableObject {
 
     // 스크롤백 버퍼
     private var scrollback: [[Cell]] = []
-    private let maxScrollback = 2000
+    public var maxScrollback: Int = 5000
 
     public init(rows: Int = 50, cols: Int = 120) {
         self.rows = rows

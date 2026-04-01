@@ -226,6 +226,7 @@ public class TokenTracker: ObservableObject {
     }
 
     public func startBlockReason(isAutomation: Bool) -> String? {
+        guard AppSettings.shared.tokenProtectionEnabled else { return nil }
         if dailyRemaining <= effectiveGlobalDailyReserve ||
             weeklyRemaining <= effectiveGlobalWeeklyReserve ||
             dailyUsagePercent >= 0.985 ||
@@ -245,7 +246,14 @@ public class TokenTracker: ObservableObject {
     }
 
     public func runningStopReason(isAutomation: Bool, currentTabTokens: Int, tokenLimit: Int) -> String? {
-        if currentTabTokens >= tokenLimit {
+        guard AppSettings.shared.tokenProtectionEnabled else {
+            // 보호 꺼져 있어도 세션 한도는 적용
+            if tokenLimit > 0 && currentTabTokens >= tokenLimit {
+                return NSLocalizedString("token.protection.session.limit", comment: "")
+            }
+            return nil
+        }
+        if tokenLimit > 0 && currentTabTokens >= tokenLimit {
             return NSLocalizedString("token.protection.session.limit", comment: "")
         }
 

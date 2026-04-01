@@ -39,7 +39,18 @@ public class CharacterRegistry: ObservableObject {
 
     private let saveKey = "DofficeCharacters"
     private let manualUnlockKey = "DofficeCharacterManualUnlocks"
-    private static let bossLineCount = 115
+    /// Dynamically count how many localized "boss.line.N" keys exist at runtime.
+    private static let bossLineCount: Int = {
+        var count = 0
+        while true {
+            let key = "boss.line.\(count + 1)"
+            let localized = NSLocalizedString(key, comment: "")
+            if localized == key { break }
+            count += 1
+        }
+        // Fall back to default lines count if no localized strings found
+        return max(count, defaultBossLines.count)
+    }()
 
     private static let defaultBossLines: [String] = [
         "열심히 일해라. 내가 보고 있다.",

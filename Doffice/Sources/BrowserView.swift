@@ -91,6 +91,8 @@ struct BrowserBookmark: Identifiable, Codable, Equatable {
 // ═══════════════════════════════════════════════════════
 
 class BrowserManager: ObservableObject {
+    static let shared = BrowserManager()
+
     @Published var tabs: [BrowserTab] = []
     @Published var activeTabId: UUID?
     @Published var bookmarks: [BrowserBookmark] = []
@@ -492,7 +494,7 @@ private struct BrowserTabContentView: View {
 // ═══════════════════════════════════════════════════════
 
 struct BrowserPanelView: View {
-    @StateObject private var manager = BrowserManager()
+    @ObservedObject private var manager = BrowserManager.shared
     @State private var urlBarText: String = ""
     @State private var isURLBarFocused: Bool = false
     @FocusState private var urlFieldFocused: Bool

@@ -14,7 +14,7 @@ public final class CLIInstallChecker {
     private var _path = ""
     private var _errorInfo = ""
     private var lastCheckedAt: Date?
-    private let cacheTTL: TimeInterval = 10
+    private let cacheTTL: TimeInterval = 30
 
     public init(executableName: String, knownExecutablePaths: [String], installHint: String) {
         self.executableName = executableName

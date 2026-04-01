@@ -25,8 +25,10 @@ public struct TerminalAreaView: View {
             switch viewMode {
             case .grid: GridPanelView()
             case .single:
-                if let tab = manager.activeTab { EventStreamView(tab: tab, compact: false) }
-                else { EmptySessionView() }
+                if let tab = manager.activeTab {
+                    if tab.isBrowserTab { BrowserPanelView() }
+                    else { EventStreamView(tab: tab, compact: false) }
+                } else { EmptySessionView() }
             case .git: GitPanelView()
             case .history: HistoryPanelView()
             case .browser: BrowserPanelView()
@@ -68,6 +70,9 @@ public struct TerminalAreaView: View {
                 }.padding(.horizontal, 6)
             }
             Spacer(minLength: 0)
+            Button(action: { manager.addBrowserTab() }) {
+                Image(systemName: "globe").font(Theme.scaled(10, weight: .medium)).foregroundColor(Theme.textDim).frame(width: 28, height: 28)
+            }.buttonStyle(.plain)
             Button(action: { manager.showNewTabSheet = true }) {
                 Image(systemName: "plus").font(Theme.scaled(10, weight: .medium)).foregroundColor(Theme.textDim).frame(width: 28, height: 28)
             }.buttonStyle(.plain).padding(.trailing, 6)
@@ -118,7 +123,12 @@ public struct TerminalAreaView: View {
                     }
                 }
                 .frame(width: 12, height: 12)
-                Text(t.projectName).font(Theme.chrome(10)).foregroundColor(a ? Theme.textPrimary : Theme.textSecondary).lineLimit(1)
+                if t.isBrowserTab {
+                    Image(systemName: "globe").font(.system(size: Theme.iconSize(9))).foregroundColor(a ? Theme.accent : Theme.textDim)
+                    Text("Browser").font(Theme.chrome(10)).foregroundColor(a ? Theme.accent : Theme.textSecondary).lineLimit(1)
+                } else {
+                    Text(t.projectName).font(Theme.chrome(10)).foregroundColor(a ? Theme.textPrimary : Theme.textSecondary).lineLimit(1)
+                }
                 if (projectPathCounts[t.projectPath] ?? 0) > 1 {
                     Text(t.workerName).font(Theme.chrome(9)).foregroundColor(t.workerColor)
                 }

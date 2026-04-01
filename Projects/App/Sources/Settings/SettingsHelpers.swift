@@ -609,6 +609,22 @@ extension SettingsView {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    func providerTokenLimitField(_ label: String, value: Binding<Int>) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(Theme.mono(8, weight: .bold))
+                .foregroundColor(Theme.textDim)
+            TextField("0", value: value, format: .number)
+                .textFieldStyle(.plain)
+                .font(Theme.mono(10, weight: .semibold))
+                .foregroundColor(Theme.textPrimary)
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.border.opacity(0.35), lineWidth: 1))
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     func statusHint(icon: String, text: String, tint: Color) -> some View {
         HStack(spacing: 5) {
             Image(systemName: icon)

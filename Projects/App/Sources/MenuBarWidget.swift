@@ -35,7 +35,7 @@ class MenuBarManager: ObservableObject {
         self.popover = popover
 
         // 주기적으로 메뉴바 타이틀 업데이트 (5초 간격)
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true) { [weak self] _ in
             self?.updateTitle()
         }
     }

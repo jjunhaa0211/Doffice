@@ -65,6 +65,8 @@ public struct BrowserBookmark: Identifiable, Codable, Equatable {
 // ═══════════════════════════════════════════════════════
 
 public class BrowserManager: ObservableObject {
+    public static let shared = BrowserManager()
+
     @Published public var tabs: [BrowserTab] = []
     @Published public var activeTabId: UUID?
     @Published public var bookmarks: [BrowserBookmark] = []
@@ -277,25 +279,37 @@ public struct WebViewRepresentable: NSViewRepresentable {
             self.webView = webView
         }
 
-        /// Called from updateNSView — checks if there's a pending command for this tab
+        /// Called from updateNSView — checks if there's a pending command for this tab.
+        /// Consumes the command atomically before executing to prevent races
+        /// when multiple coordinators process the same command.
         public func processCommand() {
             guard let webView = webView,
                   let cmd = parent.manager.pendingCommand else { return }
             let tabId = parent.tabId
+
+            // Check if this command targets our tab
+            let targetId: UUID
             switch cmd {
-            case .navigate(let id, let url) where id == tabId:
+            case .navigate(let id, _): targetId = id
+            case .goBack(let id): targetId = id
+            case .goForward(let id): targetId = id
+            case .reload(let id): targetId = id
+            }
+            guard targetId == tabId else { return }
+
+            // Consume atomically before executing — prevents other coordinators
+            // from picking up the same command in subsequent updateNSView calls
+            parent.manager.pendingCommand = nil
+
+            switch cmd {
+            case .navigate(_, let url):
                 webView.load(URLRequest(url: url))
-                parent.manager.pendingCommand = nil
-            case .goBack(let id) where id == tabId:
+            case .goBack:
                 webView.goBack()
-                parent.manager.pendingCommand = nil
-            case .goForward(let id) where id == tabId:
+            case .goForward:
                 webView.goForward()
-                parent.manager.pendingCommand = nil
-            case .reload(let id) where id == tabId:
+            case .reload:
                 webView.reload()
-                parent.manager.pendingCommand = nil
-            default: break
             }
         }
     }
@@ -359,7 +373,7 @@ private struct BrowserTabContentView: View {
 // ═══════════════════════════════════════════════════════
 
 public struct BrowserPanelView: View {
-    @StateObject private var manager = BrowserManager()
+    @ObservedObject private var manager = BrowserManager.shared
     @State private var urlBarText: String = ""
     @State private var isURLBarFocused: Bool = false
     @FocusState private var urlFieldFocused: Bool

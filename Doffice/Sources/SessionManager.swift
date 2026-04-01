@@ -1949,6 +1949,21 @@ class SessionManager: ObservableObject {
                 recoveryBundleURL = nil
             }
 
+            // 브라우저 탭 복원
+            if session.isBrowserTab == true {
+                let tab = addTab(
+                    projectName: session.projectName,
+                    projectPath: session.projectPath,
+                    autoStart: false,
+                    restoredSession: session
+                )
+                tab.isBrowserTab = true
+                tab.browserURL = session.browserURL ?? ""
+                tab.isRunning = true
+                tab.claudeActivity = .idle
+                continue
+            }
+
             let tab = addTab(
                 projectName: session.projectName,
                 projectPath: session.projectPath,

@@ -1,5 +1,6 @@
 import XCTest
 @testable import DofficeKit
+import DesignSystem
 
 final class TokenTrackerTests: XCTestCase {
 
@@ -54,5 +55,79 @@ final class TokenTrackerTests: XCTestCase {
     func testBillingPeriodLabelNotEmpty() {
         let tracker = TokenTracker.shared
         XCTAssertFalse(tracker.billingPeriodLabel.isEmpty)
+    }
+
+    // MARK: - Token Protection Tests
+
+    func testStartBlockReturnsNilWhenProtectionDisabled() {
+        let settings = AppSettings.shared
+        let originalValue = settings.tokenProtectionEnabled
+        defer { settings.tokenProtectionEnabled = originalValue }
+
+        settings.tokenProtectionEnabled = false
+        let tracker = TokenTracker.shared
+        // 보호 비활성 시 항상 nil 반환
+        XCTAssertNil(tracker.startBlockReason(isAutomation: false))
+        XCTAssertNil(tracker.startBlockReason(isAutomation: true))
+    }
+
+    func testRunningStopReturnsNilWhenProtectionDisabled() {
+        let settings = AppSettings.shared
+        let originalValue = settings.tokenProtectionEnabled
+        defer { settings.tokenProtectionEnabled = originalValue }
+
+        settings.tokenProtectionEnabled = false
+        let tracker = TokenTracker.shared
+        // 보호 비활성이어도 세션 한도(tokenLimit > 0)는 적용됨
+        XCTAssertNil(tracker.runningStopReason(isAutomation: false, currentTabTokens: 999999, tokenLimit: 0))
+        // 세션 한도 설정 시에는 적용
+        XCTAssertNotNil(tracker.runningStopReason(isAutomation: false, currentTabTokens: 50000, tokenLimit: 40000))
+    }
+
+    func testRunningStopReturnsNilWhenTokenLimitZero() {
+        let settings = AppSettings.shared
+        let originalValue = settings.tokenProtectionEnabled
+        defer { settings.tokenProtectionEnabled = originalValue }
+
+        settings.tokenProtectionEnabled = true
+        let tracker = TokenTracker.shared
+        // tokenLimit = 0 (무제한)이면 세션 한도 체크 안 함
+        let reason = tracker.runningStopReason(isAutomation: false, currentTabTokens: 999999, tokenLimit: 0)
+        // 글로벌 한도에 안 걸렸다면 nil
+        // (실제 일간/주간 사용량에 따라 다를 수 있으므로 글로벌 체크 통과 여부만 확인)
+        if tracker.dailyUsagePercent < 0.98 && tracker.weeklyUsagePercent < 0.98 {
+            XCTAssertNil(reason, "tokenLimit=0 should not trigger session limit block")
+        }
+    }
+
+    func testRunningStopTriggersWhenTokenLimitExceeded() {
+        let settings = AppSettings.shared
+        let originalValue = settings.tokenProtectionEnabled
+        defer { settings.tokenProtectionEnabled = originalValue }
+
+        settings.tokenProtectionEnabled = true
+        let tracker = TokenTracker.shared
+        // 세션 한도 50000, 사용량 60000 → 차단
+        let reason = tracker.runningStopReason(isAutomation: false, currentTabTokens: 60000, tokenLimit: 50000)
+        XCTAssertNotNil(reason, "Should block when currentTabTokens exceeds tokenLimit")
+    }
+
+    func testStartBlockReturnsNilWithHighLimits() {
+        let settings = AppSettings.shared
+        let originalProtection = settings.tokenProtectionEnabled
+        let tracker = TokenTracker.shared
+        let originalDaily = tracker.dailyTokenLimit
+        let originalWeekly = tracker.weeklyTokenLimit
+        defer {
+            settings.tokenProtectionEnabled = originalProtection
+            tracker.dailyTokenLimit = originalDaily
+            tracker.weeklyTokenLimit = originalWeekly
+        }
+
+        settings.tokenProtectionEnabled = true
+        // 매우 높은 한도 설정 → 차단 안 됨
+        tracker.dailyTokenLimit = 100_000_000
+        tracker.weeklyTokenLimit = 500_000_000
+        XCTAssertNil(tracker.startBlockReason(isAutomation: false), "Should not block with very high limits")
     }
 }

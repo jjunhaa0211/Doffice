@@ -7,6 +7,10 @@ import DesignSystem
 public struct GridPanelView: View {
     @EnvironmentObject var manager: SessionManager
     @StateObject private var settings = AppSettings.shared
+    @State private var bottomPanel: BottomPanel = .none
+    @State private var bottomPanelHeight: CGFloat = 280
+
+    enum BottomPanel { case none, history, browser }
 
     private var hasPinnedTabs: Bool { !manager.pinnedTabIds.isEmpty }
 
@@ -26,16 +30,69 @@ public struct GridPanelView: View {
     private var isFiltered: Bool { manager.selectedGroupPath != nil }
 
     public var body: some View {
-        if manager.visibleTabs.isEmpty {
-            EmptySessionView()
-        } else if hasPinnedTabs {
-            // ── Pinned multi-select grid (최우선) ──
-            pinnedGridView
-        } else if manager.focusSingleTab, let tab = manager.activeTab {
-            EventStreamView(tab: tab, compact: false)
-        } else {
-            defaultGridView
+        VStack(spacing: 0) {
+            // Main grid area
+            if manager.visibleTabs.isEmpty {
+                EmptySessionView()
+            } else if hasPinnedTabs {
+                pinnedGridView
+            } else if manager.focusSingleTab, let tab = manager.activeTab {
+                EventStreamView(tab: tab, compact: false)
+            } else {
+                defaultGridView
+            }
+
+            // Bottom panel toggle bar
+            bottomPanelBar
+
+            // Bottom panel content
+            if bottomPanel != .none {
+                ResizableDivider(height: $bottomPanelHeight)
+                Group {
+                    switch bottomPanel {
+                    case .history: HistoryPanelView()
+                    case .browser: BrowserPanelView()
+                    case .none: EmptyView()
+                    }
+                }
+                .frame(height: bottomPanelHeight)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: bottomPanel)
+    }
+
+    private var bottomPanelBar: some View {
+        HStack(spacing: 0) {
+            Rectangle().fill(Theme.border).frame(height: 1)
+            Spacer(minLength: 0)
+            HStack(spacing: 2) {
+                bottomPanelButton("clock.arrow.circlepath", NSLocalizedString("terminal.mode.history", comment: ""), panel: .history)
+                bottomPanelButton("globe", "Browser", panel: .browser)
+            }
+            .padding(.horizontal, 8)
+            Spacer(minLength: 0)
+        }
+        .frame(height: 28)
+        .background(Theme.bgCard)
+        .overlay(Rectangle().fill(Theme.border).frame(height: 1), alignment: .top)
+    }
+
+    private func bottomPanelButton(_ icon: String, _ label: String, panel: BottomPanel) -> some View {
+        let selected = bottomPanel == panel
+        return Button(action: {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                bottomPanel = bottomPanel == panel ? .none : panel
+            }
+        }) {
+            HStack(spacing: 3) {
+                Image(systemName: icon).font(.system(size: Theme.iconSize(9)))
+                Text(label).font(Theme.chrome(8, weight: selected ? .bold : .regular))
+            }
+            .foregroundColor(selected ? Theme.accent : Theme.textDim)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: Theme.cornerSmall).fill(selected ? Theme.accent.opacity(0.12) : .clear))
+        }.buttonStyle(.plain)
     }
 
     // Pinned tabs grid: show only selected tabs
@@ -96,17 +153,44 @@ public struct GridSinglePanel: View {
     public var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
-                RoundedRectangle(cornerRadius: 1).fill(tab.workerColor).frame(width: 3, height: 12)
-                Text(tab.workerName).font(Theme.chrome(9, weight: .bold)).foregroundColor(tab.workerColor)
-                Text(tab.projectName).font(Theme.chrome(9)).foregroundColor(Theme.textSecondary).lineLimit(1)
+                RoundedRectangle(cornerRadius: 1).fill(tab.isBrowserTab ? Theme.accent : tab.workerColor).frame(width: 3, height: 12)
+                if tab.isBrowserTab {
+                    Image(systemName: "globe").font(.system(size: Theme.iconSize(9))).foregroundColor(Theme.accent)
+                    Text("Browser").font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.accent)
+                } else {
+                    Text(tab.workerName).font(Theme.chrome(9, weight: .bold)).foregroundColor(tab.workerColor)
+                    Text(tab.projectName).font(Theme.chrome(9)).foregroundColor(Theme.textSecondary).lineLimit(1)
+                }
                 Spacer()
-                if tab.isProcessing { ProgressView().scaleEffect(0.35).frame(width: 8, height: 8) }
-                Text(tab.selectedModel.icon).font(Theme.chrome(9))
+                if !tab.isBrowserTab {
+                    if tab.isProcessing { ProgressView().scaleEffect(0.35).frame(width: 8, height: 8) }
+                    Text(tab.selectedModel.icon).font(Theme.chrome(9))
+                }
             }
             .padding(.horizontal, 6).padding(.vertical, 4)
             .background(isSelected ? Theme.bgSelected : Theme.bgCard)
 
-            EventStreamView(tab: tab, compact: true)
+            if tab.isBrowserTab {
+                // Grid에서는 경량 플레이스홀더 — 클릭 시 Single 모드로 전환
+                VStack(spacing: 8) {
+                    Spacer()
+                    Image(systemName: "globe")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundColor(Theme.accent.opacity(0.5))
+                    Text(tab.browserURL.isEmpty ? "Browser" : tab.browserURL)
+                        .font(Theme.mono(9))
+                        .foregroundColor(Theme.textDim)
+                        .lineLimit(1)
+                    Text(NSLocalizedString("terminal.click.to.open", comment: "클릭하여 열기"))
+                        .font(Theme.chrome(8))
+                        .foregroundColor(Theme.textMuted)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.bg)
+            } else {
+                EventStreamView(tab: tab, compact: true)
+            }
         }
         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgCard))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(isSelected ? Theme.accent.opacity(0.5) : Theme.border, lineWidth: 1))
@@ -165,5 +249,28 @@ public struct GridGroupPanel: View {
                 EmptyView()
             }
         }
+    }
+}
+
+// MARK: - Resizable Divider
+
+private struct ResizableDivider: View {
+    @Binding var height: CGFloat
+
+    var body: some View {
+        Rectangle()
+            .fill(Theme.border)
+            .frame(height: 3)
+            .contentShape(Rectangle().inset(by: -4))
+            .onHover { hovering in
+                if hovering { NSCursor.resizeUpDown.push() }
+                else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        height = max(120, min(600, height - value.translation.height))
+                    }
+            )
     }
 }

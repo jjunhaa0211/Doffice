@@ -6,6 +6,13 @@ import DesignSystem
 public class SessionManager: ObservableObject {
     public static let shared = SessionManager()
 
+    // Centralized process detection strings (edit here to add new CLI tools)
+    private static let claudeExecSuffixes: Set<String> = ["/claude"]
+    private static let claudeExecContains: Set<String> = ["/claude-", "/@anthropic"]
+    private static let claudePathKeywords: Set<String> = ["claude", "node"]
+    private static let claudeCwdMarker = ".claude"
+    private static let codexPathKeywords: Set<String> = ["/codex", "codex.app"]
+
     @Published public var tabs: [TerminalTab] = []
     @Published public var activeTabId: String?
     @Published public var showNewTabSheet: Bool = false
@@ -205,7 +212,7 @@ public class SessionManager: ObservableObject {
         }
 
         // 30초마다 자동 저장 (강제 종료 대비)
-        autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             self?.saveSessions()
         }
     }
@@ -459,13 +466,13 @@ public class SessionManager: ObservableObject {
 
             // claude 실행파일인지 확인
             let lower = execPath.lowercased()
-            guard lower.contains("claude") || lower.contains("node") else { continue }
+            guard Self.claudePathKeywords.contains(where: { lower.contains($0) }) else { continue }
 
             // node인 경우 커맨드 라인에 claude가 포함되는지 확인
             if lower.contains("node") && !lower.contains("claude") {
                 // proc_pidinfo로 args 대신 cwd에서 .claude 폴더 확인
                 if let cwd = getCwdNative(pid: Int(pid)) {
-                    if !cwd.contains(".claude") { continue }
+                    if !cwd.contains(Self.claudeCwdMarker) { continue }
                 }
             }
 
@@ -479,7 +486,8 @@ public class SessionManager: ObservableObject {
             }
 
             // claude 실행파일 경로를 가진 프로세스
-            if lower.hasSuffix("/claude") || lower.contains("/claude-") || lower.contains("/@anthropic") {
+            if Self.claudeExecSuffixes.contains(where: { lower.hasSuffix($0) }) ||
+               Self.claudeExecContains.contains(where: { lower.contains($0) }) {
                 claudePids.append(Int(pid))
             }
         }
@@ -507,7 +515,7 @@ public class SessionManager: ObservableObject {
             guard pathLen > 0 else { continue }
 
             let execPath = String(cString: codexPathBuf).lowercased()
-            guard execPath.contains("/codex") || execPath.contains("codex.app") else { continue }
+            guard Self.codexPathKeywords.contains(where: { execPath.contains($0) }) else { continue }
 
             var bsdInfo = proc_bsdinfo()
             let infoSize = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &bsdInfo, Int32(MemoryLayout<proc_bsdinfo>.size))
@@ -780,6 +788,21 @@ public class SessionManager: ObservableObject {
         if autoStart {
             tab.start()
         }
+        return tab
+    }
+
+    @discardableResult
+    public func addBrowserTab(url: String = "") -> TerminalTab {
+        let tab = addTab(
+            projectName: "Browser",
+            projectPath: NSHomeDirectory(),
+            autoStart: false
+        )
+        tab.isBrowserTab = true
+        tab.browserURL = url
+        tab.isRunning = true
+        tab.claudeActivity = .idle
+        selectTab(tab.id)
         return tab
     }
 
@@ -1962,6 +1985,21 @@ public class SessionManager: ObservableObject {
                 }
             } else {
                 recoveryBundleURL = nil
+            }
+
+            // 브라우저 탭 복원
+            if session.isBrowserTab == true {
+                let tab = addTab(
+                    projectName: session.projectName,
+                    projectPath: session.projectPath,
+                    autoStart: false,
+                    restoredSession: session
+                )
+                tab.isBrowserTab = true
+                tab.browserURL = session.browserURL ?? ""
+                tab.isRunning = true
+                tab.claudeActivity = .idle
+                continue
             }
 
             let tab = addTab(

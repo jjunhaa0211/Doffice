@@ -187,6 +187,11 @@ public class AppSettings: ObservableObject {
         didSet { notifyIfNeeded() }
     }
 
+    // ── 터미널 스크롤백 ──
+    @AppStorage("terminalMaxScrollback") public var terminalMaxScrollback: Int = 5000 {
+        didSet { notifyIfNeeded() }
+    }
+
     // ── 자동 새로고침 ──
     @AppStorage("autoRefreshOnSettingsChange") public var autoRefreshOnSettingsChange: Bool = true {
         didSet { notifyIfNeeded() }
@@ -277,6 +282,35 @@ public class AppSettings: ObservableObject {
     @AppStorage("hasCompletedOnboarding") public var hasCompletedOnboarding: Bool = false {
         didSet { notifyIfNeeded() }
     }
+
+    // ── 토큰 보호 ──
+    @AppStorage("tokenProtectionEnabled") public var tokenProtectionEnabled: Bool = true {
+        didSet { notifyIfNeeded() }
+    }
+    /// Provider별 세션 토큰 한도 (0 = 무제한)
+    @AppStorage("claudeSessionTokenLimit") public var claudeSessionTokenLimit: Int = 0 {
+        didSet { notifyIfNeeded() }
+    }
+    @AppStorage("codexSessionTokenLimit") public var codexSessionTokenLimit: Int = 0 {
+        didSet { notifyIfNeeded() }
+    }
+    @AppStorage("geminiSessionTokenLimit") public var geminiSessionTokenLimit: Int = 0 {
+        didSet { notifyIfNeeded() }
+    }
+    /// Provider별 주간 토큰 한도 (플랜 기반, 0 = 미설정 → 글로벌 한도 사용)
+    @AppStorage("claudeWeeklyLimit") public var claudeWeeklyLimit: Int = 0 {
+        didSet { notifyIfNeeded() }
+    }
+    @AppStorage("codexWeeklyLimit") public var codexWeeklyLimit: Int = 0 {
+        didSet { notifyIfNeeded() }
+    }
+    @AppStorage("geminiWeeklyLimit") public var geminiWeeklyLimit: Int = 0 {
+        didSet { notifyIfNeeded() }
+    }
+    /// Provider별 선택된 플랜 이름
+    @AppStorage("claudePlanName") public var claudePlanName: String = ""
+    @AppStorage("codexPlanName") public var codexPlanName: String = ""
+    @AppStorage("geminiPlanName") public var geminiPlanName: String = ""
 
     // ── 결제일 알림 ──
     @AppStorage("billingDay") public var billingDay: Int = 0  // 0 = 미설정, 1~31

@@ -9,16 +9,31 @@ struct DofficeApp: App {
     @StateObject private var manager = SessionManager.shared
     @ObservedObject private var settings = AppSettings.shared
 
+    static var screenBasedMainSize: CGSize {
+        let screen = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1920, height: 1080)
+        return CGSize(width: screen.width * 0.65, height: screen.height * 0.75)
+    }
+
+    static var screenBasedMinSize: (CGFloat, CGFloat) {
+        let screen = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1920, height: 1080)
+        return (max(800, screen.width * 0.5), max(500, screen.height * 0.5))
+    }
+
+    static var screenBasedOfficeSize: CGSize {
+        let screen = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1920, height: 1080)
+        return CGSize(width: screen.width * 0.5, height: screen.height * 0.55)
+    }
+
     var body: some Scene {
         WindowGroup {
             MainView()
                 .environmentObject(manager)
                 .environmentObject(settings)
-                .frame(minWidth: 1000, minHeight: 650)
+                .frame(minWidth: Self.screenBasedMinSize.0, minHeight: Self.screenBasedMinSize.1)
                 .preferredColorScheme(settings.colorScheme)
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 1200, height: 800)
+        .defaultSize(width: Self.screenBasedMainSize.width, height: Self.screenBasedMainSize.height)
 
         // 오피스 전용 창 (듀얼 모니터용)
         WindowGroup("도피스 오피스", id: "office-window") {
@@ -28,7 +43,7 @@ struct DofficeApp: App {
                 .preferredColorScheme(settings.colorScheme)
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 900, height: 600)
+        .defaultSize(width: Self.screenBasedOfficeSize.width, height: Self.screenBasedOfficeSize.height)
         .commands {
             // 단축키는 ShortcutManager의 NSEvent 모니터가 동적으로 처리
             // 메뉴 항목은 표시용으로 유지하되 단축키 힌트를 동적으로 표시
@@ -92,13 +107,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // SwiftUI 상태 복원이 비정상일 때도 바로 보이는 메인 창을 하나 확보한다.
-        DispatchQueue.main.async { [weak self] in
-            self?.presentFallbackMainWindow()
-        }
-
-        // 윈도우 복원 실패 시 여러 번 재시도 후 최종적으로 안전 창을 띄운다.
+        // 윈도우 복원 실패 시에만 안전 창을 띄운다 (정상 시작 시 불필요한 fallback 방지).
         scheduleMainWindowRecovery()
+
+        // 정상 윈도우가 뜨면 fallback 자동 dismiss
+        NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.dismissFallbackWindowIfNeeded()
+        }
     }
 
     /// 보이는 창이 하나도 없으면 메인 창을 강제로 생성/표시
@@ -136,7 +151,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func scheduleMainWindowRecovery() {
-        let recoveryDelays: [TimeInterval] = [0.35, 1.0, 2.0]
+        let recoveryDelays: [TimeInterval] = [1.0, 2.0, 4.0]
         for delay in recoveryDelays {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.ensureMainWindowVisible()
@@ -169,8 +184,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard needsResize || isOffscreen else { return }
         guard let targetFrame = NSScreen.main?.visibleFrame ?? visibleFrames.first else { return }
 
-        let preferredWidth = needsResize ? 1200 : window.frame.width
-        let preferredHeight = needsResize ? 800 : window.frame.height
+        let preferredWidth = needsResize ? targetFrame.width * 0.65 : window.frame.width
+        let preferredHeight = needsResize ? targetFrame.height * 0.75 : window.frame.height
         let width = min(preferredWidth, max(900, targetFrame.width - 40))
         let height = min(preferredHeight, max(620, targetFrame.height - 40))
         let origin = NSPoint(
@@ -204,13 +219,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             MainView()
                 .environmentObject(SessionManager.shared)
                 .environmentObject(AppSettings.shared)
-                .frame(minWidth: 1000, minHeight: 650)
+                .frame(minWidth: DofficeApp.screenBasedMinSize.0, minHeight: DofficeApp.screenBasedMinSize.1)
                 .preferredColorScheme(AppSettings.shared.colorScheme)
         )
         let hostingController = NSHostingController(rootView: rootView)
 
+        let mainSize = DofficeApp.screenBasedMainSize
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            contentRect: NSRect(x: 0, y: 0, width: mainSize.width, height: mainSize.height),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false

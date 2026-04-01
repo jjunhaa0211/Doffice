@@ -336,6 +336,8 @@ final class SessionPersistenceTests: XCTestCase {
             settingsFileOrJSON: settingsFileOrJSON,
             betaHeaders: betaHeaders,
             sessionId: sessionId,
+            isBrowserTab: nil,
+            browserURL: nil,
             fileChanges: fileChanges,
             chatHistory: chatHistory,
             tabOrder: tabOrder

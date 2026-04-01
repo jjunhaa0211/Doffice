@@ -55,7 +55,7 @@ public class TerminalTab: ObservableObject, Identifiable {
     public var inputTokensUsed: Int = 0
     public var outputTokensUsed: Int = 0
     public var totalCost: Double = 0
-    @Published public var tokenLimit: Int = 45000
+    @Published public var tokenLimit: Int = 0  // 0 = 무제한 (사용자 설정으로 관리)
     @Published public var isClaude: Bool = true
     @Published public var isCompleted: Bool = false
     @Published public var gitInfo = GitInfo()
@@ -203,6 +203,10 @@ public class TerminalTab: ObservableObject, Identifiable {
     public var betaHeaders: String = ""            // --betas
 
     // ── 세션 연속성 (--resume으로 멀티턴 유지) ──
+
+    // ── 브라우저 탭 모드 ──
+    @Published public var isBrowserTab: Bool = false
+    @Published public var browserURL: String = ""
 
     // ── 크롬 윈도우 캡처 ──
     public var chromeScreenshot: CGImage?

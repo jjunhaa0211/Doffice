@@ -88,6 +88,8 @@ struct SavedSession: Codable {
     let settingsFileOrJSON: String?
     let betaHeaders: String?
     let sessionId: String?
+    let isBrowserTab: Bool?
+    let browserURL: String?
     let fileChanges: [SavedFileChange]?
     let chatHistory: [SavedChatBlock]?
     let tabOrder: Int?
@@ -235,6 +237,8 @@ class SessionStore {
                 settingsFileOrJSON: tab.settingsFileOrJSON,
                 betaHeaders: tab.betaHeaders,
                 sessionId: tab.persistedSessionId,
+                isBrowserTab: tab.isBrowserTab,
+                browserURL: tab.browserURL,
                 fileChanges: tab.fileChanges.map(SavedFileChange.init(record:)),
                 chatHistory: tab.blocks.suffix(100).compactMap { block in
                     switch block.blockType {
@@ -415,6 +419,8 @@ class SessionStore {
             settingsFileOrJSON: tab.settingsFileOrJSON,
             betaHeaders: tab.betaHeaders,
             sessionId: tab.persistedSessionId,
+            isBrowserTab: tab.isBrowserTab,
+            browserURL: tab.browserURL,
             fileChanges: tab.fileChanges.map(SavedFileChange.init(record:)),
             chatHistory: nil,
             tabOrder: nil

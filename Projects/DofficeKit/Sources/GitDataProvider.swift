@@ -222,6 +222,10 @@ public class GitDataProvider: ObservableObject {
             .sink { [weak self] _ in self?.refreshAll() }
     }
 
+    deinit {
+        refreshTimer?.cancel()
+    }
+
     public func stop() {
         refreshTimer?.cancel()
         refreshTimer = nil
@@ -1222,13 +1226,6 @@ public enum GitDataParser {
         var currentAuthor = ""
         var currentDate = Date()
         var lineNum = 0
-
-        let dateFormatter: DateFormatter = {
-            let f = DateFormatter()
-            f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
-            f.locale = Locale(identifier: "en_US_POSIX")
-            return f
-        }()
 
         for line in raw.components(separatedBy: "\n") {
             if line.isEmpty { continue }

@@ -137,7 +137,7 @@ public struct DSCommandPalette: View {
         .frame(width: 500)
         .onChange(of: query) { _, _ in selectedIndex = 0 }
         .onKeyPress(.upArrow) { selectedIndex = max(0, selectedIndex - 1); return .handled }
-        .onKeyPress(.downArrow) { selectedIndex = min(filtered.count - 1, selectedIndex + 1); return .handled }
+        .onKeyPress(.downArrow) { selectedIndex = min(max(filtered.count - 1, 0), selectedIndex + 1); return .handled }
         .onKeyPress(.escape) { isPresented = false; return .handled }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Command palette")

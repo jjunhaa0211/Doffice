@@ -7,12 +7,12 @@ struct CommandPaletteCatalog: View {
 
     private var sampleItems: [DSCommandItem] {
         [
-            DSCommandItem(title: "New Session", subtitle: "Start a new Claude session", icon: "plus.circle.fill", tint: Theme.green) { lastAction = "New Session" },
-            DSCommandItem(title: "Settings", subtitle: "Open preferences", icon: "gearshape.fill", tint: Theme.accent) { lastAction = "Settings" },
-            DSCommandItem(title: "Toggle Dark Mode", subtitle: "Switch theme", icon: "moon.fill", tint: Theme.purple) { lastAction = "Dark Mode" },
-            DSCommandItem(title: "Export Log", subtitle: "Save session log to file", icon: "square.and.arrow.up", tint: Theme.orange) { lastAction = "Export" },
-            DSCommandItem(title: "Git Push", subtitle: "Push changes to remote", icon: "arrow.up.circle.fill", tint: Theme.cyan) { lastAction = "Git Push" },
-            DSCommandItem(title: "Clear Terminal", subtitle: "Clear output buffer", icon: "trash", tint: Theme.red) { lastAction = "Clear" },
+            DSCommandItem(id: "new-session", title: "New Session", subtitle: "Start a new Claude session", icon: "plus.circle.fill", tint: Theme.green) { lastAction = "New Session" },
+            DSCommandItem(id: "settings", title: "Settings", subtitle: "Open preferences", icon: "gearshape.fill", tint: Theme.accent) { lastAction = "Settings" },
+            DSCommandItem(id: "dark-mode", title: "Toggle Dark Mode", subtitle: "Switch theme", icon: "moon.fill", tint: Theme.purple) { lastAction = "Dark Mode" },
+            DSCommandItem(id: "export", title: "Export Log", subtitle: "Save session log to file", icon: "square.and.arrow.up", tint: Theme.orange) { lastAction = "Export" },
+            DSCommandItem(id: "git-push", title: "Git Push", subtitle: "Push changes to remote", icon: "arrow.up.circle.fill", tint: Theme.cyan) { lastAction = "Git Push" },
+            DSCommandItem(id: "clear", title: "Clear Terminal", subtitle: "Clear output buffer", icon: "trash", tint: Theme.red) { lastAction = "Clear" },
         ]
     }
 

@@ -270,7 +270,8 @@ extension EventStreamView {
         // ── Git ──
         SlashCommand("git", NSLocalizedString("slash.status.git.desc", comment: ""), category: "Git") { tab, _, _ in
             tab.refreshGitInfo()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak tab] in
+                guard let tab else { return }
                 let g = tab.gitInfo
                 if !g.isGitRepo { tab.appendBlock(.status(message: NSLocalizedString("slash.status.git.not.repo", comment: ""))); return }
                 let text = [
@@ -285,7 +286,8 @@ extension EventStreamView {
         },
         SlashCommand("branch", NSLocalizedString("slash.cmd.branch", comment: ""), category: "Git") { tab, _, _ in
             tab.refreshGitInfo()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak tab] in
+                guard let tab else { return }
                 tab.appendBlock(.status(message: String(format: NSLocalizedString("slash.status.branch.current", comment: ""), tab.gitInfo.branch.isEmpty ? NSLocalizedString("slash.status.deny.none", comment: "") : tab.gitInfo.branch)))
             }
         },

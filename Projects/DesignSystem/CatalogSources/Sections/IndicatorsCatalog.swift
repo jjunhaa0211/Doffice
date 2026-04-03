@@ -4,6 +4,7 @@ import DesignSystem
 struct IndicatorsCatalog: View {
     @State private var animatedProgress: Double = 0.0
     @State private var isAnimating = false
+    @State private var animationTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 32) {
@@ -32,8 +33,9 @@ struct IndicatorsCatalog: View {
                             .frame(width: 40)
 
                         Button(action: {
-                            isAnimating.toggle()
                             if isAnimating {
+                                stopAnimation()
+                            } else {
                                 startAnimation()
                             }
                         }) {
@@ -44,7 +46,7 @@ struct IndicatorsCatalog: View {
                         .buttonStyle(.plain)
 
                         Button(action: {
-                            isAnimating = false
+                            stopAnimation()
                             withAnimation(.easeOut(duration: 0.2)) { animatedProgress = 0 }
                         }) {
                             Text("Reset")
@@ -86,6 +88,7 @@ struct IndicatorsCatalog: View {
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border, lineWidth: 1))
             }
         }
+        .onDisappear { stopAnimation() }
     }
 
     private func progressSample(_ label: String, _ value: Double, _ tint: Color) -> some View {
@@ -99,17 +102,24 @@ struct IndicatorsCatalog: View {
     }
 
     private func startAnimation() {
-        guard isAnimating else { return }
-        withAnimation(.easeInOut(duration: 0.3)) {
-            animatedProgress = min(animatedProgress + 0.05, 1.0)
-        }
-        if animatedProgress >= 1.0 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                withAnimation(.easeOut(duration: 0.3)) { animatedProgress = 0 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { startAnimation() }
+        isAnimating = true
+        animationTimer?.invalidate()
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { _ in
+            DispatchQueue.main.async {
+                guard isAnimating else { return }
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    animatedProgress = min(animatedProgress + 0.05, 1.0)
+                }
+                if animatedProgress >= 1.0 {
+                    withAnimation(.easeOut(duration: 0.3)) { animatedProgress = 0 }
+                }
             }
-        } else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { startAnimation() }
         }
+    }
+
+    private func stopAnimation() {
+        isAnimating = false
+        animationTimer?.invalidate()
+        animationTimer = nil
     }
 }

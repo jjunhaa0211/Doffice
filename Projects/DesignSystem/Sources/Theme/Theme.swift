@@ -109,6 +109,26 @@ public enum Theme {
     public static func accentBg(_ color: Color) -> Color { ColorTokens.accentBg(color, dark: dark) }
     public static func accentBorder(_ color: Color) -> Color { ColorTokens.accentBorder(color, dark: dark) }
 
+    public static var heroBackground: LinearGradient {
+        dark
+        ? LinearGradient(colors: [Color(hex: "141414")], startPoint: .top, endPoint: .bottom)
+        : LinearGradient(colors: [Color(hex: "F5F5F5")], startPoint: .top, endPoint: .bottom)
+    }
+
+    public static var panelBackground: AnyShapeStyle {
+        AnyShapeStyle(bgCard)
+    }
+
+    public static var controlBackground: AnyShapeStyle {
+        AnyShapeStyle(bgInput)
+    }
+
+    public static var ambientAccent: Color { accent.opacity(dark ? 0.24 : 0.14) }
+    public static var panelShadow: Color { dark ? Color.black.opacity(0.36) : Color.black.opacity(0.08) }
+    public static var liftShadow: Color { dark ? Color.black.opacity(0.48) : Color.black.opacity(0.12) }
+    public static var topHighlight: Color { dark ? Color.white.opacity(0.06) : Color.white.opacity(0.90) }
+    public static var bottomShade: Color { dark ? Color.black.opacity(0.22) : Color.black.opacity(0.06) }
+
     /// 그라데이션 또는 단색 accent 배경 (AnyShapeStyle) — Custom 모드에서만 그라데이션 적용
     public static var accentBackground: AnyShapeStyle {
         if let config = cachedCustomConfig {
@@ -126,7 +146,7 @@ public enum Theme {
         return AnyShapeStyle(accent)
     }
 
-    /// 소프트 그라데이션 배경 (낮은 opacity) — 비 prominent accent 버튼 등에 사용
+    /// 소프트 accent 배경 (낮은 opacity) — 비 prominent accent 버튼 등에 사용
     public static var accentSoftBackground: AnyShapeStyle {
         if let config = cachedCustomConfig {
             if config.useGradient,
@@ -141,7 +161,7 @@ public enum Theme {
                 )
             }
         }
-        return AnyShapeStyle(accentBg(accent))
+        return AnyShapeStyle(accent.opacity(dark ? 0.16 : 0.10))
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -244,8 +264,9 @@ public enum Theme {
     public static var workerColors: [Color] { ColorTokens.workerColors(dark: dark) }
 
     public static var bgGradient: LinearGradient {
-        dark ? LinearGradient(colors: [Color(hex: "000000"), Color(hex: "0a0a0a")], startPoint: .top, endPoint: .bottom)
-             : LinearGradient(colors: [Color(hex: "ffffff"), Color(hex: "fafafa")], startPoint: .top, endPoint: .bottom)
+        dark
+        ? LinearGradient(colors: [Color(hex: "111111"), Color(hex: "161616")], startPoint: .top, endPoint: .bottom)
+        : LinearGradient(colors: [Color(hex: "FAFAFA"), Color(hex: "F0F0F0")], startPoint: .top, endPoint: .bottom)
     }
 }
 

@@ -81,32 +81,134 @@ struct CatalogRootView: View {
             case .contextMenu: return "cursorarrow.and.square.on.square.dashed"
             }
         }
+
+        var accent: Color {
+            switch self {
+            case .colors, .colorPicker: return Theme.cyan
+            case .typography, .codeBlock, .syntax: return Theme.purple
+            case .spacing, .splitPane, .divider: return Theme.orange
+            case .badges, .indicators, .ring, .badgeCount: return Theme.green
+            case .buttons, .commandPalette, .shortcutRecorder: return Theme.accent
+            case .fields, .search, .contextMenu: return Theme.yellow
+            case .cards, .lists, .timeline, .chart: return Theme.orange
+            case .navigation, .segmented, .toggle: return Theme.cyan
+            case .modals, .toasts, .callouts, .tooltip: return Theme.red
+            case .accordion, .avatar, .keyboard, .diff, .skeleton: return Theme.green
+            }
+        }
     }
 
     var body: some View {
         NavigationSplitView {
-            List(CatalogSection.allCases, selection: $selectedSection) { section in
-                Label(section.rawValue, systemImage: section.icon)
+            VStack(spacing: 18) {
+                sidebarHeader
+
+                List(CatalogSection.allCases, selection: $selectedSection) { section in
+                    HStack(spacing: 10) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Theme.bgSurface)
+                                .frame(width: 28, height: 28)
+                            Image(systemName: section.icon)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(Theme.textSecondary)
+                        }
+
+                        Text(section.rawValue)
+                            .font(Theme.mono(10.5, weight: .medium))
+                            .foregroundColor(Theme.textPrimary)
+                    }
+                    .padding(.vertical, 4)
                     .tag(section)
+                    .listRowBackground(Color.clear)
+                }
+                .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
             }
-            .listStyle(.sidebar)
-            .frame(minWidth: 180)
+            .padding(18)
+            .frame(minWidth: 240)
+            .background(Theme.bg)
             .toolbar {
                 ToolbarItem {
-                    Button(action: { settings.isDarkMode.toggle() }) {
-                        Image(systemName: settings.isDarkMode ? "sun.max.fill" : "moon.fill")
-                    }
+                    themeToggleButton
                 }
             }
         } detail: {
             ScrollView {
-                detailContent
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(24)
+                VStack(alignment: .leading, spacing: 28) {
+                    detailHero
+                    detailContent
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(28)
             }
             .background(Theme.bg)
         }
         .background(Theme.bg)
+    }
+
+    private var sidebarHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Doffice")
+                .font(Theme.chrome(9, weight: .bold))
+                .tracking(1.8)
+                .foregroundColor(Theme.textDim)
+            Text("Design System")
+                .font(Theme.mono(20, weight: .bold))
+                .foregroundColor(Theme.textPrimary)
+            Text("\(CatalogSection.allCases.count) components")
+                .font(Theme.mono(10))
+                .foregroundColor(Theme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.cornerXL)
+                .fill(Theme.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.cornerXL)
+                .stroke(Theme.border, lineWidth: 1)
+        )
+    }
+
+    private var detailHero: some View {
+        let section = selectedSection ?? .colors
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("COMPONENT")
+                .font(Theme.chrome(8.5, weight: .bold))
+                .tracking(1.8)
+                .foregroundColor(Theme.textDim)
+            Text(section.rawValue)
+                .font(Theme.mono(24, weight: .bold))
+                .foregroundColor(Theme.textPrimary)
+
+            HStack(spacing: 10) {
+                themeToggleButton
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.cornerXL)
+                .fill(Theme.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.cornerXL)
+                .stroke(Theme.border, lineWidth: 1)
+        )
+    }
+
+    private var themeToggleButton: some View {
+        DSButton(
+            settings.isDarkMode ? "Light" : "Dark",
+            icon: settings.isDarkMode ? "sun.max.fill" : "moon.fill",
+            tone: .neutral,
+            prominent: false,
+            compact: true
+        ) {
+            settings.isDarkMode.toggle()
+        }
     }
 
     @ViewBuilder

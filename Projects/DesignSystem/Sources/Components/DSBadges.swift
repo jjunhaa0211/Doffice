@@ -16,24 +16,19 @@ public struct AppStatusBadge: View {
     }
 
     public var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: compact ? 3 : 5) {
             Image(systemName: symbol)
-                .font(.system(size: compact ? Theme.chromeIconSize(8) : Theme.iconSize(9), weight: .medium))
+                .font(.system(size: compact ? Theme.chromeIconSize(7) : Theme.iconSize(8), weight: .semibold))
             Text(title)
                 .font(compact ? Theme.chrome(8, weight: .medium) : Theme.mono(9, weight: .medium))
                 .lineLimit(1)
+                .truncationMode(.tail)
         }
         .foregroundColor(tint)
-        .padding(.horizontal, compact ? Theme.sp1 + 2 : Theme.sp2)
-        .padding(.vertical, compact ? 2 : 3)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.cornerSmall)
-                .fill(Theme.accentBg(tint))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.cornerSmall)
-                .stroke(Theme.accentBorder(tint), lineWidth: 1)
-        )
+        .padding(.horizontal, compact ? 6 : Theme.sp3)
+        .padding(.vertical, compact ? 3 : 5)
+        .background(Capsule().fill(Theme.accentBg(tint)))
+        .overlay(Capsule().stroke(Theme.accentBorder(tint), lineWidth: 1))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(title))
     }
@@ -69,9 +64,9 @@ public struct AppInlineCode: View {
         Text(text)
             .font(Theme.code(10))
             .foregroundColor(Theme.textPrimary)
-            .padding(.horizontal, Theme.sp1 + 1)
-            .padding(.vertical, 1)
-            .background(RoundedRectangle(cornerRadius: 3).fill(Theme.bgTertiary))
-            .overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.borderSubtle, lineWidth: 1))
+            .padding(.horizontal, Theme.sp2)
+            .padding(.vertical, 3)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgTertiary))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.borderSubtle, lineWidth: 1))
     }
 }

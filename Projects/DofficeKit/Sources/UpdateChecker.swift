@@ -193,6 +193,8 @@ public class UpdateChecker: ObservableObject {
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = self?.extractAndPrepare(zipURL: tempURL)
+            // 다운로드 zip 정리
+            try? FileManager.default.removeItem(at: tempURL)
             DispatchQueue.main.async {
                 guard let self else { return }
                 switch result {
@@ -263,34 +265,76 @@ public class UpdateChecker: ObservableObject {
             return
         }
 
+        // 새 앱 번들이 실제로 존재하는지 확인
+        guard FileManager.default.fileExists(atPath: newAppURL.appendingPathComponent("Contents/MacOS").path) else {
+            state = .failed(message: "다운로드된 앱 번들이 손상되었습니다.")
+            return
+        }
+
         state = .installing
 
-        // 현재 앱 경로
         let currentAppURL = Bundle.main.bundleURL
-
-        // 설치 스크립트: 현재 앱 종료 → 교체 → 재시작
-        // 앱이 종료된 후 실행되어야 하므로 별도 프로세스로 작성
         let pid = ProcessInfo.processInfo.processIdentifier
+        let logFile = FileManager.default.temporaryDirectory.appendingPathComponent("doffice-updater.log").path
+        let updateTempDir = newAppURL.deletingLastPathComponent().path
+
+        // 설치 스크립트: PID 대기 → 백업 → ditto 복사 → 검증 → 실행 → 정리
         let script = """
         #!/bin/zsh
-        # PID 기반 종료 대기 (최대 10초)
-        for i in {1..20}; do
+        set -euo pipefail
+        exec > "\(logFile)" 2>&1
+        echo "[updater] 시작: $(date)"
+        echo "[updater] PID \(pid) 종료 대기..."
+
+        # PID 기반 종료 대기 (최대 15초)
+        for i in {1..30}; do
             kill -0 \(pid) 2>/dev/null || break
             sleep 0.5
         done
-        # 기존 앱 백업 후 교체
-        BACKUP="\(currentAppURL.path).backup"
+        sleep 0.5
+
+        CURRENT="\(currentAppURL.path)"
+        NEW="\(newAppURL.path)"
+        BACKUP="${CURRENT}.backup"
+
+        echo "[updater] 백업 생성: $BACKUP"
         rm -rf "$BACKUP"
-        mv "\(currentAppURL.path)" "$BACKUP" 2>/dev/null
-        cp -R "\(newAppURL.path)" "\(currentAppURL.path)"
-        # xattr 초기화 (quarantine 제거)
-        xattr -cr "\(currentAppURL.path)" 2>/dev/null
-        # 새 앱 실행
-        open "\(currentAppURL.path)"
-        # 백업 정리
+        if ! mv "$CURRENT" "$BACKUP"; then
+            echo "[updater] 백업 실패 — 복원 불필요"
+            # mv 실패 시 기존 앱이 그대로 있으므로 재실행
+            open "$CURRENT"
+            exit 1
+        fi
+
+        echo "[updater] ditto 복사: $NEW → $CURRENT"
+        if ! /usr/bin/ditto "$NEW" "$CURRENT"; then
+            echo "[updater] 복사 실패 — 백업에서 복원"
+            rm -rf "$CURRENT"
+            mv "$BACKUP" "$CURRENT"
+            open "$CURRENT"
+            exit 1
+        fi
+
+        # quarantine 제거
+        /usr/bin/xattr -cr "$CURRENT" 2>/dev/null || true
+
+        # 복사된 앱 번들 검증
+        if [ ! -d "${CURRENT}/Contents/MacOS" ]; then
+            echo "[updater] 앱 번들 검증 실패 — 백업에서 복원"
+            rm -rf "$CURRENT"
+            mv "$BACKUP" "$CURRENT"
+            open "$CURRENT"
+            exit 1
+        fi
+
+        echo "[updater] 새 앱 실행"
+        open "$CURRENT"
+
+        # 정리 (백업 + 임시 다운로드)
         sleep 3
         rm -rf "$BACKUP"
-        rm -rf "\(newAppURL.path.components(separatedBy: "/").dropLast().joined(separator: "/"))"
+        rm -rf "\(updateTempDir)"
+        echo "[updater] 완료: $(date)"
         """
 
         let scriptURL = FileManager.default.temporaryDirectory.appendingPathComponent("doffice-updater.sh")
@@ -657,6 +701,14 @@ public struct UpdateSheet: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accentBackground))
                 }.buttonStyle(.plain).keyboardShortcut(.return)
             }
+
+        case .installing:
+            Button(action: { dismiss() }) {
+                Text(NSLocalizedString("update.close", comment: "")).font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
+                    .padding(.horizontal, 16).padding(.vertical, 8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.4), lineWidth: 1))
+            }.buttonStyle(.plain).keyboardShortcut(.escape)
 
         case .noUpdate:
             Button(action: { dismiss() }) {

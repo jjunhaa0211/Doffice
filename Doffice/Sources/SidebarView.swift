@@ -859,7 +859,8 @@ struct ReportCenterView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(Theme.bg)
+        .background(Theme.bg.opacity(1))
+        .background(.ultraThickMaterial)
         .onAppear {
             if selectedReportPath == nil, let first = reports.first { loadReport(first.path) }
         }
@@ -1051,7 +1052,8 @@ struct ReportCenterView: View {
                 }
             }
         }
-        .background(Theme.bg)
+        .background(Theme.bg.opacity(1))
+        .background(.ultraThickMaterial)
     }
 
     private var emptyPreview: some View {

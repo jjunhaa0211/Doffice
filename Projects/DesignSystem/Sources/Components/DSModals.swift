@@ -22,7 +22,13 @@ public struct DSModalShell<Content: View>: View {
         VStack(spacing: 0) {
             content
         }
-        .background(Theme.bg)
+        .background(Theme.bg.opacity(1))
+        .background(.ultraThickMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Theme.border.opacity(0.5), lineWidth: 1)
+        )
     }
 }
 

@@ -443,7 +443,8 @@ struct UpdateSheet: View {
         }
         .padding(24)
         .frame(width: 440)
-        .background(Theme.bgCard)
+        .background(Theme.bgCard.opacity(1))
+        .background(.ultraThickMaterial)
     }
 
     // MARK: - Header

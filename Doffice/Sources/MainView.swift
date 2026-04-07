@@ -566,9 +566,13 @@ struct MainView: View {
                 }.buttonStyle(.plain).help(NSLocalizedString("main.update.available", comment: ""))
             }
 
-            // Claude 버전
+            // CLI 버전
             if ClaudeInstallChecker.shared.isInstalled {
                 Text("Claude \(ClaudeInstallChecker.shared.version)")
+                    .font(Theme.chrome(8)).foregroundColor(Theme.textMuted)
+            }
+            if ClaudeInstallChecker.shared.geminiInstalled {
+                Text("Gemini \(ClaudeInstallChecker.shared.geminiVersion)")
                     .font(Theme.chrome(8)).foregroundColor(Theme.textMuted)
             }
 
@@ -1246,7 +1250,8 @@ struct BugReportView: View {
         }
         .padding(24)
         .frame(width: 540)
-        .background(Theme.bg)
+        .background(Theme.bg.opacity(1))
+        .background(.ultraThickMaterial)
     }
 
     private func reportSection<Content: View>(

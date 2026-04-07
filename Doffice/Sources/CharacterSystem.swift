@@ -1076,7 +1076,8 @@ struct CharacterCollectionView: View {
                 .padding(.horizontal, 18).padding(.vertical, 16)
             }
         }
-        .background(Theme.bg)
+        .background(Theme.bg.opacity(1))
+        .background(.ultraThickMaterial)
         .frame(minWidth: 920, minHeight: 720)
     }
 

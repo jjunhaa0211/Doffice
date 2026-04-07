@@ -1332,7 +1332,8 @@ struct AchievementCollectionView: View {
                 .padding(.horizontal, 24).padding(.vertical, 16)
             }
         }
-        .background(Theme.bg)
+        .background(Theme.bg.opacity(1))
+        .background(.ultraThickMaterial)
         .overlay(detailOverlay)
     }
 

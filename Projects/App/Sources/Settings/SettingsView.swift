@@ -23,6 +23,7 @@ struct SettingsView: View {
     @State var clearAllMode = false
     @State var showTokenResetConfirm = false
     @State var showTemplateResetConfirm = false
+    @State var newCustomJobName: String = ""
     @State var showLanguageRestartAlert = false
     @State var pendingLanguage: String?
     @State var showThemeRestartAlert = false
@@ -104,36 +105,65 @@ struct SettingsView: View {
             )
             .keyboardShortcut(.escape)
 
-            // 탭 바
-            ScrollView(.horizontal, showsIndicators: false) {
-                DSTabBar(tabs: settingsTabs, selectedIndex: $selectedSettingsTab)
-            }
-            .padding(.horizontal, Theme.sp4)
-            .padding(.vertical, Theme.sp2)
-
             Rectangle().fill(Theme.border).frame(height: 1)
 
-            // 탭 내용
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: Theme.sp4) {
-                    switch selectedSettingsTab {
-                    case 0: generalTab
-                    case 1: displayTab
-                    case 2: officeTab
-                    case 3: tokenTab
-                    case 4: dataTab
-                    case 5: templateTab
-                    case 6: pluginTab
-                    case 7: supportTab
-                    case 8: securityTab
-                    case 9: ShortcutsSettingsTab()
-                    default: generalTab
+            HStack(spacing: 0) {
+                // 세로 사이드바
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 2) {
+                        ForEach(Array(settingsTabs.enumerated()), id: \.offset) { index, tab in
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.12)) { selectedSettingsTab = index }
+                            }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: tab.0)
+                                        .font(.system(size: Theme.iconSize(11), weight: .medium))
+                                        .foregroundColor(index == selectedSettingsTab ? Theme.accent : Theme.textDim)
+                                        .frame(width: 18)
+                                    Text(tab.1)
+                                        .font(Theme.mono(10, weight: index == selectedSettingsTab ? .semibold : .regular))
+                                        .foregroundColor(index == selectedSettingsTab ? Theme.textPrimary : Theme.textSecondary)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(
+                                    RoundedRectangle(cornerRadius: Theme.cornerMedium)
+                                        .fill(index == selectedSettingsTab ? Theme.bgSurface : .clear)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
+                    .padding(10)
                 }
-                .padding(Theme.sp5)
+                .frame(width: 170)
+                .background(Theme.bgCard)
+
+                Rectangle().fill(Theme.border).frame(width: 1)
+
+                // 탭 내용
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: Theme.sp4) {
+                        switch selectedSettingsTab {
+                        case 0: generalTab
+                        case 1: displayTab
+                        case 2: officeTab
+                        case 3: tokenTab
+                        case 4: dataTab
+                        case 5: templateTab
+                        case 6: pluginTab
+                        case 7: supportTab
+                        case 8: securityTab
+                        case 9: ShortcutsSettingsTab()
+                        default: generalTab
+                        }
+                    }
+                    .padding(Theme.sp5)
+                }
             }
         }
-        .frame(width: 580, height: 680)
+        .frame(width: 720, height: 600)
         .background(Theme.bg)
         .onAppear {
             settings.ensureCoffeeSupportPreset()

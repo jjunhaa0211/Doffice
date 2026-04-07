@@ -1,6 +1,22 @@
 import SwiftUI
 
 // ═══════════════════════════════════════════════════════
+// MARK: - Custom Job (사용자 정의 직업)
+// ═══════════════════════════════════════════════════════
+
+public struct CustomJob: Codable, Identifiable, Equatable {
+    public var id: String = UUID().uuidString
+    public var name: String
+    public var icon: String = "person.fill"
+    public var promptTemplate: String = ""
+    public var statusMarker: String = ""
+
+    public init(id: String = UUID().uuidString, name: String, icon: String = "person.fill", promptTemplate: String = "", statusMarker: String = "") {
+        self.id = id; self.name = name; self.icon = icon; self.promptTemplate = promptTemplate; self.statusMarker = statusMarker
+    }
+}
+
+// ═══════════════════════════════════════════════════════
 // MARK: - App Settings (전역 설정)
 // ═══════════════════════════════════════════════════════
 
@@ -90,6 +106,114 @@ public class AppSettings: ObservableObject {
     }
 
     // MARK: - Automation
+
+    // ── 파이프라인 설정 ──
+
+    @AppStorage("disabledPromptRoles") private var _disabledPromptRoles: String = "[]" {
+        didSet { notifyIfNeeded() }
+    }
+
+    public var disabledPromptRoles: Set<String> {
+        get {
+            guard let data = _disabledPromptRoles.data(using: .utf8),
+                  let arr = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+            return Set(arr)
+        }
+        set {
+            let arr = Array(newValue).sorted()
+            if let data = try? JSONEncoder().encode(arr),
+               let str = String(data: data, encoding: .utf8) {
+                _disabledPromptRoles = str
+            }
+        }
+    }
+
+    public func isPromptEnabled(for role: String) -> Bool {
+        !disabledPromptRoles.contains(role)
+    }
+
+    public func setPromptEnabled(_ enabled: Bool, for role: String) {
+        var roles = disabledPromptRoles
+        if enabled { roles.remove(role) } else { roles.insert(role) }
+        disabledPromptRoles = roles
+    }
+
+    @AppStorage("pipelineOrder") private var _pipelineOrder: String = "[]" {
+        didSet { notifyIfNeeded() }
+    }
+
+    public static let defaultPipelineOrder = ["planner", "designer", "developerExecution", "reviewer", "qa", "reporter", "sre"]
+
+    public var pipelineOrder: [String] {
+        get {
+            guard let data = _pipelineOrder.data(using: .utf8),
+                  let arr = try? JSONDecoder().decode([String].self, from: data),
+                  !arr.isEmpty else { return Self.defaultPipelineOrder }
+            return arr
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let str = String(data: data, encoding: .utf8) {
+                _pipelineOrder = str
+            }
+        }
+    }
+
+    public func resetPipelineOrder() { _pipelineOrder = "[]" }
+
+    @AppStorage("customJobs") private var _customJobs: String = "[]" {
+        didSet { notifyIfNeeded() }
+    }
+
+    public var customJobs: [CustomJob] {
+        get {
+            guard let data = _customJobs.data(using: .utf8),
+                  let arr = try? JSONDecoder().decode([CustomJob].self, from: data) else { return [] }
+            return arr
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let str = String(data: data, encoding: .utf8) {
+                _customJobs = str
+            }
+        }
+    }
+
+    public func addCustomJob(_ job: CustomJob) {
+        var jobs = customJobs; jobs.append(job); customJobs = jobs
+    }
+
+    public func removeCustomJob(id: String) {
+        var jobs = customJobs; jobs.removeAll { $0.id == id }; customJobs = jobs
+    }
+
+    @AppStorage("deletedDefaultJobs") private var _deletedDefaultJobs: String = "[]" {
+        didSet { notifyIfNeeded() }
+    }
+
+    public var deletedDefaultJobs: Set<String> {
+        get {
+            guard let data = _deletedDefaultJobs.data(using: .utf8),
+                  let arr = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+            return Set(arr)
+        }
+        set {
+            let arr = Array(newValue).sorted()
+            if let data = try? JSONEncoder().encode(arr),
+               let str = String(data: data, encoding: .utf8) {
+                _deletedDefaultJobs = str
+            }
+        }
+    }
+
+    public func deleteDefaultJob(_ rawValue: String) {
+        var deleted = deletedDefaultJobs; deleted.insert(rawValue); deletedDefaultJobs = deleted
+        var order = pipelineOrder; order.removeAll { $0 == rawValue }; pipelineOrder = order
+    }
+
+    public func restoreDefaultJob(_ rawValue: String) {
+        var deleted = deletedDefaultJobs; deleted.remove(rawValue); deletedDefaultJobs = deleted
+    }
 
     // ── 자동화/성능 보호 설정 ──
     @AppStorage("reviewerMaxPasses") public var reviewerMaxPasses: Int = 2 {

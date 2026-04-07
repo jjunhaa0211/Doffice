@@ -1189,6 +1189,18 @@
 "settings.template.pinned" = "Pinned Automation Status Lines";
 "settings.template.pinned.desc" = "The lines below are automatically appended by the app to keep workflows running. Feel free to customize the main template body.";
 
+/* Settings - Pipeline Management */
+"settings.template.prompt.toggle" = "Auto Prompt Injection";
+"settings.template.prompt.toggle.desc" = "Toggle auto prompt injection per role";
+"settings.template.pipeline" = "Pipeline Order";
+"settings.template.pipeline.desc" = "Reorder with arrows or remove steps";
+"settings.template.pipeline.reset" = "Reset to Default";
+"settings.template.custom.jobs" = "Custom Jobs";
+"settings.template.custom.jobs.desc" = "Add or remove custom roles";
+"settings.template.custom.jobs.empty" = "No custom jobs registered";
+"settings.template.custom.jobs.name" = "Job name";
+"settings.template.custom.jobs.add" = "Add";
+
 /* Settings - Security */
 "settings.security.session" = "Session Protection";
 "settings.security.lock.off" = "Lock Not Set";

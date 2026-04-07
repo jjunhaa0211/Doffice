@@ -1189,6 +1189,18 @@
 "settings.template.pinned" = "固定自動化ステータス行";
 "settings.template.pinned.desc" = "以下の行はワークフローが途切れないようアプリがバックグラウンドで自動的に追加します。本文テンプレートは自由に変更できます。";
 
+/* Settings - Pipeline Management */
+"settings.template.prompt.toggle" = "プロンプト自動注入";
+"settings.template.prompt.toggle.desc" = "ロールごとにプロンプト自動注入のオン/オフ";
+"settings.template.pipeline" = "パイプライン順序";
+"settings.template.pipeline.desc" = "矢印で順序を変更またはステップを削除";
+"settings.template.pipeline.reset" = "デフォルトに戻す";
+"settings.template.custom.jobs" = "カスタムジョブ";
+"settings.template.custom.jobs.desc" = "カスタムロールの追加と削除";
+"settings.template.custom.jobs.empty" = "登録されたカスタムジョブはありません";
+"settings.template.custom.jobs.name" = "ジョブ名";
+"settings.template.custom.jobs.add" = "追加";
+
 /* Settings - Security */
 "settings.security.session" = "セッション保護";
 "settings.security.lock.off" = "ロック未設定";

@@ -104,6 +104,172 @@ extension SettingsView {
                     }
                 }
             }
+
+            // ── 프롬프트 자동 주입 토글 ──
+            settingsSection(title: NSLocalizedString("settings.template.prompt.toggle", comment: ""), subtitle: NSLocalizedString("settings.template.prompt.toggle.desc", comment: "")) {
+                VStack(spacing: 6) {
+                    ForEach(AutomationTemplateKind.allCases) { kind in
+                        HStack(spacing: 8) {
+                            Image(systemName: kind.icon)
+                                .font(.system(size: Theme.iconSize(10), weight: .medium))
+                                .foregroundColor(settings.isPromptEnabled(for: kind.rawValue) ? Theme.accent : Theme.textDim)
+                                .frame(width: 16)
+                            Text(kind.displayName)
+                                .font(Theme.mono(10, weight: .medium))
+                                .foregroundColor(settings.isPromptEnabled(for: kind.rawValue) ? Theme.textPrimary : Theme.textDim)
+                            Spacer()
+                            Toggle("", isOn: Binding(
+                                get: { settings.isPromptEnabled(for: kind.rawValue) },
+                                set: { settings.setPromptEnabled($0, for: kind.rawValue) }
+                            ))
+                            .toggleStyle(.switch)
+                            .controlSize(.mini)
+                        }
+                        .padding(.vertical, 3)
+                    }
+                }
+            }
+
+            // ── 파이프라인 순서 변경 ──
+            settingsSection(title: NSLocalizedString("settings.template.pipeline", comment: ""), subtitle: NSLocalizedString("settings.template.pipeline.desc", comment: "")) {
+                VStack(spacing: 8) {
+                    ForEach(Array(settings.pipelineOrder.enumerated()), id: \.element) { index, roleKey in
+                        HStack(spacing: 8) {
+                            Text("\(index + 1)")
+                                .font(Theme.mono(9, weight: .bold))
+                                .foregroundColor(Theme.textDim)
+                                .frame(width: 16)
+                            if let kind = AutomationTemplateKind(rawValue: roleKey) {
+                                Image(systemName: kind.icon)
+                                    .font(.system(size: Theme.iconSize(10)))
+                                    .foregroundColor(Theme.accent)
+                                    .frame(width: 16)
+                                Text(kind.displayName)
+                                    .font(Theme.mono(10, weight: .medium))
+                                    .foregroundColor(Theme.textPrimary)
+                            } else {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: Theme.iconSize(10)))
+                                    .foregroundColor(Theme.purple)
+                                    .frame(width: 16)
+                                Text(roleKey)
+                                    .font(Theme.mono(10, weight: .medium))
+                                    .foregroundColor(Theme.textPrimary)
+                            }
+                            Spacer()
+                            if index > 0 {
+                                Button(action: {
+                                    var order = settings.pipelineOrder
+                                    order.swapAt(index, index - 1)
+                                    settings.pipelineOrder = order
+                                }) {
+                                    Image(systemName: "chevron.up")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(Theme.textSecondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            if index < settings.pipelineOrder.count - 1 {
+                                Button(action: {
+                                    var order = settings.pipelineOrder
+                                    order.swapAt(index, index + 1)
+                                    settings.pipelineOrder = order
+                                }) {
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(Theme.textSecondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            Button(action: {
+                                var order = settings.pipelineOrder
+                                order.remove(at: index)
+                                settings.pipelineOrder = order
+                            }) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(Theme.red)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface))
+                    }
+
+                    Button(action: { settings.resetPipelineOrder() }) {
+                        Text(NSLocalizedString("settings.template.pipeline.reset", comment: ""))
+                            .font(Theme.mono(9, weight: .bold))
+                            .appButtonSurface(tone: .orange, compact: true)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // ── 커스텀 직업 관리 ──
+            settingsSection(title: NSLocalizedString("settings.template.custom.jobs", comment: ""), subtitle: NSLocalizedString("settings.template.custom.jobs.desc", comment: "")) {
+                VStack(spacing: 8) {
+                    ForEach(settings.customJobs) { job in
+                        HStack(spacing: 8) {
+                            Image(systemName: job.icon)
+                                .font(.system(size: Theme.iconSize(10)))
+                                .foregroundColor(Theme.purple)
+                                .frame(width: 16)
+                            Text(job.name)
+                                .font(Theme.mono(10, weight: .medium))
+                                .foregroundColor(Theme.textPrimary)
+                            Spacer()
+                            Button(action: {
+                                settings.removeCustomJob(id: job.id)
+                                var order = settings.pipelineOrder
+                                order.removeAll { $0 == "custom_\(job.id)" }
+                                settings.pipelineOrder = order
+                            }) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(Theme.red)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface))
+                    }
+
+                    if settings.customJobs.isEmpty {
+                        Text(NSLocalizedString("settings.template.custom.jobs.empty", comment: ""))
+                            .font(Theme.mono(9))
+                            .foregroundColor(Theme.textDim)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+
+                    HStack(spacing: 8) {
+                        TextField(NSLocalizedString("settings.template.custom.jobs.name", comment: ""), text: $newCustomJobName)
+                            .textFieldStyle(.plain)
+                            .font(Theme.mono(10))
+                            .padding(6)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.border, lineWidth: 1))
+
+                        Button(action: {
+                            let trimmed = newCustomJobName.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !trimmed.isEmpty else { return }
+                            let job = CustomJob(name: trimmed)
+                            settings.addCustomJob(job)
+                            var order = settings.pipelineOrder
+                            order.append("custom_\(job.id)")
+                            settings.pipelineOrder = order
+                            newCustomJobName = ""
+                        }) {
+                            Text(NSLocalizedString("settings.template.custom.jobs.add", comment: ""))
+                                .font(Theme.mono(9, weight: .bold))
+                                .appButtonSurface(tone: .accent, compact: true)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
     }
 

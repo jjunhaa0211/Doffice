@@ -40,6 +40,9 @@ struct CatalogRootView: View {
         case chart = "Chart"
         case commandPalette = "Cmd Palette"
         case contextMenu = "Context Menu"
+        case modifiers = "Modifiers"
+        case extensions = "Extensions"
+        case notifications = "Notifications"
 
         var id: String { rawValue }
 
@@ -79,6 +82,9 @@ struct CatalogRootView: View {
             case .chart: return "chart.bar.fill"
             case .commandPalette: return "command"
             case .contextMenu: return "cursorarrow.and.square.on.square.dashed"
+            case .modifiers: return "wand.and.stars"
+            case .extensions: return "puzzlepiece.fill"
+            case .notifications: return "bell.and.waves.left.and.right"
             }
         }
 
@@ -94,6 +100,7 @@ struct CatalogRootView: View {
             case .navigation, .segmented, .toggle: return Theme.cyan
             case .modals, .toasts, .callouts, .tooltip: return Theme.red
             case .accordion, .avatar, .keyboard, .diff, .skeleton: return Theme.green
+            case .modifiers, .extensions, .notifications: return Theme.purple
             }
         }
     }
@@ -248,6 +255,9 @@ struct CatalogRootView: View {
         case .chart: ChartCatalog()
         case .commandPalette: CommandPaletteCatalog()
         case .contextMenu: ContextMenuCatalog()
+        case .modifiers: ModifiersCatalog()
+        case .extensions: ExtensionsCatalog()
+        case .notifications: NotificationsCatalog()
         case .none:
             Text("Select a section")
                 .font(Theme.mono(14))

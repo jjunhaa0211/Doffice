@@ -58,6 +58,46 @@ struct ButtonsCatalog: View {
                 }
             }
 
+            catalogSection("DSIconButton — Icon Only") {
+                HStack(spacing: 12) {
+                    VStack(spacing: 4) {
+                        DSIconButton("xmark", tint: Theme.textDim) {}
+                        Text("Close").font(Theme.code(8)).foregroundColor(Theme.textDim)
+                    }
+                    VStack(spacing: 4) {
+                        DSIconButton("gear", tint: Theme.textSecondary) {}
+                        Text("Settings").font(Theme.code(8)).foregroundColor(Theme.textDim)
+                    }
+                    VStack(spacing: 4) {
+                        DSIconButton("arrow.clockwise", tint: Theme.accent) {}
+                        Text("Refresh").font(Theme.code(8)).foregroundColor(Theme.textDim)
+                    }
+                    VStack(spacing: 4) {
+                        DSIconButton("trash", tint: Theme.red) {}
+                        Text("Delete").font(Theme.code(8)).foregroundColor(Theme.textDim)
+                    }
+                    VStack(spacing: 4) {
+                        DSIconButton("plus", size: 12, tint: Theme.green) {}
+                        Text("Large").font(Theme.code(8)).foregroundColor(Theme.textDim)
+                    }
+                }
+            }
+
+            catalogSection("DSButtonGroup — Grouped Actions") {
+                DSButtonGroup(spacing: 8) {
+                    DSButton("Cancel", tone: .neutral, compact: true) { clickCount += 1; lastClicked = "Cancel" }
+                    DSButton("Save Draft", tone: .accent, compact: true) { clickCount += 1; lastClicked = "Save Draft" }
+                    DSButton("Publish", tone: .green, prominent: true, compact: true) { clickCount += 1; lastClicked = "Publish" }
+                }
+
+                DSButtonGroup(spacing: 12) {
+                    DSIconButton("bold", tint: Theme.textSecondary) {}
+                    DSIconButton("italic", tint: Theme.textSecondary) {}
+                    DSIconButton("underline", tint: Theme.textSecondary) {}
+                    DSIconButton("strikethrough", tint: Theme.textSecondary) {}
+                }
+            }
+
             catalogSection("Disabled State") {
                 HStack(spacing: 12) {
                     Button(action: {}) {

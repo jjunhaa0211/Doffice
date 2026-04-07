@@ -12,8 +12,8 @@
 <p align="center">
   <a href="https://github.com/jjunhaa0211/Doffice/releases/latest"><img src="https://img.shields.io/github/v/release/jjunhaa0211/Doffice?style=flat-square&color=blue" alt="Release"></a>
   <img src="https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey?style=flat-square" alt="Platform">
-  <img src="https://img.shields.io/badge/swift-5.0-orange?style=flat-square" alt="Swift">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>
+  <img src="https://img.shields.io/badge/swift-6.1-orange?style=flat-square" alt="Swift">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Custom-red?style=flat-square" alt="License"></a>
 </p>
 
 ---

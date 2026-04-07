@@ -31,14 +31,56 @@ jobs:
       - name: Generate Project
         run: mise exec -- tuist generate --no-open || true
 
-      - name: Smoke Test Pipeline
+      - name: Source Sync Check (Projects/ ↔ Doffice/)
         run: |
-          chmod +x ./Scripts/smoke-test.sh
-          APP_DERIVED_DATA_PATH="$PWD/build-app" \
-          DESIGNSYSTEM_DERIVED_DATA_PATH="$PWD/build-designsystem" \
-          DOFFICEKIT_DERIVED_DATA_PATH="$PWD/build-dofficekit" \
-          LEGACY_DERIVED_DATA_PATH="$PWD/build-legacy" \
-          ./Scripts/smoke-test.sh
+          chmod +x ./Scripts/sync-check.sh
+          ./Scripts/sync-check.sh
+
+      - name: DesignSystem Tests
+        run: |
+          xcodebuild test \
+            -workspace Doffice.xcworkspace \
+            -scheme DesignSystem \
+            -destination 'platform=macOS' \
+            -configuration Debug \
+            -derivedDataPath "$PWD/build-designsystem"
+
+      - name: DofficeKit Tests
+        run: |
+          xcodebuild test \
+            -workspace Doffice.xcworkspace \
+            -scheme DofficeKit \
+            -destination 'platform=macOS' \
+            -configuration Debug \
+            -derivedDataPath "$PWD/build-dofficekit"
+
+      - name: Legacy Doffice Tests
+        run: |
+          xcodebuild test \
+            -project Doffice/Doffice.xcodeproj \
+            -scheme Doffice \
+            -destination 'platform=macOS' \
+            -configuration Debug \
+            -derivedDataPath "$PWD/build-legacy"
+
+      - name: Release Build
+        run: |
+          xcodebuild build \
+            -workspace Doffice.xcworkspace \
+            -scheme Doffice \
+            -destination 'platform=macOS' \
+            -configuration Release \
+            ONLY_ACTIVE_ARCH=NO \
+            -derivedDataPath "$PWD/build-app"
+
+      - name: App Launch Smoke Test
+        run: |
+          APP_BINARY="$PWD/build-app/Build/Products/Release/Doffice.app/Contents/MacOS/Doffice"
+          if [[ ! -x "$APP_BINARY" ]]; then
+            echo "Missing app binary at $APP_BINARY" >&2
+            exit 1
+          fi
+          DOFFICE_SMOKE_TEST=1 "$APP_BINARY" --smoke-test --smoke-timeout=25
 
       - name: Package
         if: startsWith(github.ref, 'refs/tags/v')

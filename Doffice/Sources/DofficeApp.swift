@@ -109,9 +109,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ClaudeInstallChecker.shared.check()
             DispatchQueue.main.async {
                 if ClaudeInstallChecker.shared.isInstalled {
-                    print("[도피스] Claude Code \(ClaudeInstallChecker.shared.version) found at \(ClaudeInstallChecker.shared.path)")
+                    print("[도피스] Claude Code \(ClaudeInstallChecker.shared.version) (\(ClaudeInstallChecker.shared.path.components(separatedBy: "/").last ?? "Claude Code")) found at \(ClaudeInstallChecker.shared.path)")
                 } else {
                     print("[도피스] ⚠️ Claude Code not installed")
+                }
+                if ClaudeInstallChecker.shared.geminiInstalled {
+                    print("[도피스] Gemini CLI \(ClaudeInstallChecker.shared.geminiVersion) found at \(ClaudeInstallChecker.shared.geminiPath)")
                 }
             }
         }

@@ -318,6 +318,9 @@ class ClaudeInstallChecker {
     private var _version = ""
     private var _path = ""
     private var _errorInfo = ""
+    private var _geminiInstalled = false
+    private var _geminiVersion = ""
+    private var _geminiPath = ""
     private var lastCheckedAt: Date?
     private let cacheTTL: TimeInterval = 10
 
@@ -325,6 +328,9 @@ class ClaudeInstallChecker {
     var version: String { lock.lock(); defer { lock.unlock() }; return _version }
     var path: String { lock.lock(); defer { lock.unlock() }; return _path }
     var errorInfo: String { lock.lock(); defer { lock.unlock() }; return _errorInfo }
+    var geminiInstalled: Bool { lock.lock(); defer { lock.unlock() }; return _geminiInstalled }
+    var geminiVersion: String { lock.lock(); defer { lock.unlock() }; return _geminiVersion }
+    var geminiPath: String { lock.lock(); defer { lock.unlock() }; return _geminiPath }
 
     func check(force: Bool = false) {
         lock.lock()
@@ -338,6 +344,14 @@ class ClaudeInstallChecker {
 
         lastCheckedAt = Date()
 
+        // ── Claude CLI 감지 ──
+        checkClaude()
+
+        // ── Gemini CLI 감지 ──
+        checkGemini()
+    }
+
+    private func checkClaude() {
         // 1) Try `which claude` with our enriched PATH
         if let p = TerminalTab.shellSync("which claude 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines), !p.isEmpty {
             _isInstalled = true; _path = p; _errorInfo = ""
@@ -375,6 +389,39 @@ class ClaudeInstallChecker {
         _version = ""
         _path = ""
         _errorInfo = "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"
+    }
+
+    private func checkGemini() {
+        let home = NSHomeDirectory()
+        let geminiPaths = [
+            "/opt/homebrew/bin/gemini",
+            "/usr/local/bin/gemini",
+            home + "/.npm-global/bin/gemini",
+        ]
+        let allPATHDirs = TerminalTab.buildFullPATH().split(separator: ":").map(String.init)
+        let allCandidates = geminiPaths + allPATHDirs.map { $0 + "/gemini" }
+
+        for candidate in allCandidates {
+            if FileManager.default.isExecutableFile(atPath: candidate) {
+                _geminiInstalled = true
+                _geminiPath = candidate
+                _geminiVersion = TerminalTab.shellSync("\"\(candidate)\" --version 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return
+            }
+        }
+
+        // which로도 시도
+        if let p = TerminalTab.shellSync("which gemini 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines), !p.isEmpty,
+           FileManager.default.isExecutableFile(atPath: p) {
+            _geminiInstalled = true
+            _geminiPath = p
+            _geminiVersion = TerminalTab.shellSync("\"\(p)\" --version 2>/dev/null")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return
+        }
+
+        _geminiInstalled = false
+        _geminiVersion = ""
+        _geminiPath = ""
     }
 }
 

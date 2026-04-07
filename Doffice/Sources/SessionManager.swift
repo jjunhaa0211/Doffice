@@ -406,9 +406,9 @@ class SessionManager: ObservableObject {
         var results: [DetectedSession] = []
         var seenPaths = Set<String>()
 
-        // Claude Code 세션만 감지 (진짜 터미널에 붙어있는 것만)
-        let claudeSessions = findClaudeCodeSessions()
-        for session in claudeSessions {
+        // Claude Code + Gemini CLI 세션 감지
+        let allSessions = findClaudeCodeSessions() + findGeminiCLISessions()
+        for session in allSessions {
             if !seenPaths.contains(session.path) {
                 seenPaths.insert(session.path)
                 results.append(session)
@@ -441,6 +441,63 @@ class SessionManager: ObservableObject {
         }
 
         return results
+    }
+
+    private func findGeminiCLISessions() -> [DetectedSession] {
+        var results: [DetectedSession] = []
+        let pids = findGeminiPidsNative()
+
+        for pid in pids {
+            if let projectPath = getClaudeProjectPath(pid: pid) {
+                let projectName = getProjectName(path: projectPath)
+                let branch = getBranch(path: projectPath)
+                results.append(DetectedSession(
+                    pid: pid,
+                    path: projectPath,
+                    projectName: projectName,
+                    branch: branch,
+                    isClaude: false,
+                    parentApp: "Gemini CLI"
+                ))
+            }
+        }
+        return results
+    }
+
+    private func findGeminiPidsNative() -> [Int] {
+        let bufferSize = proc_listallpids(nil, 0)
+        guard bufferSize > 0 else { return [] }
+
+        var pids = [Int32](repeating: 0, count: Int(bufferSize))
+        let actualSize = proc_listallpids(&pids, Int32(MemoryLayout<Int32>.size * pids.count))
+        guard actualSize > 0 else { return [] }
+
+        var geminiPids: [Int] = []
+        let count = Int(actualSize) / MemoryLayout<Int32>.size
+
+        for i in 0..<count {
+            let pid = pids[i]
+            guard pid > 0 else { continue }
+
+            var pathBuf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            let pathLen = proc_pidpath(pid, &pathBuf, UInt32(MAXPATHLEN))
+            guard pathLen > 0 else { continue }
+
+            let execPath = String(cString: pathBuf)
+            let lower = execPath.lowercased()
+
+            // gemini 실행파일인지 확인
+            guard lower.hasSuffix("/gemini") || lower.contains("/gemini-") || lower.contains("/@google") else { continue }
+
+            // 자체 spawn 프로세스 제외
+            var bsdInfo = proc_bsdinfo()
+            let infoSize = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &bsdInfo, Int32(MemoryLayout<proc_bsdinfo>.size))
+            if infoSize > 0 && bsdInfo.pbi_ppid == UInt32(ProcessInfo.processInfo.processIdentifier) { continue }
+
+            geminiPids.append(Int(pid))
+        }
+
+        return geminiPids
     }
 
     /// 네이티브 API로 claude 프로세스 PID 찾기

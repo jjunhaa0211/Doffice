@@ -2,6 +2,14 @@
 
 All notable changes to Doffice are documented here.
 
+## [0.0.51] - 2026-04-08
+
+### Fixed
+- Plugin registry install: manifest-based download now fetches all related files
+- Character hiring: raise max from 12 to 30, show achievement requirement notice
+- Auto-update: launch binary directly instead of through LaunchServices
+- /usage command: fix infinite "조회 중" hang, faster PTY startup detection
+
 ## [0.0.50] - 2026-04-08
 
 ### Added

@@ -1,0 +1,54 @@
+name: Bug Report
+description: Report a bug in Doffice
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened?
+      placeholder: Describe the bug clearly
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Open Doffice
+        2. Click '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Doffice Version
+      placeholder: "0.0.49"
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS Version
+      placeholder: "15.x (Sequoia) / 14.x (Sonoma)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Crash Logs / Screenshots
+      description: Attach any relevant logs from ~/Library/Logs/Doffice/ or screenshots

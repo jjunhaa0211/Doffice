@@ -9,7 +9,7 @@ cask "doffice" do
 
   auto_updates true
 
-  app "DofficeApp.app"
+  app "Doffice.app"
 
   zap trash: [
     "~/Library/Preferences/com.doffice.app.plist",

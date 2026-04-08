@@ -603,15 +603,14 @@ struct EventStreamView: View {
             tab.appendBlock(.status(message: text))
         },
         SlashCommand("usage", NSLocalizedString("slash.cmd.usage", comment: ""), category: NSLocalizedString("slash.category.display", comment: "")) { tab, _, _ in
-            tab.appendBlock(.status(message: NSLocalizedString("slash.status.usage.checking", comment: "")))
+            let checkingBlock = tab.appendBlock(.status(message: NSLocalizedString("slash.status.usage.checking", comment: "")))
             DispatchQueue.global(qos: .userInitiated).async { [weak tab] in
                 let result = ClaudeUsageFetcher.fetch()
                 DispatchQueue.main.async {
                     guard let tab = tab else { return }
-                    // 마지막 "조회 중" 블록 제거
-                    if let lastIdx = tab.blocks.indices.last,
-                       tab.blocks[lastIdx].content.contains(NSLocalizedString("slash.checking", comment: "")) {
-                        tab.blocks.remove(at: lastIdx)
+                    // "조회 중" 블록 제거
+                    if let idx = tab.blocks.firstIndex(where: { $0.id == checkingBlock.id }) {
+                        tab.blocks.remove(at: idx)
                     }
                     tab.appendBlock(.status(message: result))
                 }

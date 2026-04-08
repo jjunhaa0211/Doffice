@@ -2853,45 +2853,55 @@ enum ClaudeUsageFetcher {
             close(masterFD)
         }
 
-        // 시작 대기
-        Thread.sleep(forTimeInterval: 5.0)
-        guard drainFD(masterFD) else {
-            return "❌ Claude 출력 읽기 설정 실패"
+        // 시작 대기 — Claude CLI 프롬프트가 나올 때까지 (최대 8초)
+        var startupData = Data()
+        let bootStart = Date()
+        while Date().timeIntervalSince(bootStart) < 8.0 {
+            Thread.sleep(forTimeInterval: 0.3)
+            var buf = [UInt8](repeating: 0, count: 4096)
+            _ = withTemporarilyNonBlocking(masterFD, work: {
+                while true {
+                    let n = Darwin.read(masterFD, &buf, buf.count)
+                    if n <= 0 { break }
+                    startupData.append(buf, count: n)
+                }
+            })
+            let partial = String(data: startupData, encoding: .utf8) ?? ""
+            if partial.contains(">") || partial.contains("❯") || partial.contains("claude") { break }
         }
 
-        // /usage 입력 (Tab으로 자동완성 확정)
+        // /usage 입력
         writeSlow(masterFD, "/usage")
-        Thread.sleep(forTimeInterval: 0.3)
+        Thread.sleep(forTimeInterval: 0.2)
         _ = Darwin.write(masterFD, "\r", 1)  // Enter
 
-        // 데이터 수집 — 최대 15초, "Esc to cancel" 감지 시 조기 종료
+        // 데이터 수집 — 최대 10초, 결과 감지 시 조기 종료
         var allData = Data()
         let startTime = Date()
-        while Date().timeIntervalSince(startTime) < 15.0 {
-            Thread.sleep(forTimeInterval: 0.5)
+        while Date().timeIntervalSince(startTime) < 10.0 {
+            Thread.sleep(forTimeInterval: 0.3)
             var buf = [UInt8](repeating: 0, count: 8192)
-            guard withTemporarilyNonBlocking(masterFD, work: {
+            _ = withTemporarilyNonBlocking(masterFD, work: {
                 while true {
                     let n = Darwin.read(masterFD, &buf, buf.count)
                     if n <= 0 { break }
                     allData.append(buf, count: n)
                 }
-            }) else {
-                return "❌ Claude 출력 읽기 설정 실패"
-            }
+            })
 
             let partial = String(data: allData, encoding: .utf8) ?? ""
+            if partial.contains("% used") { break }
             if partial.contains("Esc") && partial.contains("cancel") { break }
-            if partial.contains("% used") && partial.contains("Reset") { break }
+            if partial.contains("usage") && partial.contains("Reset") { break }
         }
 
         // 정리
         _ = Darwin.write(masterFD, "\u{1b}", 1) // Esc
-        Thread.sleep(forTimeInterval: 0.5)
-        _ = Darwin.write(masterFD, "\u{03}", 1) // Ctrl+C
         Thread.sleep(forTimeInterval: 0.3)
+        _ = Darwin.write(masterFD, "\u{03}", 1) // Ctrl+C
+        Thread.sleep(forTimeInterval: 0.2)
         writeSlow(masterFD, "/exit\r")
-        Thread.sleep(forTimeInterval: 0.5)
+        Thread.sleep(forTimeInterval: 0.3)
 
         let raw = String(data: allData, encoding: .utf8) ?? ""
         return parseUsageOutput(raw)

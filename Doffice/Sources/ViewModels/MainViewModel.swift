@@ -2,6 +2,16 @@ import SwiftUI
 import Combine
 import AppKit
 
+#if !canImport(DofficeKit)
+struct CodexInstallChecker {
+    static let shared = CodexInstallChecker()
+    var isInstalled: Bool { false }
+    var version: String { "" }
+    var path: String { "" }
+    func check() {}
+}
+#endif
+
 
 
 // MARK: - MainViewModel

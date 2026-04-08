@@ -475,6 +475,122 @@ public class PluginHost: ObservableObject {
 // ═══════════════════════════════════════════════════════
 
 /// 원격 레지스트리에 등록된 플러그인 (GitHub registry.json)
+// MARK: - Marketplace Enums
+
+public enum PluginCategory: String, CaseIterable, Identifiable {
+    case all, themes, characters, commands, effects
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .all: return NSLocalizedString("plugin.category.all", comment: "")
+        case .themes: return NSLocalizedString("plugin.category.themes", comment: "")
+        case .characters: return NSLocalizedString("plugin.category.characters", comment: "")
+        case .commands: return NSLocalizedString("plugin.category.commands", comment: "")
+        case .effects: return NSLocalizedString("plugin.category.effects", comment: "")
+        }
+    }
+
+    public var icon: String {
+        switch self {
+        case .all: return "square.grid.2x2.fill"
+        case .themes: return "paintpalette.fill"
+        case .characters: return "person.2.fill"
+        case .commands: return "terminal"
+        case .effects: return "sparkles"
+        }
+    }
+
+    public func matches(_ tags: [String]) -> Bool {
+        guard self != .all else { return true }
+        return tags.contains { $0.lowercased() == rawValue || $0.lowercased().contains(rawValue.dropLast()) }
+    }
+}
+
+public enum PluginSortOption: String, CaseIterable, Identifiable {
+    case popular, newest, alphabetical
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .popular: return NSLocalizedString("plugin.sort.popular", comment: "")
+        case .newest: return NSLocalizedString("plugin.sort.newest", comment: "")
+        case .alphabetical: return NSLocalizedString("plugin.sort.alphabetical", comment: "")
+        }
+    }
+}
+
+public enum PluginTemplate: String, CaseIterable, Identifiable {
+    case themePack, commandPack, effectPack, fullPlugin
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .themePack: return NSLocalizedString("plugin.template.theme", comment: "")
+        case .commandPack: return NSLocalizedString("plugin.template.command", comment: "")
+        case .effectPack: return NSLocalizedString("plugin.template.effect", comment: "")
+        case .fullPlugin: return NSLocalizedString("plugin.template.full", comment: "")
+        }
+    }
+
+    public var icon: String {
+        switch self {
+        case .themePack: return "paintpalette.fill"
+        case .commandPack: return "terminal.fill"
+        case .effectPack: return "sparkles"
+        case .fullPlugin: return "puzzlepiece.fill"
+        }
+    }
+
+    public var description: String {
+        switch self {
+        case .themePack: return NSLocalizedString("plugin.template.theme.desc", comment: "")
+        case .commandPack: return NSLocalizedString("plugin.template.command.desc", comment: "")
+        case .effectPack: return NSLocalizedString("plugin.template.effect.desc", comment: "")
+        case .fullPlugin: return NSLocalizedString("plugin.template.full.desc", comment: "")
+        }
+    }
+
+    public var tint: String {
+        switch self {
+        case .themePack: return "purple"
+        case .commandPack: return "cyan"
+        case .effectPack: return "orange"
+        case .fullPlugin: return "green"
+        }
+    }
+
+    public var scaffoldOptions: PluginManager.ScaffoldOptions {
+        switch self {
+        case .themePack:
+            return .init(includeHooks: false, includeSlashCommands: false, includeCharacters: true, includeSettings: false, includePanel: false, includeThemes: true, includeEffects: false, includeFurniture: true)
+        case .commandPack:
+            return .init(includeHooks: true, includeSlashCommands: true, includeCharacters: false, includeSettings: true, includePanel: false, includeThemes: false, includeEffects: false, includeFurniture: false)
+        case .effectPack:
+            return .init(includeHooks: false, includeSlashCommands: false, includeCharacters: false, includeSettings: false, includePanel: false, includeThemes: false, includeEffects: true, includeFurniture: false)
+        case .fullPlugin:
+            return .init(includeHooks: true, includeSlashCommands: true, includeCharacters: true, includeSettings: true, includePanel: true, includeThemes: true, includeEffects: true, includeFurniture: true)
+        }
+    }
+}
+
+// MARK: - Debug Entry
+
+public struct PluginDebugEntry: Identifiable {
+    public let id = UUID()
+    public let timestamp = Date()
+    public let level: Level
+    public let source: String
+    public let message: String
+
+    public enum Level: String {
+        case info, warning, error, event, effect
+    }
+}
+
 public struct RegistryPlugin: Codable, Identifiable, Equatable {
     public let id: String              // 고유 식별자
     public var name: String            // 표시 이름
@@ -526,6 +642,12 @@ public class PluginManager: ObservableObject {
     // 마켓플레이스 검색/필터
     @Published public var searchQuery: String = ""
     @Published public var selectedTags: Set<String> = []
+    @Published public var marketplaceCategory: PluginCategory = .all
+    @Published public var marketplaceSortOption: PluginSortOption = .popular
+
+    // 디버그 로그
+    @Published public var debugLog: [PluginDebugEntry] = []
+    private let maxDebugEntries = 200
 
     // 개별 확장 포인트 비활성화 목록 (extensionID set)
     @Published public var disabledExtensions: Set<String> = []
@@ -898,9 +1020,14 @@ public class PluginManager: ObservableObject {
 
     // MARK: - 마켓플레이스 검색/필터
 
-    /// 검색어 + 태그 필터가 적용된 레지스트리 목록
+    /// 검색어 + 태그 + 카테고리 필터가 적용된 레지스트리 목록 (정렬 포함)
     public var filteredRegistryPlugins: [RegistryPlugin] {
         var result = registryPlugins
+
+        // 카테고리 필터
+        if marketplaceCategory != .all {
+            result = result.filter { marketplaceCategory.matches($0.tags) }
+        }
 
         // 검색어 필터
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -920,7 +1047,22 @@ public class PluginManager: ObservableObject {
             }
         }
 
+        // 정렬
+        switch marketplaceSortOption {
+        case .popular:
+            result.sort { ($0.stars ?? 0) > ($1.stars ?? 0) }
+        case .newest:
+            result.sort { $0.version > $1.version }
+        case .alphabetical:
+            result.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        }
+
         return result
+    }
+
+    /// Featured 플러그인 (별이 가장 많은 상위 3개)
+    public var featuredPlugins: [RegistryPlugin] {
+        Array(registryPlugins.sorted { ($0.stars ?? 0) > ($1.stars ?? 0) }.prefix(3))
     }
 
     /// 레지스트리에 있는 모든 태그 (카운트 포함)
@@ -1828,6 +1970,43 @@ public class PluginManager: ObservableObject {
             if options.includeCharacters {
                 contributes["characters"] = "characters.json"
             }
+            if options.includeThemes {
+                contributes["themes"] = [[
+                    "id": "\(name)-default",
+                    "name": "\(name) Theme",
+                    "isDark": true,
+                    "accentHex": "5b9cf6",
+                    "bgHex": "0f0f0f",
+                    "cardHex": "1a1a1a",
+                    "textHex": "e0e0e0"
+                ]]
+            }
+            if options.includeEffects {
+                contributes["effects"] = [[
+                    "id": "\(name)-confetti",
+                    "trigger": "onSessionComplete",
+                    "type": "confetti",
+                    "config": [
+                        "colors": ["5b9cf6", "3ecf8e", "f5a623"],
+                        "count": 30,
+                        "duration": 2.5
+                    ],
+                    "enabled": true
+                ] as [String: Any]]
+            }
+            if options.includeFurniture {
+                contributes["furniture"] = [[
+                    "id": "\(name)-desk",
+                    "name": "\(name) Desk",
+                    "sprite": [
+                        ["8b7355", "8b7355", "8b7355", "8b7355"],
+                        ["6b5335", "", "", "6b5335"]
+                    ],
+                    "width": 2,
+                    "height": 1,
+                    "zone": "mainOffice"
+                ] as [String: Any]]
+            }
             if options.includePanel {
                 contributes["panels"] = [[
                     "id": "main-panel",
@@ -1896,8 +2075,8 @@ public class PluginManager: ObservableObject {
             let pluginJSON: [String: Any] = [
                 "name": name,
                 "version": "0.1.0",
-                "description": "\(name) — Doffice plugin",
-                "author": Self.currentUserName,
+                "description": options.pluginDescription.isEmpty ? "\(name) — Doffice plugin" : options.pluginDescription,
+                "author": options.pluginAuthor.isEmpty ? Self.currentUserName : options.pluginAuthor,
                 "contributes": contributes
             ]
             let pluginData = try JSONSerialization.data(withJSONObject: pluginJSON, options: [.prettyPrinted, .sortedKeys])
@@ -1924,13 +2103,38 @@ public class PluginManager: ObservableObject {
         public var includeCharacters: Bool = true
         public var includeSettings: Bool = true
         public var includePanel: Bool = true
-        public init(includeHooks: Bool = true, includeSlashCommands: Bool = true, includeCharacters: Bool = true, includeSettings: Bool = true, includePanel: Bool = true) {
+        public var includeThemes: Bool = false
+        public var includeEffects: Bool = false
+        public var includeFurniture: Bool = false
+        public var pluginDescription: String = ""
+        public var pluginAuthor: String = ""
+
+        public init(includeHooks: Bool = true, includeSlashCommands: Bool = true, includeCharacters: Bool = true, includeSettings: Bool = true, includePanel: Bool = true, includeThemes: Bool = false, includeEffects: Bool = false, includeFurniture: Bool = false) {
             self.includeHooks = includeHooks
             self.includeSlashCommands = includeSlashCommands
             self.includeCharacters = includeCharacters
             self.includeSettings = includeSettings
             self.includePanel = includePanel
+            self.includeThemes = includeThemes
+            self.includeEffects = includeEffects
+            self.includeFurniture = includeFurniture
         }
+    }
+
+    // MARK: - Debug Logging
+
+    public func logDebug(_ level: PluginDebugEntry.Level, source: String, message: String) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.debugLog.append(PluginDebugEntry(level: level, source: source, message: message))
+            if self.debugLog.count > self.maxDebugEntries {
+                self.debugLog.removeFirst(self.debugLog.count - self.maxDebugEntries)
+            }
+        }
+    }
+
+    public func clearDebugLog() {
+        debugLog.removeAll()
     }
 
     // MARK: - Finder에서 열기

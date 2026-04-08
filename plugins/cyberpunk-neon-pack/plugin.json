@@ -46,11 +46,18 @@
         "id": "neon-sign",
         "name": "네온 사인",
         "sprite": [
-          ["ff00ff", "00ffff", "ff00ff", "00ffff", "ff00ff"],
-          ["00ffff", "", "", "", "00ffff"],
-          ["ff00ff", "", "ffee00", "", "ff00ff"],
-          ["00ffff", "", "", "", "00ffff"],
-          ["ff00ff", "00ffff", "ff00ff", "00ffff", "ff00ff"]
+          ["0d0d1a", "0d0d1a", "3a3a4e", "3a3a4e", "3a3a4e", "3a3a4e", "3a3a4e", "3a3a4e", "3a3a4e", "3a3a4e", "3a3a4e", "3a3a4e", "0d0d1a", "0d0d1a"],
+          ["0d0d1a", "3a3a4e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "3a3a4e", "0d0d1a"],
+          ["3a3a4e", "1a1a2e", "ff88ff", "ff44ff", "ff00ff", "1a1a2e", "ff88ff", "ff44ff", "ff00ff", "1a1a2e", "ff88ff", "ff00ff", "1a1a2e", "3a3a4e"],
+          ["3a3a4e", "1a1a2e", "ff00ff", "1a1a2e", "1a1a2e", "1a1a2e", "ff00ff", "1a1a2e", "ff00ff", "1a1a2e", "ff00ff", "ff44ff", "1a1a2e", "3a3a4e"],
+          ["3a3a4e", "1a1a2e", "ff44ff", "ff00ff", "ff88ff", "1a1a2e", "ff00ff", "1a1a2e", "ff00ff", "1a1a2e", "ff00ff", "ff00ff", "1a1a2e", "3a3a4e"],
+          ["3a3a4e", "1a1a2e", "ff00ff", "1a1a2e", "1a1a2e", "1a1a2e", "ff00ff", "1a1a2e", "ff00ff", "1a1a2e", "ff00ff", "ff44ff", "1a1a2e", "3a3a4e"],
+          ["3a3a4e", "1a1a2e", "ff88ff", "ff44ff", "ff00ff", "1a1a2e", "ff88ff", "ff44ff", "ff00ff", "1a1a2e", "ff88ff", "ff00ff", "1a1a2e", "3a3a4e"],
+          ["3a3a4e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "3a3a4e"],
+          ["3a3a4e", "1a1a2e", "ff88ff", "2a2a3e", "2a2a3e", "ff88ff", "2a2a3e", "2a2a3e", "ff88ff", "2a2a3e", "2a2a3e", "ff88ff", "1a1a2e", "3a3a4e"],
+          ["0d0d1a", "3a3a4e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "3a3a4e", "0d0d1a"],
+          ["0d0d1a", "0d0d1a", "3a3a4e", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "3a3a4e", "0d0d1a", "0d0d1a"],
+          ["0d0d1a", "0d0d1a", "4a4a5e", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "4a4a5e", "0d0d1a", "0d0d1a"]
         ],
         "width": 2,
         "height": 2,
@@ -60,12 +67,18 @@
         "id": "hologram-desk",
         "name": "홀로그램 데스크",
         "sprite": [
-          ["", "00ffff", "00ffff", "00ffff", "00ffff", ""],
-          ["1a1a2e", "00cccc", "00ffff", "00ffff", "00cccc", "1a1a2e"],
-          ["1a1a2e", "1a1a2e", "2a2a3e", "2a2a3e", "1a1a2e", "1a1a2e"],
-          ["", "1a1a2e", "", "", "1a1a2e", ""],
-          ["", "1a1a2e", "", "", "1a1a2e", ""],
-          ["1a1a2e", "1a1a2e", "", "", "1a1a2e", "1a1a2e"]
+          ["", "", "44ffff", "00ffff", "00ffff", "00ffff", "00ffff", "00ffff", "00ffff", "00ffff", "00ffff", "00ffff", "00ffff", "44ffff", "", ""],
+          ["", "44ffff", "00ffff", "00cccc", "", "", "", "", "", "", "", "", "00cccc", "00ffff", "44ffff", ""],
+          ["44ffff", "00ffff", "00cccc", "", "00ffff", "00cccc", "00ffff", "00cccc", "00ffff", "00cccc", "00ffff", "", "00cccc", "00cccc", "00ffff", "44ffff"],
+          ["44ffff", "00ffff", "", "00cccc", "", "00ffff", "", "00cccc", "", "00ffff", "", "00cccc", "", "", "00ffff", "44ffff"],
+          ["44ffff", "00ffff", "00cccc", "", "00ffff", "00cccc", "00ffff", "00cccc", "00ffff", "00cccc", "00ffff", "", "00cccc", "00cccc", "00ffff", "44ffff"],
+          ["", "44ffff", "00ffff", "00cccc", "", "", "", "", "", "", "", "", "00cccc", "00ffff", "44ffff", ""],
+          ["", "", "3a3a4e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "3a3a4e", "", ""],
+          ["", "", "3a3a4e", "1a1a2e", "1a1a2e", "00ffff", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "00ffff", "1a1a2e", "1a1a2e", "3a3a4e", "", ""],
+          ["", "", "3a3a4e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "3a3a4e", "", ""],
+          ["", "", "", "2a2a3e", "", "", "", "", "", "", "", "", "2a2a3e", "", "", ""],
+          ["", "", "", "2a2a3e", "", "", "", "", "", "", "", "", "2a2a3e", "", "", ""],
+          ["", "", "44ffff", "2a2a3e", "1a1a2e", "", "", "", "", "", "", "1a1a2e", "2a2a3e", "44ffff", "", ""]
         ],
         "width": 3,
         "height": 2,
@@ -75,13 +88,22 @@
         "id": "server-rack",
         "name": "서버 랙",
         "sprite": [
-          ["2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e"],
-          ["2a2a3e", "00ff88", "ff2266", "2a2a3e"],
-          ["2a2a3e", "00ffff", "00ff88", "2a2a3e"],
-          ["2a2a3e", "ff00ff", "00ffff", "2a2a3e"],
-          ["2a2a3e", "00ff88", "ff2266", "2a2a3e"],
-          ["2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e"],
-          ["1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e"]
+          ["4a4a5e", "5a5a6e", "5a5a6e", "5a5a6e", "5a5a6e", "5a5a6e", "5a5a6e", "5a5a6e", "5a5a6e", "4a4a5e"],
+          ["4a4a5e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "4a4a5e"],
+          ["4a4a5e", "1a1a2e", "00ff88", "ff2266", "1a1a2e", "3a3a4e", "3a3a4e", "3a3a4e", "1a1a2e", "4a4a5e"],
+          ["4a4a5e", "1a1a2e", "00ffff", "00ff88", "1a1a2e", "2a2a3e", "3a3a4e", "2a2a3e", "1a1a2e", "4a4a5e"],
+          ["4a4a5e", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "4a4a5e"],
+          ["4a4a5e", "1a1a2e", "ff2266", "ffaa00", "1a1a2e", "3a3a4e", "3a3a4e", "3a3a4e", "1a1a2e", "4a4a5e"],
+          ["4a4a5e", "1a1a2e", "00ff88", "00ffff", "1a1a2e", "2a2a3e", "3a3a4e", "2a2a3e", "1a1a2e", "4a4a5e"],
+          ["4a4a5e", "1a1a2e", "ffaa00", "ff2266", "1a1a2e", "3a3a4e", "2a2a3e", "3a3a4e", "1a1a2e", "4a4a5e"],
+          ["4a4a5e", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "4a4a5e"],
+          ["4a4a5e", "1a1a2e", "00ffff", "ff00ff", "00ff88", "1a1a2e", "3a3a4e", "3a3a4e", "1a1a2e", "4a4a5e"],
+          ["4a4a5e", "1a1a2e", "ff2266", "00ff88", "1a1a2e", "2a2a3e", "3a3a4e", "2a2a3e", "1a1a2e", "4a4a5e"],
+          ["4a4a5e", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "4a4a5e"],
+          ["4a4a5e", "1a1a2e", "ffaa00", "00ffff", "1a1a2e", "3a3a4e", "3a3a4e", "3a3a4e", "1a1a2e", "4a4a5e"],
+          ["4a4a5e", "1a1a2e", "00ff88", "ff2266", "ffaa00", "1a1a2e", "2a2a3e", "3a3a4e", "1a1a2e", "4a4a5e"],
+          ["4a4a5e", "5a5a6e", "5a5a6e", "5a5a6e", "5a5a6e", "5a5a6e", "5a5a6e", "5a5a6e", "5a5a6e", "4a4a5e"],
+          ["0d0d1a", "0d0d1a", "2a2a3e", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "2a2a3e", "0d0d1a", "0d0d1a"]
         ],
         "width": 2,
         "height": 3,
@@ -91,13 +113,22 @@
         "id": "vending-machine-cyber",
         "name": "사이버 자판기",
         "sprite": [
-          ["2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e"],
-          ["2a2a3e", "ff00ff", "00ffff", "ff00ff", "2a2a3e"],
-          ["2a2a3e", "00ffff", "ff00ff", "00ffff", "2a2a3e"],
-          ["2a2a3e", "ff00ff", "00ffff", "ff00ff", "2a2a3e"],
-          ["2a2a3e", "", "ffee00", "", "2a2a3e"],
-          ["2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e"],
-          ["1a1a2e", "", "", "", "1a1a2e"]
+          ["2a2a3e", "ff00ff", "ff44ff", "ff00ff", "ff00ff", "ff00ff", "ff00ff", "ff00ff", "ff00ff", "ff44ff", "ff00ff", "2a2a3e"],
+          ["ff00ff", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "ff00ff"],
+          ["ff00ff", "1a1a2e", "ff44ff", "ff88ff", "1a1a2e", "00ffff", "44ffff", "1a1a2e", "ff00ff", "ff44ff", "1a1a2e", "00ffff"],
+          ["ff00ff", "1a1a2e", "ff00ff", "ff44ff", "1a1a2e", "00cccc", "00ffff", "1a1a2e", "cc00cc", "ff00ff", "1a1a2e", "00ffff"],
+          ["ff00ff", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "ff00ff"],
+          ["ff00ff", "1a1a2e", "00ff88", "44ff99", "1a1a2e", "ffaa00", "ffcc44", "1a1a2e", "8833ff", "aa55ff", "1a1a2e", "00ffff"],
+          ["ff00ff", "1a1a2e", "00cc66", "00ff88", "1a1a2e", "ff8800", "ffaa00", "1a1a2e", "6622cc", "8833ff", "1a1a2e", "00ffff"],
+          ["ff00ff", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "ff00ff"],
+          ["ff00ff", "1a1a2e", "ff2266", "ff4488", "1a1a2e", "ffee00", "ffff44", "1a1a2e", "00ffff", "44ffff", "1a1a2e", "00ffff"],
+          ["ff00ff", "1a1a2e", "cc1144", "ff2266", "1a1a2e", "ccbb00", "ffee00", "1a1a2e", "00cccc", "00ffff", "1a1a2e", "00ffff"],
+          ["ff00ff", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "1a1a2e", "ff00ff"],
+          ["00ffff", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "ffee00", "ffff44", "ffee00", "2a2a3e", "4a4a5e", "2a2a3e", "00ffff"],
+          ["00ffff", "2a2a3e", "ff00ff", "ff44ff", "ff00ff", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "3a3a4e", "2a2a3e", "00ffff"],
+          ["00ffff", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "2a2a3e", "00ffff"],
+          ["2a2a3e", "00ffff", "44ffff", "00ffff", "00ffff", "00ffff", "00ffff", "00ffff", "00ffff", "44ffff", "00ffff", "2a2a3e"],
+          ["0d0d1a", "0d0d1a", "0d0d1a", "1a1a2e", "0d0d1a", "0d0d1a", "0d0d1a", "0d0d1a", "1a1a2e", "0d0d1a", "0d0d1a", "0d0d1a"]
         ],
         "width": 2,
         "height": 3,
@@ -124,6 +155,20 @@
           "duration": 0.5
         },
         "enabled": true
+      }
+    ],
+    "officePresets": [
+      {
+        "id": "cyberpunk-lab",
+        "name": "사이버펑크 랩",
+        "description": "네온 불빛 가득한 하이테크 연구실",
+        "furniture": [
+          {"furnitureId": "server-rack", "col": 2, "row": 2},
+          {"furnitureId": "server-rack", "col": 5, "row": 2},
+          {"furnitureId": "hologram-desk", "col": 10, "row": 5},
+          {"furnitureId": "neon-sign", "col": 16, "row": 2},
+          {"furnitureId": "vending-machine-cyber", "col": 22, "row": 3}
+        ]
       }
     ]
   }

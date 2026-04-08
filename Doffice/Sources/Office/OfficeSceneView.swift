@@ -585,21 +585,20 @@ struct OfficeSceneView: View {
 
             if !editPanelCollapsed {
             ScrollView(.vertical, showsIndicators: false) {
-                let gridColumns = [GridItem(.adaptive(minimum: 72, maximum: 90), spacing: 6)]
-                VStack(alignment: .trailing, spacing: 8) {
+                let gridColumns = [GridItem(.adaptive(minimum: 56, maximum: 70), spacing: 4)]
+                VStack(alignment: .leading, spacing: 8) {
                     // 기본 가구 카탈로그
                     VStack(alignment: .leading, spacing: 4) {
                         Text("FURNITURE")
                             .font(Theme.mono(8, weight: .bold))
                             .foregroundColor(Theme.orange)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
 
-                        LazyVGrid(columns: gridColumns, spacing: 6) {
+                        LazyVGrid(columns: gridColumns, spacing: 4) {
                             ForEach(furnitureCatalog) { item in
                                 Button {
                                     placeStandardFurniture(item)
                                 } label: {
-                                    VStack(spacing: 3) {
+                                    VStack(spacing: 2) {
                                         Canvas { ctx, canvasSize in
                                             let furnitureType = item.type ?? .desk
                                             OfficeSpriteRenderer.drawDetailedFurniture(
@@ -610,22 +609,22 @@ struct OfficeSceneView: View {
                                                 dark: false, frame: 0
                                             )
                                         }
-                                        .frame(width: 48, height: 48)
+                                        .frame(width: 40, height: 40)
                                         .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(Theme.bgSurface.opacity(0.6)))
                                         .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(Theme.border.opacity(0.3), lineWidth: 1))
 
                                         Text(item.name)
-                                            .font(Theme.mono(7, weight: .bold))
+                                            .font(Theme.mono(6, weight: .bold))
                                             .foregroundColor(Theme.textPrimary)
                                             .lineLimit(1)
                                         Text("\(item.size.w)x\(item.size.h)")
-                                            .font(Theme.mono(6))
+                                            .font(Theme.mono(5))
                                             .foregroundColor(Theme.textDim)
                                     }
                                     .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 4)
-                                    .background(RoundedRectangle(cornerRadius: Theme.cornerLarge).fill(Theme.bgCard.opacity(0.6)))
-                                    .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge).stroke(Theme.green.opacity(0.2), lineWidth: 1))
+                                    .padding(.vertical, 3)
+                                    .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(Theme.bgCard.opacity(0.6)))
+                                    .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(Theme.green.opacity(0.2), lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -635,17 +634,16 @@ struct OfficeSceneView: View {
                     // Plugin furniture placement section
                     if !pluginHost.furniture.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("PLUGIN FURNITURE")
-                                .font(Theme.mono(8, weight: .bold))
+                            Text("PLUGIN")
+                                .font(Theme.mono(7, weight: .bold))
                                 .foregroundColor(Theme.purple)
-                                .frame(maxWidth: .infinity, alignment: .trailing)
 
-                            LazyVGrid(columns: gridColumns, spacing: 6) {
+                            LazyVGrid(columns: gridColumns, spacing: 4) {
                                 ForEach(pluginHost.furniture) { item in
                                     Button {
                                         placePluginFurniture(item)
                                     } label: {
-                                        VStack(spacing: 3) {
+                                        VStack(spacing: 2) {
                                             Canvas { ctx, canvasSize in
                                                 OfficeSpriteRenderer.drawDetailedFurniture(
                                                     ctx, type: .plugin,
@@ -656,22 +654,22 @@ struct OfficeSceneView: View {
                                                     pluginFurnitureId: item.decl.id
                                                 )
                                             }
-                                            .frame(width: 48, height: 48)
+                                            .frame(width: 40, height: 40)
                                             .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(Theme.bgSurface.opacity(0.6)))
                                             .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(Theme.purple.opacity(0.3), lineWidth: 1))
 
                                             Text(item.decl.name)
-                                                .font(Theme.mono(7, weight: .bold))
+                                                .font(Theme.mono(6, weight: .bold))
                                                 .foregroundColor(Theme.textPrimary)
                                                 .lineLimit(1)
                                             Text("\(item.decl.width)x\(item.decl.height)")
-                                                .font(Theme.mono(6))
+                                                .font(Theme.mono(5))
                                                 .foregroundColor(Theme.purple)
                                         }
                                         .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 4)
-                                        .background(RoundedRectangle(cornerRadius: Theme.cornerLarge).fill(Theme.bgCard.opacity(0.6)))
-                                        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge).stroke(Theme.purple.opacity(0.2), lineWidth: 1))
+                                        .padding(.vertical, 3)
+                                        .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(Theme.bgCard.opacity(0.6)))
+                                        .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(Theme.purple.opacity(0.2), lineWidth: 1))
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -680,7 +678,6 @@ struct OfficeSceneView: View {
                     }
                 }
             }
-            .frame(maxHeight: 320)
             } // end if !editPanelCollapsed
 
             HStack(spacing: 6) {

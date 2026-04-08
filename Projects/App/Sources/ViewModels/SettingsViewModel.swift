@@ -89,6 +89,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var showPluginScaffold = false
     @Published var scaffoldName = ""
     @Published var expandedPluginId: String?
+    @Published var showDebugConsole = false
 
     // MARK: - Secret Key
 

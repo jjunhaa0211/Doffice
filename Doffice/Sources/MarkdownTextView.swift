@@ -26,8 +26,8 @@ public struct MarkdownTextView: View {
                         .font(Theme.mono(headingSize(level), weight: .bold))
                         .foregroundColor(Theme.textPrimary)
                         .padding(.top, level <= 2 ? 6 : 3)
-                case .codeBlock(let code):
-                    codeBlockView(code: code)
+                case .codeBlock(let code, let language):
+                    codeBlockView(code: code, language: language)
                 case .bullet(let content):
                     HStack(alignment: .top, spacing: 6) {
                         Text("•").font(Theme.mono(compact ? 10 : 11)).foregroundStyle(Theme.accentBackground)
@@ -49,28 +49,43 @@ public struct MarkdownTextView: View {
 
     // MARK: - Code Block with Copy Button
 
-    private func codeBlockView(code: String) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
+    @State private var copiedBlockId: String?
+
+    private func codeBlockView(code: String, language: String?) -> some View {
+        let blockId = "\(code.hashValue)"
+        let isCopied = copiedBlockId == blockId
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
+                if let lang = language, !lang.isEmpty {
+                    Text(lang.uppercased())
+                        .font(Theme.mono(7, weight: .bold))
+                        .foregroundColor(Theme.textMuted)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                }
                 Spacer()
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(code, forType: .string)
+                    copiedBlockId = blockId
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        if copiedBlockId == blockId { copiedBlockId = nil }
+                    }
                 } label: {
                     HStack(spacing: 3) {
-                        Image(systemName: "doc.on.doc")
+                        Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
                             .font(.system(size: Theme.iconSize(8)))
-                        Text("Copy")
+                        Text(isCopied ? "Copied!" : "Copy")
                             .font(Theme.mono(8, weight: .medium))
                     }
-                    .foregroundColor(Theme.textDim)
+                    .foregroundColor(isCopied ? Theme.green : Theme.textDim)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                 }
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
             }
-            .padding(.top, 4).padding(.trailing, 4)
+            .padding(.top, 2).padding(.trailing, 4)
 
             Text(code)
                 .font(Theme.mono(compact ? 10 : 11))
@@ -173,7 +188,7 @@ public struct MarkdownTextView: View {
 
     private enum MdBlock {
         case heading(Int, String)
-        case codeBlock(String)
+        case codeBlock(String, String?) // code, language
         case bullet(String)
         case separator
         case table([[String]])
@@ -200,13 +215,15 @@ public struct MarkdownTextView: View {
 
             // Code block
             if trimmed.hasPrefix("```") {
+                let lang = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                let language: String? = lang.isEmpty ? nil : lang
                 var code: [String] = []
                 i += 1
                 while i < lines.count && !lines[i].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
                     code.append(lines[i])
                     i += 1
                 }
-                blocks.append(.codeBlock(code.joined(separator: "\n")))
+                blocks.append(.codeBlock(code.joined(separator: "\n"), language))
                 i += 1
                 continue
             }

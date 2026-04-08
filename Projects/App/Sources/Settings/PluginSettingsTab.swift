@@ -329,6 +329,19 @@ extension SettingsView {
                             .background(RoundedRectangle(cornerRadius: 6).fill(Theme.green.opacity(0.08)))
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.green.opacity(0.2), lineWidth: 1))
                         }.buttonStyle(.plain)
+
+                        Button(action: { showDebugConsole = true }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "ant.fill")
+                                    .font(.system(size: Theme.iconSize(10), weight: .medium))
+                                Text(NSLocalizedString("plugin.btn.debug", comment: "Debug"))
+                                    .font(Theme.mono(9, weight: .medium))
+                            }
+                            .foregroundColor(Theme.orange)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.orange.opacity(0.08)))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.orange.opacity(0.2), lineWidth: 1))
+                        }.buttonStyle(.plain)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -515,11 +528,90 @@ extension SettingsView {
                         }
                     }
 
+                    // 카테고리 탭
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 4) {
+                            ForEach(PluginCategory.allCases) { category in
+                                let isActive = pluginManager.marketplaceCategory == category
+                                Button(action: { pluginManager.marketplaceCategory = category }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: category.icon)
+                                            .font(.system(size: 8, weight: .medium))
+                                        Text(category.label)
+                                            .font(Theme.mono(8, weight: isActive ? .bold : .regular))
+                                    }
+                                    .foregroundColor(isActive ? Theme.accent : Theme.textSecondary)
+                                    .padding(.horizontal, 10).padding(.vertical, 5)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(isActive ? Theme.accent.opacity(0.12) : Theme.bgSurface)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(isActive ? Theme.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+                                    )
+                                }.buttonStyle(.plain)
+                            }
+
+                            Spacer()
+
+                            // 정렬 옵션
+                            Menu {
+                                ForEach(PluginSortOption.allCases) { option in
+                                    Button(action: { pluginManager.marketplaceSortOption = option }) {
+                                        HStack {
+                                            Text(option.label)
+                                            if pluginManager.marketplaceSortOption == option {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "arrow.up.arrow.down")
+                                        .font(.system(size: 8, weight: .medium))
+                                    Text(pluginManager.marketplaceSortOption.label)
+                                        .font(Theme.mono(8))
+                                }
+                                .foregroundColor(Theme.textDim)
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface))
+                            }
+                            .menuStyle(.borderlessButton)
+                            .frame(width: 100)
+                        }
+                    }
+
+                    // Featured 섹션 (검색 없을 때만)
+                    if pluginManager.searchQuery.isEmpty && pluginManager.selectedTags.isEmpty && pluginManager.marketplaceCategory == .all {
+                        let featured = pluginManager.featuredPlugins
+                        if !featured.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "star.fill")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(Theme.yellow)
+                                    Text(NSLocalizedString("plugin.featured", comment: "Featured"))
+                                        .font(Theme.mono(9, weight: .bold))
+                                        .foregroundColor(Theme.yellow)
+                                }
+                                ForEach(featured) { item in
+                                    marketplaceCard(item)
+                                }
+                            }
+
+                            Rectangle().fill(Theme.border.opacity(0.3)).frame(height: 1)
+                                .padding(.vertical, 4)
+                        }
+                    }
+
+                    // 플러그인 목록
                     let filtered = pluginManager.filteredRegistryPlugins
                     if !filtered.isEmpty {
-                        VStack(spacing: 6) {
+                        VStack(spacing: 8) {
                             ForEach(filtered) { item in
-                                marketplaceRow(item)
+                                marketplaceCard(item)
                             }
                         }
                     } else if !pluginManager.isLoadingRegistry && pluginManager.registryError == nil {
@@ -591,65 +683,15 @@ extension SettingsView {
             }
         }
         .sheet(isPresented: $vm.showPluginScaffold) {
-            VStack(spacing: 16) {
-                HStack {
-                    Image(systemName: "hammer.fill")
-                        .font(.system(size: Theme.iconSize(14), weight: .bold))
-                        .foregroundColor(Theme.green)
-                    Text(NSLocalizedString("plugin.scaffold.title", comment: ""))
-                        .font(Theme.mono(13, weight: .bold))
-                        .foregroundColor(Theme.textPrimary)
-                    Spacer()
-                    Button(action: { showPluginScaffold = false }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 14))
-                            .foregroundColor(Theme.textDim)
-                    }.buttonStyle(.plain)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(NSLocalizedString("plugin.scaffold.name.label", comment: ""))
-                        .font(Theme.mono(10, weight: .medium))
-                        .foregroundColor(Theme.textSecondary)
-                    TextField(NSLocalizedString("plugin.scaffold.name.placeholder", comment: ""), text: $vm.scaffoldName)
-                        .font(Theme.mono(11)).textFieldStyle(.plain)
-                        .padding(10)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border, lineWidth: 1))
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(NSLocalizedString("plugin.scaffold.desc", comment: ""))
-                        .font(Theme.mono(8))
-                        .foregroundColor(Theme.textDim)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                HStack {
-                    Spacer()
-                    Button(action: { showPluginScaffold = false }) {
-                        Text(NSLocalizedString("cancel", comment: ""))
-                            .font(Theme.mono(10, weight: .medium))
-                            .foregroundColor(Theme.textSecondary)
-                            .padding(.horizontal, 14).padding(.vertical, 8)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
-                    }.buttonStyle(.plain)
-
-                    Button(action: { scaffoldNewPlugin() }) {
-                        Text(NSLocalizedString("plugin.scaffold.btn", comment: ""))
-                            .font(Theme.mono(10, weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 14).padding(.vertical, 8)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(scaffoldName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Theme.textDim : Theme.green))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(scaffoldName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .padding(20)
-            .frame(width: 400)
-            .background(Theme.bg)
+            PluginScaffoldSheet(onScaffold: { name, options in
+                scaffoldNewPlugin(name: name, options: options)
+            }, onDismiss: { showPluginScaffold = false })
             .dofficeSheetPresentation()
+        }
+        .sheet(isPresented: $vm.showDebugConsole) {
+            PluginDebugView()
+                .frame(minWidth: 560, minHeight: 400)
+                .dofficeSheetPresentation()
         }
     }
 
@@ -674,9 +716,9 @@ extension SettingsView {
         #endif
     }
 
-    func scaffoldNewPlugin() {
-        let name = scaffoldName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
+    func scaffoldNewPlugin(name: String? = nil, options: PluginManager.ScaffoldOptions? = nil) {
+        let pluginName = (name ?? scaffoldName).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !pluginName.isEmpty else { return }
 
         #if os(macOS)
         let panel = NSOpenPanel()
@@ -686,7 +728,7 @@ extension SettingsView {
         panel.message = NSLocalizedString("plugin.scaffold.pick.dir", comment: "")
         panel.prompt = NSLocalizedString("plugin.scaffold.pick.prompt", comment: "")
         if panel.runModal() == .OK, let url = panel.url {
-            if let pluginPath = pluginManager.scaffold(name: name, at: url.path) {
+            if let pluginPath = pluginManager.scaffold(name: pluginName, at: url.path, options: options ?? PluginManager.ScaffoldOptions()) {
                 pluginManager.install(source: pluginPath)
                 NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: pluginPath)
             }
@@ -1053,10 +1095,329 @@ extension SettingsView {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border.opacity(0.3), lineWidth: 1))
     }
 
+    // MARK: - Marketplace Card (리디자인)
+
+    func marketplaceCard(_ item: RegistryPlugin) -> some View {
+        let installed = pluginManager.isInstalled(item)
+        let hasStars = (item.stars ?? 0) > 0
+
+        return VStack(alignment: .leading, spacing: 8) {
+            // Header row
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(item.name)
+                            .font(Theme.mono(11, weight: .bold))
+                            .foregroundColor(Theme.textPrimary)
+                        Text("v\(item.version)")
+                            .font(Theme.mono(7))
+                            .foregroundColor(Theme.textDim)
+                    }
+                    Text("by \(item.author)")
+                        .font(Theme.mono(8))
+                        .foregroundColor(Theme.textDim)
+                }
+
+                Spacer()
+
+                if hasStars {
+                    HStack(spacing: 2) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 8))
+                            .foregroundColor(Theme.yellow)
+                        Text("\(item.stars ?? 0)")
+                            .font(Theme.mono(9, weight: .bold))
+                            .foregroundColor(Theme.yellow)
+                    }
+                }
+            }
+
+            // Description
+            Text(item.description)
+                .font(Theme.mono(9))
+                .foregroundColor(Theme.textSecondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // Badges & Tags
+            HStack(spacing: 6) {
+                if item.characterCount > 0 {
+                    contributionPill(icon: "person.fill", text: "\(item.characterCount)", tint: Theme.purple)
+                }
+                ForEach(item.tags.prefix(4), id: \.self) { tag in
+                    Text("#\(tag)")
+                        .font(Theme.mono(7, weight: .medium))
+                        .foregroundColor(Theme.cyan)
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 3).fill(Theme.cyan.opacity(0.06)))
+                }
+                Spacer()
+
+                // Install button
+                if installed {
+                    HStack(spacing: 3) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 9))
+                        Text(NSLocalizedString("plugin.marketplace.installed", comment: ""))
+                            .font(Theme.mono(8, weight: .medium))
+                    }
+                    .foregroundColor(Theme.green)
+                } else {
+                    Button(action: { pluginManager.installFromRegistry(item) }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.system(size: Theme.iconSize(10), weight: .bold))
+                            Text(NSLocalizedString("plugin.btn.install", comment: ""))
+                                .font(Theme.mono(9, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accentBackground))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(pluginManager.isInstalling)
+                }
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bgSurface))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(
+            installed ? Theme.green.opacity(0.2) : Theme.border.opacity(0.3), lineWidth: 1
+        ))
+    }
+
+    func contributionPill(icon: String, text: String, tint: Color) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon).font(.system(size: 7))
+            Text(text).font(Theme.mono(7, weight: .medium))
+        }
+        .foregroundColor(tint)
+        .padding(.horizontal, 6).padding(.vertical, 2)
+        .background(RoundedRectangle(cornerRadius: 4).fill(tint.opacity(0.08)))
+    }
+
     var supportTab: some View {
         VStack(spacing: 14) {
             CoffeeSupportPopoverView(embedded: true)
         }
     }
 
+}
+
+// MARK: - Plugin Scaffold Sheet (템플릿 선택기)
+
+struct PluginScaffoldSheet: View {
+    var onScaffold: (String, PluginManager.ScaffoldOptions) -> Void
+    var onDismiss: () -> Void
+
+    @State private var pluginName = ""
+    @State private var pluginDescription = ""
+    @State private var pluginAuthor = ""
+    @State private var selectedTemplate: PluginTemplate = .fullPlugin
+
+    // Feature toggles
+    @State private var includeHooks = true
+    @State private var includeSlashCommands = true
+    @State private var includeCharacters = true
+    @State private var includePanel = true
+    @State private var includeThemes = false
+    @State private var includeEffects = false
+    @State private var includeFurniture = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Image(systemName: "hammer.fill")
+                    .font(.system(size: Theme.iconSize(14), weight: .bold))
+                    .foregroundColor(Theme.green)
+                Text(NSLocalizedString("plugin.scaffold.title", comment: ""))
+                    .font(Theme.mono(13, weight: .bold))
+                    .foregroundColor(Theme.textPrimary)
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(Theme.textDim)
+                }.buttonStyle(.plain)
+            }
+            .padding(16)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Template selector
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(NSLocalizedString("plugin.scaffold.template", comment: "Template"))
+                            .font(Theme.mono(10, weight: .bold))
+                            .foregroundColor(Theme.textSecondary)
+
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                            ForEach(PluginTemplate.allCases) { template in
+                                templateCard(template)
+                            }
+                        }
+                    }
+
+                    // Name
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(NSLocalizedString("plugin.scaffold.name.label", comment: ""))
+                            .font(Theme.mono(10, weight: .medium))
+                            .foregroundColor(Theme.textSecondary)
+                        TextField(NSLocalizedString("plugin.scaffold.name.placeholder", comment: ""), text: $pluginName)
+                            .font(Theme.mono(11)).textFieldStyle(.plain)
+                            .padding(8)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border, lineWidth: 1))
+                    }
+
+                    // Description
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(NSLocalizedString("plugin.scaffold.description", comment: "Description"))
+                            .font(Theme.mono(10, weight: .medium))
+                            .foregroundColor(Theme.textSecondary)
+                        TextField(NSLocalizedString("plugin.scaffold.description.placeholder", comment: ""), text: $pluginDescription)
+                            .font(Theme.mono(11)).textFieldStyle(.plain)
+                            .padding(8)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border, lineWidth: 1))
+                    }
+
+                    // Author
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(NSLocalizedString("plugin.scaffold.author", comment: "Author"))
+                            .font(Theme.mono(10, weight: .medium))
+                            .foregroundColor(Theme.textSecondary)
+                        TextField(NSLocalizedString("plugin.scaffold.author.placeholder", comment: ""), text: $pluginAuthor)
+                            .font(Theme.mono(11)).textFieldStyle(.plain)
+                            .padding(8)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border, lineWidth: 1))
+                    }
+
+                    // Feature toggles
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(NSLocalizedString("plugin.scaffold.features", comment: "Features"))
+                            .font(Theme.mono(10, weight: .bold))
+                            .foregroundColor(Theme.textSecondary)
+
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 4) {
+                            featureToggle("Hooks", icon: "gearshape.2", isOn: $includeHooks)
+                            featureToggle("Slash Commands", icon: "command", isOn: $includeSlashCommands)
+                            featureToggle("Characters", icon: "person.2.fill", isOn: $includeCharacters)
+                            featureToggle("Panel (HTML)", icon: "rectangle.on.rectangle", isOn: $includePanel)
+                            featureToggle("Themes", icon: "paintpalette.fill", isOn: $includeThemes)
+                            featureToggle("Effects", icon: "sparkles", isOn: $includeEffects)
+                            featureToggle("Furniture", icon: "sofa.fill", isOn: $includeFurniture)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            // Footer
+            HStack {
+                Spacer()
+                Button(action: onDismiss) {
+                    Text(NSLocalizedString("cancel", comment: ""))
+                        .font(Theme.mono(10, weight: .medium))
+                        .foregroundColor(Theme.textSecondary)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
+                }.buttonStyle(.plain)
+
+                Button(action: {
+                    var opts = PluginManager.ScaffoldOptions(
+                        includeHooks: includeHooks,
+                        includeSlashCommands: includeSlashCommands,
+                        includeCharacters: includeCharacters,
+                        includeSettings: true,
+                        includePanel: includePanel,
+                        includeThemes: includeThemes,
+                        includeEffects: includeEffects,
+                        includeFurniture: includeFurniture
+                    )
+                    opts.pluginDescription = pluginDescription
+                    opts.pluginAuthor = pluginAuthor
+                    onScaffold(pluginName, opts)
+                }) {
+                    Text(NSLocalizedString("plugin.scaffold.btn", comment: ""))
+                        .font(Theme.mono(10, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(
+                            pluginName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Theme.textDim : Theme.green
+                        ))
+                }
+                .buttonStyle(.plain)
+                .disabled(pluginName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(16)
+        }
+        .frame(width: 480, height: 580)
+        .background(Theme.bg)
+        .onChange(of: selectedTemplate) { _, template in
+            let opts = template.scaffoldOptions
+            includeHooks = opts.includeHooks
+            includeSlashCommands = opts.includeSlashCommands
+            includeCharacters = opts.includeCharacters
+            includePanel = opts.includePanel
+            includeThemes = opts.includeThemes
+            includeEffects = opts.includeEffects
+            includeFurniture = opts.includeFurniture
+        }
+    }
+
+    private func templateCard(_ template: PluginTemplate) -> some View {
+        let isSelected = selectedTemplate == template
+        let tintColor: Color = {
+            switch template.tint {
+            case "purple": return Theme.purple
+            case "cyan": return Theme.cyan
+            case "orange": return Theme.orange
+            default: return Theme.green
+            }
+        }()
+
+        return Button(action: { selectedTemplate = template }) {
+            VStack(spacing: 6) {
+                Image(systemName: template.icon)
+                    .font(.system(size: Theme.iconSize(16), weight: .bold))
+                    .foregroundColor(isSelected ? tintColor : Theme.textDim)
+                Text(template.label)
+                    .font(Theme.mono(9, weight: .bold))
+                    .foregroundColor(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                Text(template.description)
+                    .font(Theme.mono(7))
+                    .foregroundColor(Theme.textDim)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 10).fill(isSelected ? tintColor.opacity(0.08) : Theme.bgSurface))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(
+                isSelected ? tintColor.opacity(0.4) : Theme.border.opacity(0.3), lineWidth: isSelected ? 1.5 : 1
+            ))
+        }.buttonStyle(.plain)
+    }
+
+    private func featureToggle(_ label: String, icon: String, isOn: Binding<Bool>) -> some View {
+        Button(action: { isOn.wrappedValue.toggle() }) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: Theme.iconSize(9), weight: .medium))
+                    .foregroundColor(isOn.wrappedValue ? Theme.accent : Theme.textDim)
+                    .frame(width: 14)
+                Text(label)
+                    .font(Theme.mono(9))
+                    .foregroundColor(isOn.wrappedValue ? Theme.textPrimary : Theme.textDim)
+                Spacer()
+                Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 12))
+                    .foregroundColor(isOn.wrappedValue ? Theme.green : Theme.textDim)
+            }
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 6).fill(isOn.wrappedValue ? Theme.green.opacity(0.05) : .clear))
+        }.buttonStyle(.plain)
+    }
 }

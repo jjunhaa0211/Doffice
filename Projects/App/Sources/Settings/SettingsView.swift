@@ -80,6 +80,7 @@ struct SettingsView: View {
     var expandedPluginId: String? { get { vm.expandedPluginId } nonmutating set { vm.expandedPluginId = newValue } }
     var secretKeyInput: String { get { vm.secretKeyInput } nonmutating set { vm.secretKeyInput = newValue } }
     var secretKeyResult: SecretKeyResult { get { vm.secretKeyResult } nonmutating set { vm.secretKeyResult = newValue } }
+    var showDebugConsole: Bool { get { vm.showDebugConsole } nonmutating set { vm.showDebugConsole = newValue } }
 
     let settingsTabs: [(String, String)] = [
         ("slider.horizontal.3", NSLocalizedString("settings.general", comment: "")), ("paintbrush.fill", NSLocalizedString("settings.display", comment: "")), ("building.2.fill", NSLocalizedString("settings.office", comment: "")),

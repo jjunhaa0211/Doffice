@@ -725,6 +725,105 @@ struct PluginEntry: Codable, Identifiable, Equatable {
     }
 }
 
+// MARK: - Marketplace Enums
+
+enum PluginCategory: String, CaseIterable, Identifiable {
+    case all, themes, characters, commands, effects
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .all: return NSLocalizedString("plugin.category.all", comment: "")
+        case .themes: return NSLocalizedString("plugin.category.themes", comment: "")
+        case .characters: return NSLocalizedString("plugin.category.characters", comment: "")
+        case .commands: return NSLocalizedString("plugin.category.commands", comment: "")
+        case .effects: return NSLocalizedString("plugin.category.effects", comment: "")
+        }
+    }
+    var icon: String {
+        switch self {
+        case .all: return "square.grid.2x2.fill"
+        case .themes: return "paintpalette.fill"
+        case .characters: return "person.2.fill"
+        case .commands: return "terminal"
+        case .effects: return "sparkles"
+        }
+    }
+    func matches(_ tags: [String]) -> Bool {
+        guard self != .all else { return true }
+        return tags.contains { $0.lowercased() == rawValue || $0.lowercased().contains(rawValue.dropLast()) }
+    }
+}
+
+enum PluginSortOption: String, CaseIterable, Identifiable {
+    case popular, newest, alphabetical
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .popular: return NSLocalizedString("plugin.sort.popular", comment: "")
+        case .newest: return NSLocalizedString("plugin.sort.newest", comment: "")
+        case .alphabetical: return NSLocalizedString("plugin.sort.alphabetical", comment: "")
+        }
+    }
+}
+
+enum PluginTemplate: String, CaseIterable, Identifiable {
+    case themePack, commandPack, effectPack, fullPlugin
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .themePack: return NSLocalizedString("plugin.template.theme", comment: "")
+        case .commandPack: return NSLocalizedString("plugin.template.command", comment: "")
+        case .effectPack: return NSLocalizedString("plugin.template.effect", comment: "")
+        case .fullPlugin: return NSLocalizedString("plugin.template.full", comment: "")
+        }
+    }
+    var icon: String {
+        switch self {
+        case .themePack: return "paintpalette.fill"
+        case .commandPack: return "terminal.fill"
+        case .effectPack: return "sparkles"
+        case .fullPlugin: return "puzzlepiece.fill"
+        }
+    }
+    var description: String {
+        switch self {
+        case .themePack: return NSLocalizedString("plugin.template.theme.desc", comment: "")
+        case .commandPack: return NSLocalizedString("plugin.template.command.desc", comment: "")
+        case .effectPack: return NSLocalizedString("plugin.template.effect.desc", comment: "")
+        case .fullPlugin: return NSLocalizedString("plugin.template.full.desc", comment: "")
+        }
+    }
+    var tint: String {
+        switch self {
+        case .themePack: return "purple"
+        case .commandPack: return "cyan"
+        case .effectPack: return "orange"
+        case .fullPlugin: return "green"
+        }
+    }
+    var scaffoldOptions: PluginManager.ScaffoldOptions {
+        switch self {
+        case .themePack:
+            return .init(includeHooks: false, includeSlashCommands: false, includeCharacters: true, includeSettings: false, includePanel: false, includeThemes: true, includeEffects: false, includeFurniture: true)
+        case .commandPack:
+            return .init(includeHooks: true, includeSlashCommands: true, includeCharacters: false, includeSettings: true, includePanel: false, includeThemes: false, includeEffects: false, includeFurniture: false)
+        case .effectPack:
+            return .init(includeHooks: false, includeSlashCommands: false, includeCharacters: false, includeSettings: false, includePanel: false, includeThemes: false, includeEffects: true, includeFurniture: false)
+        case .fullPlugin:
+            return .init(includeHooks: true, includeSlashCommands: true, includeCharacters: true, includeSettings: true, includePanel: true, includeThemes: true, includeEffects: true, includeFurniture: true)
+        }
+    }
+}
+
+struct PluginDebugEntry: Identifiable {
+    let id = UUID()
+    let timestamp = Date()
+    let level: Level
+    let source: String
+    let message: String
+    enum Level: String { case info, warning, error, event, effect }
+}
+
 class PluginManager: ObservableObject {
     static let shared = PluginManager()
 
@@ -737,6 +836,10 @@ class PluginManager: ObservableObject {
     @Published var registryPlugins: [RegistryPlugin] = []
     @Published var isLoadingRegistry: Bool = false
     @Published var registryError: String?
+    @Published var marketplaceCategory: PluginCategory = .all
+    @Published var marketplaceSortOption: PluginSortOption = .popular
+    @Published var debugLog: [PluginDebugEntry] = []
+    private let maxDebugEntries = 200
 
     private let storageKey = "DofficePlugins"
     private let pluginBaseDir: URL
@@ -1631,6 +1734,38 @@ class PluginManager: ObservableObject {
         var includeCharacters: Bool = true
         var includeSettings: Bool = true
         var includePanel: Bool = true
+        var includeThemes: Bool = false
+        var includeEffects: Bool = false
+        var includeFurniture: Bool = false
+        var pluginDescription: String = ""
+        var pluginAuthor: String = ""
+
+        init(includeHooks: Bool = true, includeSlashCommands: Bool = true, includeCharacters: Bool = true, includeSettings: Bool = true, includePanel: Bool = true, includeThemes: Bool = false, includeEffects: Bool = false, includeFurniture: Bool = false) {
+            self.includeHooks = includeHooks
+            self.includeSlashCommands = includeSlashCommands
+            self.includeCharacters = includeCharacters
+            self.includeSettings = includeSettings
+            self.includePanel = includePanel
+            self.includeThemes = includeThemes
+            self.includeEffects = includeEffects
+            self.includeFurniture = includeFurniture
+        }
+    }
+
+    // MARK: - Debug Logging
+
+    func logDebug(_ level: PluginDebugEntry.Level, source: String, message: String) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.debugLog.append(PluginDebugEntry(level: level, source: source, message: message))
+            if self.debugLog.count > self.maxDebugEntries {
+                self.debugLog.removeFirst(self.debugLog.count - self.maxDebugEntries)
+            }
+        }
+    }
+
+    func clearDebugLog() {
+        debugLog.removeAll()
     }
 
     // MARK: - Finder에서 열기

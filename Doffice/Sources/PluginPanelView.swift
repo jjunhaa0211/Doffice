@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 import WebKit
-import DesignSystem
+
 
 // ═══════════════════════════════════════════════════════
 // MARK: - Plugin Panel View (WKWebView 래퍼)

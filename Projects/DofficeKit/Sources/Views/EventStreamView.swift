@@ -142,7 +142,9 @@ public struct EventStreamView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 2) {
                             ForEach(filteredBlocks) { block in
-                                EventBlockView(block: block, compact: compact)
+                                EventBlockView(block: block, compact: compact, onResendPrompt: { text in
+                                    inputText = text
+                                })
                                     .id(block.id)
                                     .textSelection(.enabled)
                             }

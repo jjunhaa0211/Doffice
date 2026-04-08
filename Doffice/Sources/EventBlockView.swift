@@ -9,6 +9,7 @@ public struct EventBlockView: View {
     var block: StreamBlock
     @StateObject private var settings = AppSettings.shared
     public let compact: Bool
+    public var onResendPrompt: ((String) -> Void)?
     @State private var thoughtCollapsed = true
     @State private var showCopied = false
 
@@ -61,22 +62,53 @@ public struct EventBlockView: View {
     // MARK: - User Prompt
 
     private var userPromptBlock: some View {
-        HStack(alignment: .bottom, spacing: 0) {
-            Spacer(minLength: compact ? 40 : 72)
-            Text(block.content)
-                .font(Theme.mono(compact ? 11 : 13))
-                .foregroundStyle(.white)
-                .padding(.vertical, 10).padding(.horizontal, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [Theme.accent, Theme.accent.opacity(0.78)],
-                                startPoint: .topLeading, endPoint: .bottomTrailing
+        VStack(alignment: .trailing, spacing: 4) {
+            HStack(alignment: .bottom, spacing: 0) {
+                Spacer(minLength: compact ? 40 : 72)
+                Text(block.content)
+                    .font(Theme.mono(compact ? 11 : 13))
+                    .foregroundStyle(.white)
+                    .padding(.vertical, 10).padding(.horizontal, 14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Theme.accent, Theme.accent.opacity(0.78)],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing
+                                )
                             )
-                        )
-                        .shadow(color: Theme.accent.opacity(0.18), radius: 6, x: 0, y: 3)
-                )
+                            .shadow(color: Theme.accent.opacity(0.18), radius: 6, x: 0, y: 3)
+                    )
+            }
+
+            HStack(spacing: 8) {
+                Text(block.timestamp, style: .time)
+                    .font(Theme.mono(7))
+                    .foregroundColor(Theme.textMuted)
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(block.content, forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: Theme.iconSize(7)))
+                        .foregroundColor(Theme.textMuted)
+                }
+                .buttonStyle(.plain)
+                .help("Copy")
+
+                if let onResend = onResendPrompt {
+                    Button {
+                        onResend(block.content)
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: Theme.iconSize(7)))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                    .help(NSLocalizedString("block.resend", value: "Edit & Resend", comment: ""))
+                }
+            }
         }
         .padding(.top, 10).padding(.bottom, 2)
     }
@@ -165,6 +197,9 @@ public struct EventBlockView: View {
                 if !block.isComplete {
                     ProgressView().scaleEffect(0.35).frame(width: 12, height: 12)
                 }
+                Text(block.timestamp, style: .time)
+                    .font(Theme.mono(7))
+                    .foregroundColor(Theme.textMuted)
             }
             .padding(.vertical, 4).padding(.horizontal, 8)
         }
@@ -240,6 +275,33 @@ public struct EventBlockView: View {
                 Text(block.content)
                     .font(Theme.mono(fsSm))
                     .foregroundColor(Theme.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+
+                // 경로 복사
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(block.content, forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: Theme.iconSize(8)))
+                        .foregroundColor(Theme.textDim)
+                }
+                .buttonStyle(.plain)
+                .help(NSLocalizedString("block.copy.path", value: "Copy path", comment: ""))
+
+                // Finder에서 열기
+                Button {
+                    let url = URL(fileURLWithPath: block.content)
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                } label: {
+                    Image(systemName: "folder")
+                        .font(.system(size: Theme.iconSize(8)))
+                        .foregroundColor(Theme.textDim)
+                }
+                .buttonStyle(.plain)
+                .help(NSLocalizedString("block.reveal.finder", value: "Reveal in Finder", comment: ""))
             }
             .padding(.vertical, 3).padding(.horizontal, 8)
         }
@@ -302,6 +364,22 @@ public struct EventBlockView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
+
+            // 빠른 후속 액션 버튼
+            if let onResend = onResendPrompt {
+                HStack(spacing: 6) {
+                    quickActionButton(label: NSLocalizedString("block.action.continue", value: "이어서", comment: ""), icon: "arrow.right.circle", color: Theme.accent) {
+                        onResend("이어서 진행해줘")
+                    }
+                    quickActionButton(label: NSLocalizedString("block.action.explain", value: "설명", comment: ""), icon: "questionmark.circle", color: Theme.purple) {
+                        onResend("방금 한 작업을 설명해줘")
+                    }
+                    quickActionButton(label: NSLocalizedString("block.action.fix", value: "수정", comment: ""), icon: "wrench", color: Theme.orange) {
+                        onResend("에러가 있으면 수정해줘")
+                    }
+                }
+                .padding(.top, 4)
+            }
         }
         .padding(12)
         .background(
@@ -319,6 +397,23 @@ public struct EventBlockView: View {
                 )
         )
         .padding(.top, 6)
+    }
+
+    private func quickActionButton(label: String, icon: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: Theme.iconSize(8)))
+                Text(label)
+                    .font(Theme.mono(8, weight: .bold))
+            }
+            .foregroundColor(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 6).fill(color.opacity(0.08)))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(color.opacity(0.2), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Error

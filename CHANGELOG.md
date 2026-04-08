@@ -2,6 +2,24 @@
 
 All notable changes to Doffice are documented here.
 
+## [0.0.52] - 2026-04-08
+
+### Added
+- Plugin character filter button in character collection view
+- Plugin character badges: 바캉스(cyan), 배그(red) per pack
+- Plugin furniture rendering and placement in modular build
+- Character tap in office shows action menu popover
+
+### Fixed
+- Plugin characters not loading (invalid enum values in characters.json)
+- Plugin validation rejecting effects/furniture-only packs
+- All bundled plugin data uses valid HatType/Accessory/Species values
+- Enum fallback decoding: unknown values map gracefully instead of crash
+
+### Changed
+- Remove typing-combo-pack
+- Max hired characters raised from 12 to 30
+
 ## [0.0.51] - 2026-04-08
 
 ### Fixed

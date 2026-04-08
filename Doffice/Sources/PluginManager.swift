@@ -860,7 +860,104 @@ class PluginManager: ObservableObject {
             installBundledPlugin(item, bundledID: bundledID)
             return
         }
+
+        // plugin.json manifest → 관련 파일 모두 다운로드
+        if item.downloadURL.hasSuffix("plugin.json") || item.downloadURL.hasSuffix("package.json") {
+            installFromManifestURL(item)
+            return
+        }
+
         install(source: item.downloadURL)
+    }
+
+    /// plugin.json manifest URL에서 관련 파일 모두 다운로드
+    private func installFromManifestURL(_ item: RegistryPlugin) {
+        guard let manifestURL = URL(string: item.downloadURL) else {
+            finishWithError(NSLocalizedString("plugin.error.invalid.url", comment: ""))
+            return
+        }
+
+        let baseURL = manifestURL.deletingLastPathComponent()
+        let pluginDir = pluginBaseDir.appendingPathComponent(item.id)
+        let fm = FileManager.default
+
+        isInstalling = true
+        lastError = nil
+        installProgress = String(format: NSLocalizedString("plugin.progress.downloading", comment: ""), item.name)
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+
+            do {
+                if fm.fileExists(atPath: pluginDir.path) {
+                    try fm.removeItem(at: pluginDir)
+                }
+                try fm.createDirectory(at: pluginDir, withIntermediateDirectories: true)
+            } catch {
+                self.finishWithError(String(format: NSLocalizedString("plugin.error.download.failed", comment: ""), error.localizedDescription))
+                return
+            }
+
+            guard let manifestData = try? Data(contentsOf: manifestURL) else {
+                self.cleanupManagedPluginDirectory(pluginDir)
+                self.finishWithError(String(format: NSLocalizedString("plugin.error.download.failed", comment: ""), "manifest"))
+                return
+            }
+
+            let manifestDest = pluginDir.appendingPathComponent(manifestURL.lastPathComponent)
+            try? manifestData.write(to: manifestDest)
+
+            var filesToDownload: [String] = ["characters.json", "README.md", "package.json"]
+            if let manifest = try? JSONSerialization.jsonObject(with: manifestData) as? [String: Any] {
+                if let contributes = manifest["contributes"] as? [String: Any] {
+                    for (_, value) in contributes {
+                        if let fileName = value as? String {
+                            filesToDownload.append(fileName)
+                        }
+                    }
+                }
+                if let files = manifest["files"] as? [String] {
+                    filesToDownload.append(contentsOf: files)
+                }
+            }
+
+            let uniqueFiles = Array(Set(filesToDownload))
+
+            for fileName in uniqueFiles {
+                let fileURL = baseURL.appendingPathComponent(fileName)
+                let destPath = pluginDir.appendingPathComponent(fileName)
+                let parentDir = destPath.deletingLastPathComponent()
+                try? fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
+
+                if let data = try? Data(contentsOf: fileURL) {
+                    try? data.write(to: destPath)
+                }
+            }
+
+            let claudeMDPath = pluginDir.appendingPathComponent("CLAUDE.md")
+            if !fm.fileExists(atPath: claudeMDPath.path) {
+                let claudeContent = "# \(item.name)\n\n\(item.description)\n"
+                try? claudeContent.write(to: claudeMDPath, atomically: true, encoding: .utf8)
+            }
+
+            if let validationMessage = self.pluginValidationError(at: pluginDir.path) {
+                self.cleanupManagedPluginDirectory(pluginDir)
+                self.finishWithError(validationMessage)
+                return
+            }
+
+            let entry = PluginEntry(
+                id: UUID().uuidString,
+                name: item.name,
+                source: item.downloadURL,
+                localPath: pluginDir.path,
+                version: item.version,
+                installedAt: Date(),
+                enabled: true,
+                sourceType: .rawURL
+            )
+            self.finishInstall(entry)
+        }
     }
 
     /// 이미 설치되어 있는지 확인

@@ -2,6 +2,23 @@
 
 All notable changes to Doffice are documented here.
 
+## [0.0.50] - 2026-04-08
+
+### Added
+- Localization key sync verification script (`Scripts/l10n-check.sh`) + CI step
+- Code signing and notarization pipeline in CI
+- Design system catalog: Modifiers, Extensions, Notifications sections (34 → 37)
+- DSIconButton and DSButtonGroup demos in ButtonsCatalog
+
+### Changed
+- Sync-check improved: sums extension files, ±15% tolerance (9 drift → 4)
+- Remove Tuist-generated xcodeproj/xcworkspace from git (-3,296 lines)
+- Bump SwiftTerm to 1.13.0, actions/checkout to v6, action-gh-release to v2
+- Sync 73 missing localization keys across en/ko/ja (both source trees)
+
+### Fixed
+- Homebrew cask app name: DofficeApp.app → Doffice.app
+
 ## [0.0.49] - 2026-04-07
 
 ### Added

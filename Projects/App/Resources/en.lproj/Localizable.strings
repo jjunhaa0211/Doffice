@@ -2672,3 +2672,9 @@
 
 /* Gemini */
 "gemini.rate.limit" = "Rate limit reached, retrying...";
+
+"settings.token.protection" = "Token Protection";
+"settings.token.protection.off" = "Protection off — daily/weekly limits ignored";
+"settings.token.protection.on" = "Auto-block when daily/weekly limits exceeded";
+"settings.token.protection.toggle" = "Enable Token Protection";
+"sidebar.report.loading" = "Loading...";

@@ -35,3 +35,7 @@ UserInterfaceState.xcuserstate
 Tuist/Dependencies/SwiftPackageManager/.build/
 **/Derived/
 *.xcodeproj/xcuserdata/
+
+# Tuist-generated project files (regenerated via `tuist generate`)
+Projects/**/*.xcodeproj/
+Doffice.xcworkspace/

@@ -2670,3 +2670,9 @@
 
 /* Gemini */
 "gemini.rate.limit" = "용량 한도 도달, 재시도 중...";
+
+"settings.token.protection" = "토큰 보호";
+"settings.token.protection.off" = "보호 꺼짐 — 일간/주간 한도 무시";
+"settings.token.protection.on" = "일간/주간 한도 초과 시 자동 차단";
+"settings.token.protection.toggle" = "토큰 보호 활성화";
+"sidebar.report.loading" = "로딩 중...";

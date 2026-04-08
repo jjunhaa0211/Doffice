@@ -2672,3 +2672,9 @@
 
 /* Gemini */
 "gemini.rate.limit" = "レート制限に達しました。リトライ中...";
+
+"settings.token.protection" = "トークン保護";
+"settings.token.protection.off" = "保護オフ — 日次/週次上限を無視";
+"settings.token.protection.on" = "日次/週次上限超過時に自動ブロック";
+"settings.token.protection.toggle" = "トークン保護を有効化";
+"sidebar.report.loading" = "読み込み中...";

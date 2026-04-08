@@ -36,6 +36,11 @@ jobs:
           chmod +x ./Scripts/sync-check.sh
           ./Scripts/sync-check.sh
 
+      - name: Localization Key Sync Check
+        run: |
+          chmod +x ./Scripts/l10n-check.sh
+          ./Scripts/l10n-check.sh
+
       - name: DesignSystem Tests
         run: |
           xcodebuild test \
@@ -82,12 +87,60 @@ jobs:
           fi
           DOFFICE_SMOKE_TEST=1 "$APP_BINARY" --smoke-test --smoke-timeout=25
 
+      - name: Import Code Signing Certificate
+        if: startsWith(github.ref, 'refs/tags/v') && env.MACOS_CERTIFICATE != ''
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          echo -n "$MACOS_CERTIFICATE" | base64 --decode -o $CERTIFICATE_PATH
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          security import $CERTIFICATE_PATH -P "$MACOS_CERTIFICATE_PWD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+      - name: Codesign App
+        if: startsWith(github.ref, 'refs/tags/v') && env.MACOS_CERTIFICATE != ''
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
+        run: |
+          APP_PATH="build-app/Build/Products/Release/Doffice.app"
+          codesign --force --deep --options runtime --sign "$SIGNING_IDENTITY" "$APP_PATH"
+          codesign --verify --verbose "$APP_PATH"
+
       - name: Package
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           cd build-app/Build/Products/Release
           ditto -c -k --sequesterRsrc --keepParent Doffice.app Doffice-${GITHUB_REF_NAME}.zip
           echo "ASSET_PATH=build-app/Build/Products/Release/Doffice-${GITHUB_REF_NAME}.zip" >> $GITHUB_ENV
+
+      - name: Notarize App
+        if: startsWith(github.ref, 'refs/tags/v') && env.APPLE_ID != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit "$ASSET_PATH" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait --timeout 600
+          xcrun stapler staple "build-app/Build/Products/Release/Doffice.app"
+          # Re-package with stapled ticket
+          cd build-app/Build/Products/Release
+          rm -f Doffice-${GITHUB_REF_NAME}.zip
+          ditto -c -k --sequesterRsrc --keepParent Doffice.app Doffice-${GITHUB_REF_NAME}.zip
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')

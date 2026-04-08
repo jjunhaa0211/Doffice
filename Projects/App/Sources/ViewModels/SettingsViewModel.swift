@@ -160,51 +160,51 @@ final class SettingsViewModel: ObservableObject {
         customFontSize = ct.fontSize ?? 11.0
 
         // Background
-        customBgColor = ThemeColorDefaults.resolve(ct.bgHex, pair: .bg, isDark: isDark)
-        customBgCardColor = ThemeColorDefaults.resolve(ct.bgCardHex, pair: .bgCard, isDark: isDark)
-        customBgSurfaceColor = ThemeColorDefaults.resolve(ct.bgSurfaceHex, pair: .bgSurface, isDark: isDark)
-        customBgTertiaryColor = ThemeColorDefaults.resolve(ct.bgTertiaryHex, pair: .bgTertiary, isDark: isDark)
+        customBgColor = ThemeColorDefaults.resolve(ct.bgHex, pair: ThemeColorDefaults.bg, isDark: isDark)
+        customBgCardColor = ThemeColorDefaults.resolve(ct.bgCardHex, pair: ThemeColorDefaults.bgCard, isDark: isDark)
+        customBgSurfaceColor = ThemeColorDefaults.resolve(ct.bgSurfaceHex, pair: ThemeColorDefaults.bgSurface, isDark: isDark)
+        customBgTertiaryColor = ThemeColorDefaults.resolve(ct.bgTertiaryHex, pair: ThemeColorDefaults.bgTertiary, isDark: isDark)
 
         // Text
-        customTextPrimaryColor = ThemeColorDefaults.resolve(ct.textPrimaryHex, pair: .textPrimary, isDark: isDark)
-        customTextSecondaryColor = ThemeColorDefaults.resolve(ct.textSecondaryHex, pair: .textSecondary, isDark: isDark)
-        customTextDimColor = ThemeColorDefaults.resolve(ct.textDimHex, pair: .textDim, isDark: isDark)
-        customTextMutedColor = ThemeColorDefaults.resolve(ct.textMutedHex, pair: .textMuted, isDark: isDark)
+        customTextPrimaryColor = ThemeColorDefaults.resolve(ct.textPrimaryHex, pair: ThemeColorDefaults.textPrimary, isDark: isDark)
+        customTextSecondaryColor = ThemeColorDefaults.resolve(ct.textSecondaryHex, pair: ThemeColorDefaults.textSecondary, isDark: isDark)
+        customTextDimColor = ThemeColorDefaults.resolve(ct.textDimHex, pair: ThemeColorDefaults.textDim, isDark: isDark)
+        customTextMutedColor = ThemeColorDefaults.resolve(ct.textMutedHex, pair: ThemeColorDefaults.textMuted, isDark: isDark)
 
         // Border
-        customBorderColor = ThemeColorDefaults.resolve(ct.borderHex, pair: .border, isDark: isDark)
-        customBorderStrongColor = ThemeColorDefaults.resolve(ct.borderStrongHex, pair: .borderStrong, isDark: isDark)
+        customBorderColor = ThemeColorDefaults.resolve(ct.borderHex, pair: ThemeColorDefaults.border, isDark: isDark)
+        customBorderStrongColor = ThemeColorDefaults.resolve(ct.borderStrongHex, pair: ThemeColorDefaults.borderStrong, isDark: isDark)
 
         // Semantic
-        customGreenColor = ThemeColorDefaults.resolve(ct.greenHex, pair: .green, isDark: isDark)
-        customRedColor = ThemeColorDefaults.resolve(ct.redHex, pair: .red, isDark: isDark)
-        customYellowColor = ThemeColorDefaults.resolve(ct.yellowHex, pair: .yellow, isDark: isDark)
-        customPurpleColor = ThemeColorDefaults.resolve(ct.purpleHex, pair: .purple, isDark: isDark)
-        customOrangeColor = ThemeColorDefaults.resolve(ct.orangeHex, pair: .orange, isDark: isDark)
-        customCyanColor = ThemeColorDefaults.resolve(ct.cyanHex, pair: .cyan, isDark: isDark)
-        customPinkColor = ThemeColorDefaults.resolve(ct.pinkHex, pair: .pink, isDark: isDark)
+        customGreenColor = ThemeColorDefaults.resolve(ct.greenHex, pair: ThemeColorDefaults.green, isDark: isDark)
+        customRedColor = ThemeColorDefaults.resolve(ct.redHex, pair: ThemeColorDefaults.red, isDark: isDark)
+        customYellowColor = ThemeColorDefaults.resolve(ct.yellowHex, pair: ThemeColorDefaults.yellow, isDark: isDark)
+        customPurpleColor = ThemeColorDefaults.resolve(ct.purpleHex, pair: ThemeColorDefaults.purple, isDark: isDark)
+        customOrangeColor = ThemeColorDefaults.resolve(ct.orangeHex, pair: ThemeColorDefaults.orange, isDark: isDark)
+        customCyanColor = ThemeColorDefaults.resolve(ct.cyanHex, pair: ThemeColorDefaults.cyan, isDark: isDark)
+        customPinkColor = ThemeColorDefaults.resolve(ct.pinkHex, pair: ThemeColorDefaults.pink, isDark: isDark)
     }
 
     /// 다크/라이트 모드 전환 시 커스텀 hex가 없는 색상만 기본값으로 업데이트합니다.
     func syncColorsForMode(_ isDark: Bool, theme: CustomThemeConfig) {
         let pairs: [(hex: String?, pair: ThemeColorDefaults.ModePair, update: (Color) -> Void)] = [
-            (theme.bgHex, .bg, { [weak self] in self?.customBgColor = $0 }),
-            (theme.bgCardHex, .bgCard, { [weak self] in self?.customBgCardColor = $0 }),
-            (theme.bgSurfaceHex, .bgSurface, { [weak self] in self?.customBgSurfaceColor = $0 }),
-            (theme.bgTertiaryHex, .bgTertiary, { [weak self] in self?.customBgTertiaryColor = $0 }),
-            (theme.textPrimaryHex, .textPrimary, { [weak self] in self?.customTextPrimaryColor = $0 }),
-            (theme.textSecondaryHex, .textSecondary, { [weak self] in self?.customTextSecondaryColor = $0 }),
-            (theme.textDimHex, .textDim, { [weak self] in self?.customTextDimColor = $0 }),
-            (theme.textMutedHex, .textMuted, { [weak self] in self?.customTextMutedColor = $0 }),
-            (theme.borderHex, .border, { [weak self] in self?.customBorderColor = $0 }),
-            (theme.borderStrongHex, .borderStrong, { [weak self] in self?.customBorderStrongColor = $0 }),
-            (theme.greenHex, .green, { [weak self] in self?.customGreenColor = $0 }),
-            (theme.redHex, .red, { [weak self] in self?.customRedColor = $0 }),
-            (theme.yellowHex, .yellow, { [weak self] in self?.customYellowColor = $0 }),
-            (theme.purpleHex, .purple, { [weak self] in self?.customPurpleColor = $0 }),
-            (theme.orangeHex, .orange, { [weak self] in self?.customOrangeColor = $0 }),
-            (theme.cyanHex, .cyan, { [weak self] in self?.customCyanColor = $0 }),
-            (theme.pinkHex, .pink, { [weak self] in self?.customPinkColor = $0 }),
+            (theme.bgHex, ThemeColorDefaults.bg, { [weak self] in self?.customBgColor = $0 }),
+            (theme.bgCardHex, ThemeColorDefaults.bgCard, { [weak self] in self?.customBgCardColor = $0 }),
+            (theme.bgSurfaceHex, ThemeColorDefaults.bgSurface, { [weak self] in self?.customBgSurfaceColor = $0 }),
+            (theme.bgTertiaryHex, ThemeColorDefaults.bgTertiary, { [weak self] in self?.customBgTertiaryColor = $0 }),
+            (theme.textPrimaryHex, ThemeColorDefaults.textPrimary, { [weak self] in self?.customTextPrimaryColor = $0 }),
+            (theme.textSecondaryHex, ThemeColorDefaults.textSecondary, { [weak self] in self?.customTextSecondaryColor = $0 }),
+            (theme.textDimHex, ThemeColorDefaults.textDim, { [weak self] in self?.customTextDimColor = $0 }),
+            (theme.textMutedHex, ThemeColorDefaults.textMuted, { [weak self] in self?.customTextMutedColor = $0 }),
+            (theme.borderHex, ThemeColorDefaults.border, { [weak self] in self?.customBorderColor = $0 }),
+            (theme.borderStrongHex, ThemeColorDefaults.borderStrong, { [weak self] in self?.customBorderStrongColor = $0 }),
+            (theme.greenHex, ThemeColorDefaults.green, { [weak self] in self?.customGreenColor = $0 }),
+            (theme.redHex, ThemeColorDefaults.red, { [weak self] in self?.customRedColor = $0 }),
+            (theme.yellowHex, ThemeColorDefaults.yellow, { [weak self] in self?.customYellowColor = $0 }),
+            (theme.purpleHex, ThemeColorDefaults.purple, { [weak self] in self?.customPurpleColor = $0 }),
+            (theme.orangeHex, ThemeColorDefaults.orange, { [weak self] in self?.customOrangeColor = $0 }),
+            (theme.cyanHex, ThemeColorDefaults.cyan, { [weak self] in self?.customCyanColor = $0 }),
+            (theme.pinkHex, ThemeColorDefaults.pink, { [weak self] in self?.customPinkColor = $0 }),
         ]
 
         for entry in pairs {
@@ -218,9 +218,28 @@ final class SettingsViewModel: ObservableObject {
 
     func calculateCacheSize() {
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let size = SessionStore.shared.calculateCacheSize()
+            var totalBytes: Int64 = 0
+            if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+                let dofficeDir = appSupport.appendingPathComponent("Doffice")
+                if let enumerator = FileManager.default.enumerator(at: dofficeDir, includingPropertiesForKeys: [.fileSizeKey]) {
+                    for case let url as URL in enumerator {
+                        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                            totalBytes += Int64(size)
+                        }
+                    }
+                }
+            }
+            let udKeys = ["DofficeTokenHistory", "DofficeCharacters", "DofficeCharacterManualUnlocks", "DofficeAchievements"]
+            for key in udKeys {
+                if let data = UserDefaults.standard.data(forKey: key) {
+                    totalBytes += Int64(data.count)
+                } else if let dict = UserDefaults.standard.dictionary(forKey: key),
+                          let data = try? JSONSerialization.data(withJSONObject: dict) {
+                    totalBytes += Int64(data.count)
+                }
+            }
             DispatchQueue.main.async {
-                self?.cacheSize = ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+                self?.cacheSize = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
             }
         }
     }

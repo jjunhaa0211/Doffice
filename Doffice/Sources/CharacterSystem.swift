@@ -423,16 +423,21 @@ class CharacterRegistry: ObservableObject {
     }
 
     func hire(_ id: String) {
-        guard let idx = allCharacters.firstIndex(where: { $0.id == id }) else { return }
-        // 도전과제 잠금 체크
+        guard let idx = allCharacters.firstIndex(where: { $0.id == id }) else {
+            CrashLogger.shared.warning("CharacterRegistry.hire: character '\(id)' not found in allCharacters (\(allCharacters.count) total)")
+            return
+        }
+        // 도전과제 잠금 체크 — 잠금 해제 또는 수동 해제된 경우 통과
         if let req = allCharacters[idx].requiredAchievement {
-            guard AchievementManager.shared.achievements.first(where: { $0.id == req })?.unlocked == true else {
+            let unlocked = AchievementManager.shared.achievements.first(where: { $0.id == req })?.unlocked == true
+            let manuallyUnlocked = manuallyUnlockedCharacterIDs.contains(id)
+            if !unlocked && !manuallyUnlocked {
                 let achievementName = AchievementManager.shared.achievements.first(where: { $0.id == req })?.name ?? req
                 notifyAchievementRequired(achievementName)
                 return
             }
         }
-        guard allCharacters[idx].isHired || canHire(id) else {
+        if hiredCharacters.count >= Self.maxHiredCount && !allCharacters[idx].isHired {
             notifyHiringCapReached()
             return
         }

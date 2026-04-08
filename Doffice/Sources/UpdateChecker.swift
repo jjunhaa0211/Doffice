@@ -285,12 +285,12 @@ class UpdateChecker: ObservableObject {
         echo "[updater] 시작: $(date)"
         echo "[updater] PID \(pid) 종료 대기..."
 
-        # PID 기반 종료 대기 (최대 15초)
-        for i in {1..30}; do
+        # PID 기반 종료 대기 (최대 30초)
+        for i in {1..60}; do
             kill -0 \(pid) 2>/dev/null || break
             sleep 0.5
         done
-        sleep 0.5
+        sleep 1
 
         CURRENT="\(currentAppURL.path)"
         NEW="\(newAppURL.path)"
@@ -325,8 +325,11 @@ class UpdateChecker: ObservableObject {
             exit 1
         fi
 
+        # LaunchServices에 새 앱 등록 (캐시 갱신)
+        /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted "$CURRENT" 2>/dev/null || true
+
         echo "[updater] 새 앱 실행"
-        open "$CURRENT"
+        open -n "$CURRENT"
 
         # 정리 (백업 + 임시 다운로드)
         sleep 3
@@ -347,8 +350,8 @@ class UpdateChecker: ObservableObject {
             proc.standardError = nil
             try proc.run()
 
-            // 강제 종료 — NSApp.terminate는 AppKit 종료 흐름에서 차단될 수 있음
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            // 스크립트가 실행된 것을 확인 후 종료
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 exit(0)
             }
         } catch {

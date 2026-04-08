@@ -245,7 +245,7 @@ extension SettingsView {
                     }
 
                     HStack(spacing: 8) {
-                        TextField(NSLocalizedString("settings.template.custom.jobs.name", comment: ""), text: $newCustomJobName)
+                        TextField(NSLocalizedString("settings.template.custom.jobs.name", comment: ""), text: $vm.newCustomJobName)
                             .textFieldStyle(.plain)
                             .font(Theme.mono(10))
                             .padding(6)
@@ -280,7 +280,7 @@ extension SettingsView {
             settingsSection(title: NSLocalizedString("plugin.section.add", comment: ""), subtitle: NSLocalizedString("plugin.section.add.subtitle", comment: "")) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
-                        TextField(NSLocalizedString("plugin.input.placeholder", comment: ""), text: $pluginSourceInput)
+                        TextField(NSLocalizedString("plugin.input.placeholder", comment: ""), text: $vm.pluginSourceInput)
                             .font(Theme.mono(10)).textFieldStyle(.plain)
                             .padding(8)
                             .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
@@ -559,7 +559,7 @@ extension SettingsView {
         .onDisappear {
             pluginManager.stopWatchingAll()
         }
-        .alert(NSLocalizedString("plugin.confirm.uninstall", comment: ""), isPresented: $showPluginUninstallConfirm) {
+        .alert(NSLocalizedString("plugin.confirm.uninstall", comment: ""), isPresented: $vm.showPluginUninstallConfirm) {
             Button(NSLocalizedString("delete", comment: ""), role: .destructive) {
                 if let plugin = pluginToUninstall {
                     pluginManager.uninstall(plugin)
@@ -590,7 +590,7 @@ extension SettingsView {
                             req.pluginName, URL(fileURLWithPath: req.scriptPath).lastPathComponent))
             }
         }
-        .sheet(isPresented: $showPluginScaffold) {
+        .sheet(isPresented: $vm.showPluginScaffold) {
             VStack(spacing: 16) {
                 HStack {
                     Image(systemName: "hammer.fill")
@@ -611,7 +611,7 @@ extension SettingsView {
                     Text(NSLocalizedString("plugin.scaffold.name.label", comment: ""))
                         .font(Theme.mono(10, weight: .medium))
                         .foregroundColor(Theme.textSecondary)
-                    TextField(NSLocalizedString("plugin.scaffold.name.placeholder", comment: ""), text: $scaffoldName)
+                    TextField(NSLocalizedString("plugin.scaffold.name.placeholder", comment: ""), text: $vm.scaffoldName)
                         .font(Theme.mono(11)).textFieldStyle(.plain)
                         .padding(10)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))

@@ -34,7 +34,7 @@ extension SettingsView {
             settingsSection(title: NSLocalizedString("theme.section.profile", comment: ""), subtitle: NSLocalizedString("theme.section.profile.subtitle", comment: "")) {
                 VStack(spacing: 10) {
                     securityRow(label: NSLocalizedString("theme.label.app.name", comment: "")) {
-                        TextField(NSLocalizedString("theme.label.app.name", comment: ""), text: $editingAppName)
+                        TextField(NSLocalizedString("theme.label.app.name", comment: ""), text: $vm.editingAppName)
                             .font(Theme.mono(10)).textFieldStyle(.plain)
                             .padding(6)
                             .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface))
@@ -43,7 +43,7 @@ extension SettingsView {
                             .onSubmit { settings.appDisplayName = editingAppName; settings.requestRefreshIfNeeded() }
                     }
                     securityRow(label: NSLocalizedString("theme.label.company", comment: "")) {
-                        TextField(NSLocalizedString("theme.label.company.placeholder", comment: ""), text: $editingCompanyName)
+                        TextField(NSLocalizedString("theme.label.company.placeholder", comment: ""), text: $vm.editingCompanyName)
                             .font(Theme.mono(10)).textFieldStyle(.plain)
                             .padding(6)
                             .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface))
@@ -53,7 +53,7 @@ extension SettingsView {
                     }
                     securityRow(label: NSLocalizedString("theme.label.secret.key", comment: "")) {
                         HStack(spacing: 6) {
-                            SecureField(NSLocalizedString("theme.label.secret.key.placeholder", comment: ""), text: $secretKeyInput)
+                            SecureField(NSLocalizedString("theme.label.secret.key.placeholder", comment: ""), text: $vm.secretKeyInput)
                                 .font(Theme.mono(10)).textFieldStyle(.plain)
                                 .padding(6)
                                 .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface))
@@ -168,7 +168,7 @@ extension SettingsView {
                             Text(NSLocalizedString("settings.appinfo.update", comment: "")).font(Theme.mono(9, weight: .bold))
                                 .appButtonSurface(tone: .green, compact: true)
                         }.buttonStyle(.plain)
-                        .sheet(isPresented: $showUpdateSheet) {
+                        .sheet(isPresented: $vm.showUpdateSheet) {
                             UpdateSheet().dofficeSheetPresentation()
                         }
                         Spacer()

@@ -106,7 +106,7 @@ extension SettingsView {
                             HStack(spacing: 4) {
                                 Text(NSLocalizedString("settings.customtheme.gradient", comment: ""))
                                     .font(Theme.mono(8)).foregroundColor(Theme.textDim)
-                                Toggle("", isOn: $customUseGradient)
+                                Toggle("", isOn: $vm.customUseGradient)
                                     .toggleStyle(.switch).controlSize(.mini)
                                     .onChange(of: customUseGradient) { _, newVal in
                                         var config = settings.customTheme
@@ -134,7 +134,7 @@ extension SettingsView {
                                 HStack(spacing: 6) {
                                     Text(NSLocalizedString("settings.customtheme.gradient.start", comment: ""))
                                         .font(Theme.mono(9)).foregroundColor(Theme.textSecondary)
-                                    ColorPicker("", selection: $customGradientStart, supportsOpacity: false)
+                                    ColorPicker("", selection: $vm.customGradientStart, supportsOpacity: false)
                                         .labelsHidden()
                                         .onChange(of: customGradientStart) { _, newColor in
                                             var config = settings.customTheme
@@ -145,7 +145,7 @@ extension SettingsView {
                                 HStack(spacing: 6) {
                                     Text(NSLocalizedString("settings.customtheme.gradient.end", comment: ""))
                                         .font(Theme.mono(9)).foregroundColor(Theme.textSecondary)
-                                    ColorPicker("", selection: $customGradientEnd, supportsOpacity: false)
+                                    ColorPicker("", selection: $vm.customGradientEnd, supportsOpacity: false)
                                         .labelsHidden()
                                         .onChange(of: customGradientEnd) { _, newColor in
                                             var config = settings.customTheme
@@ -164,7 +164,7 @@ extension SettingsView {
                                 Text("● Accent")
                                     .font(Theme.mono(9)).foregroundColor(Theme.textSecondary)
                                 Spacer()
-                                ColorPicker("", selection: $customAccentColor, supportsOpacity: false)
+                                ColorPicker("", selection: $vm.customAccentColor, supportsOpacity: false)
                                     .labelsHidden()
                                     .onChange(of: customAccentColor) { _, newColor in
                                         var config = settings.customTheme
@@ -185,24 +185,24 @@ extension SettingsView {
                     }
 
                     // 배경 색상
-                    DisclosureGroup(isExpanded: $showBgColors) {
+                    DisclosureGroup(isExpanded: $vm.showBgColors) {
                         VStack(spacing: 8) {
-                            colorPickerRow(label: "배경 (bg)", color: $customBgColor,
+                            colorPickerRow(label: "배경 (bg)", color: $vm.customBgColor,
                                 savedHex: settings.customTheme.bgHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "000000") : Color(hex: "fafafa")) { hex in
                                 var c = settings.customTheme; c.bgHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "카드 (bgCard)", color: $customBgCardColor,
+                            colorPickerRow(label: "카드 (bgCard)", color: $vm.customBgCardColor,
                                 savedHex: settings.customTheme.bgCardHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "0a0a0a") : Color(hex: "ffffff")) { hex in
                                 var c = settings.customTheme; c.bgCardHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "서피스 (bgSurface)", color: $customBgSurfaceColor,
+                            colorPickerRow(label: "서피스 (bgSurface)", color: $vm.customBgSurfaceColor,
                                 savedHex: settings.customTheme.bgSurfaceHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "111111") : Color(hex: "f5f5f5")) { hex in
                                 var c = settings.customTheme; c.bgSurfaceHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "3단계 배경 (bgTertiary)", color: $customBgTertiaryColor,
+                            colorPickerRow(label: "3단계 배경 (bgTertiary)", color: $vm.customBgTertiaryColor,
                                 savedHex: settings.customTheme.bgTertiaryHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "1a1a1a") : Color(hex: "ebebeb")) { hex in
                                 var c = settings.customTheme; c.bgTertiaryHex = hex; settings.saveCustomTheme(c)
@@ -216,24 +216,24 @@ extension SettingsView {
                     }
 
                     // 텍스트 색상
-                    DisclosureGroup(isExpanded: $showTextColors) {
+                    DisclosureGroup(isExpanded: $vm.showTextColors) {
                         VStack(spacing: 8) {
-                            colorPickerRow(label: "기본 텍스트", color: $customTextPrimaryColor,
+                            colorPickerRow(label: "기본 텍스트", color: $vm.customTextPrimaryColor,
                                 savedHex: settings.customTheme.textPrimaryHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "ededed") : Color(hex: "171717")) { hex in
                                 var c = settings.customTheme; c.textPrimaryHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "보조 텍스트", color: $customTextSecondaryColor,
+                            colorPickerRow(label: "보조 텍스트", color: $vm.customTextSecondaryColor,
                                 savedHex: settings.customTheme.textSecondaryHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "a1a1a1") : Color(hex: "636363")) { hex in
                                 var c = settings.customTheme; c.textSecondaryHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "흐린 텍스트 (dim)", color: $customTextDimColor,
+                            colorPickerRow(label: "흐린 텍스트 (dim)", color: $vm.customTextDimColor,
                                 savedHex: settings.customTheme.textDimHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "707070") : Color(hex: "8f8f8f")) { hex in
                                 var c = settings.customTheme; c.textDimHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "뮤트 텍스트 (muted)", color: $customTextMutedColor,
+                            colorPickerRow(label: "뮤트 텍스트 (muted)", color: $vm.customTextMutedColor,
                                 savedHex: settings.customTheme.textMutedHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "484848") : Color(hex: "b0b0b0")) { hex in
                                 var c = settings.customTheme; c.textMutedHex = hex; settings.saveCustomTheme(c)
@@ -247,14 +247,14 @@ extension SettingsView {
                     }
 
                     // 테두리 색상
-                    DisclosureGroup(isExpanded: $showBorderColors) {
+                    DisclosureGroup(isExpanded: $vm.showBorderColors) {
                         VStack(spacing: 8) {
-                            colorPickerRow(label: "기본 테두리", color: $customBorderColor,
+                            colorPickerRow(label: "기본 테두리", color: $vm.customBorderColor,
                                 savedHex: settings.customTheme.borderHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "282828") : Color(hex: "e5e5e5")) { hex in
                                 var c = settings.customTheme; c.borderHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "강조 테두리", color: $customBorderStrongColor,
+                            colorPickerRow(label: "강조 테두리", color: $vm.customBorderStrongColor,
                                 savedHex: settings.customTheme.borderStrongHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "3e3e3e") : Color(hex: "d0d0d0")) { hex in
                                 var c = settings.customTheme; c.borderStrongHex = hex; settings.saveCustomTheme(c)
@@ -268,39 +268,39 @@ extension SettingsView {
                     }
 
                     // 시맨틱 색상
-                    DisclosureGroup(isExpanded: $showSemanticColors) {
+                    DisclosureGroup(isExpanded: $vm.showSemanticColors) {
                         VStack(spacing: 8) {
-                            colorPickerRow(label: "초록 (green)", color: $customGreenColor,
+                            colorPickerRow(label: "초록 (green)", color: $vm.customGreenColor,
                                 savedHex: settings.customTheme.greenHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "3ecf8e") : Color(hex: "18a058")) { hex in
                                 var c = settings.customTheme; c.greenHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "빨강 (red)", color: $customRedColor,
+                            colorPickerRow(label: "빨강 (red)", color: $vm.customRedColor,
                                 savedHex: settings.customTheme.redHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "f14c4c") : Color(hex: "e5484d")) { hex in
                                 var c = settings.customTheme; c.redHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "노랑 (yellow)", color: $customYellowColor,
+                            colorPickerRow(label: "노랑 (yellow)", color: $vm.customYellowColor,
                                 savedHex: settings.customTheme.yellowHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "f5a623") : Color(hex: "ca8a04")) { hex in
                                 var c = settings.customTheme; c.yellowHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "보라 (purple)", color: $customPurpleColor,
+                            colorPickerRow(label: "보라 (purple)", color: $vm.customPurpleColor,
                                 savedHex: settings.customTheme.purpleHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "8e4ec6") : Color(hex: "6e56cf")) { hex in
                                 var c = settings.customTheme; c.purpleHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "주황 (orange)", color: $customOrangeColor,
+                            colorPickerRow(label: "주황 (orange)", color: $vm.customOrangeColor,
                                 savedHex: settings.customTheme.orangeHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "f97316") : Color(hex: "e5560a")) { hex in
                                 var c = settings.customTheme; c.orangeHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "청록 (cyan)", color: $customCyanColor,
+                            colorPickerRow(label: "청록 (cyan)", color: $vm.customCyanColor,
                                 savedHex: settings.customTheme.cyanHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "06b6d4") : Color(hex: "0891b2")) { hex in
                                 var c = settings.customTheme; c.cyanHex = hex; settings.saveCustomTheme(c)
                             }
-                            colorPickerRow(label: "분홍 (pink)", color: $customPinkColor,
+                            colorPickerRow(label: "분홍 (pink)", color: $vm.customPinkColor,
                                 savedHex: settings.customTheme.pinkHex,
                                 defaultColor: settings.isDarkMode ? Color(hex: "e54d9e") : Color(hex: "d23197")) { hex in
                                 var c = settings.customTheme; c.pinkHex = hex; settings.saveCustomTheme(c)
@@ -321,7 +321,7 @@ extension SettingsView {
                             .font(Theme.mono(10, weight: .medium))
                             .foregroundColor(Theme.textPrimary)
                         Spacer()
-                        Picker("", selection: $customFontName) {
+                        Picker("", selection: $vm.customFontName) {
                             Text(NSLocalizedString("settings.customtheme.font.system", comment: ""))
                                 .tag("")
                             ForEach(NSFontManager.shared.availableFontFamilies, id: \.self) { family in
@@ -348,7 +348,7 @@ extension SettingsView {
                                 .font(Theme.code(10))
                                 .foregroundColor(Theme.textSecondary)
                         }
-                        Slider(value: $customFontSize, in: 8...24, step: 1)
+                        Slider(value: $vm.customFontSize, in: 8...24, step: 1)
                             .onChange(of: customFontSize) { _, newVal in
                                 var config = settings.customTheme
                                 config.fontSize = newVal

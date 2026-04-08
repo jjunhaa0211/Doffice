@@ -10,7 +10,7 @@ import DofficeKit
 struct SettingsView: View {
     @ObservedObject var settings = AppSettings.shared
     @Environment(\.dismiss) var dismiss
-    @StateObject private var vm = SettingsViewModel()
+    @StateObject var vm = SettingsViewModel()
 
     @ObservedObject var tokenTracker = TokenTracker.shared
     @ObservedObject var templateStore = AutomationTemplateStore.shared

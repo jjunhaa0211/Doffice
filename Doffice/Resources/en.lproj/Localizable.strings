@@ -2664,3 +2664,14 @@
 
 "office.action.terminal" = "Open Terminal";
 "office.action.role" = "Change Role";
+"button.cancel" = "Cancel";
+"settings.appicon" = "App Icon";
+"settings.icon.change.message" = "Restart the app to apply the new icon.";
+"settings.icon.change.title" = "Change App Icon";
+"settings.icon.classic" = "Classic";
+"settings.icon.mint" = "Mint";
+"settings.icon.ocean" = "Ocean";
+"settings.icon.pixel" = "Pixel";
+"settings.icon.restart" = "Restart";
+"settings.icon.slate" = "Slate";
+"settings.icon.sunset" = "Sunset";

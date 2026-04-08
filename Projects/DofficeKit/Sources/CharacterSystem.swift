@@ -92,20 +92,22 @@ public struct CharacterCollectionView: View {
             if showPipeline {
                 VStack(alignment: .leading, spacing: 8) {
                     ScrollView(.horizontal, showsIndicators: false) {
+                        let steps = enabledPipelineSteps
                         HStack(spacing: 0) {
-                            pipelineStep(icon: "list.bullet.rectangle.portrait.fill", label: NSLocalizedString("char.pipeline.plan", comment: ""), color: Theme.cyan, isFirst: true)
-                            pipelineArrow()
-                            pipelineStep(icon: "paintbrush.pointed.fill", label: NSLocalizedString("char.pipeline.design", comment: ""), color: Theme.pink)
-                            pipelineArrow()
-                            pipelineStep(icon: "hammer.fill", label: NSLocalizedString("char.pipeline.dev", comment: ""), color: Theme.accent, highlight: true)
-                            pipelineArrow()
-                            pipelineStep(icon: "checklist.checked", label: NSLocalizedString("char.pipeline.review", comment: ""), color: Theme.orange)
-                            pipelineArrow()
-                            pipelineStep(icon: "checkmark.seal.fill", label: NSLocalizedString("char.pipeline.qa", comment: ""), color: Theme.green)
-                            pipelineArrow()
-                            pipelineStep(icon: "doc.text.fill", label: NSLocalizedString("char.pipeline.report", comment: ""), color: Theme.purple)
-                            Text("·").font(Theme.mono(10)).foregroundColor(Theme.textDim).padding(.horizontal, 4)
-                            pipelineStep(icon: "server.rack", label: NSLocalizedString("char.pipeline.sre", comment: ""), color: Theme.red, isLast: true)
+                            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                                if index > 0 {
+                                    if step.separated {
+                                        Text("·").font(Theme.mono(10)).foregroundColor(Theme.textDim).padding(.horizontal, 4)
+                                    } else {
+                                        pipelineArrow()
+                                    }
+                                }
+                                pipelineStep(
+                                    icon: step.icon, label: step.label, color: step.color,
+                                    highlight: step.highlight,
+                                    isFirst: index == 0, isLast: index == steps.count - 1
+                                )
+                            }
                         }
                     }
                     HStack(spacing: 12) {
@@ -282,6 +284,46 @@ public struct CharacterCollectionView: View {
         .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgSurface.opacity(0.6)))
     }
 
+    // MARK: - Pipeline Steps (설정 기반 동적 생성)
+
+    private struct PipelineStepInfo {
+        let icon: String
+        let label: String
+        let color: Color
+        let highlight: Bool
+        let separated: Bool  // arrow 대신 · 구분자
+    }
+
+    private static let allPipelineSteps: [(key: String, icon: String, labelKey: String, color: Color, highlight: Bool, separated: Bool)] = [
+        ("planner", "list.bullet.rectangle.portrait.fill", "char.pipeline.plan", Theme.cyan, false, false),
+        ("designer", "paintbrush.pointed.fill", "char.pipeline.design", Theme.pink, false, false),
+        ("developerExecution", "hammer.fill", "char.pipeline.dev", Theme.accent, true, false),
+        ("reviewer", "checklist.checked", "char.pipeline.review", Theme.orange, false, false),
+        ("qa", "checkmark.seal.fill", "char.pipeline.qa", Theme.green, false, false),
+        ("reporter", "doc.text.fill", "char.pipeline.report", Theme.purple, false, false),
+        ("sre", "server.rack", "char.pipeline.sre", Theme.red, false, true),
+    ]
+
+    private var enabledPipelineSteps: [PipelineStepInfo] {
+        let settings = AppSettings.shared
+        let order = settings.pipelineOrder
+        // 파이프라인 순서대로 정렬, 비활성화된 단계 제외
+        let lookup = Dictionary(uniqueKeysWithValues: Self.allPipelineSteps.map { ($0.key, $0) })
+        var steps: [PipelineStepInfo] = []
+        for key in order {
+            guard settings.isPromptEnabled(for: key),
+                  let step = lookup[key] else { continue }
+            steps.append(PipelineStepInfo(
+                icon: step.icon,
+                label: NSLocalizedString(step.labelKey, comment: ""),
+                color: step.color,
+                highlight: step.highlight,
+                separated: step.separated && !steps.isEmpty
+            ))
+        }
+        return steps
+    }
+
     private func pipelineStep(icon: String, label: String, color: Color, highlight: Bool = false, isFirst: Bool = false, isLast: Bool = false) -> some View {
         VStack(spacing: 3) {
             Image(systemName: icon)
@@ -368,13 +410,17 @@ public struct CharacterCard: View {
                                 .foregroundColor(shirtColor)
                                 .lineLimit(1)
 
-                            if character.isFleaMarketHiddenCharacter {
-                                Text("히든")
+                            if let badge = character.pluginBadgeText {
+                                let tint = character.isFleaMarketHiddenCharacter ? Theme.yellow :
+                                    character.pluginPackName == "vacation-beach-pack" ? Theme.cyan :
+                                    character.pluginPackName == "battleground-pack" ? Theme.red :
+                                    Theme.purple
+                                Text(badge)
                                     .font(Theme.mono(7, weight: .bold))
-                                    .foregroundColor(Theme.yellow)
+                                    .foregroundColor(tint)
                                     .padding(.horizontal, 4)
                                     .padding(.vertical, 2)
-                                    .background(Theme.yellow.opacity(0.12))
+                                    .background(tint.opacity(0.12))
                                     .cornerRadius(4)
                             }
                         }
@@ -389,7 +435,7 @@ public struct CharacterCard: View {
 
                     // Role badge - full width with no truncation
                     Menu {
-                        ForEach(WorkerJob.allCases) { role in
+                        ForEach(WorkerJob.enabledCases) { role in
                             Button { registry.setJobRole(role, for: character.id) } label: {
                                 Label(role.displayName, systemImage: role.icon)
                             }

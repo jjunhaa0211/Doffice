@@ -1,4 +1,5 @@
 import SwiftUI
+import DesignSystem
 
 public enum WorkerJob: String, Codable, CaseIterable, Identifiable {
     case developer
@@ -11,6 +12,31 @@ public enum WorkerJob: String, Codable, CaseIterable, Identifiable {
     case sre
 
     public var id: String { rawValue }
+
+    /// 프롬프트 자동 주입 설정에서 사용하는 키 (AutomationTemplateKind rawValue와 매핑)
+    public var promptRoleKey: String? {
+        switch self {
+        case .planner: return "planner"
+        case .designer: return "designer"
+        case .developer: return "developerExecution"
+        case .reviewer: return "reviewer"
+        case .qa: return "qa"
+        case .reporter: return "reporter"
+        case .sre: return "sre"
+        case .boss: return nil  // boss는 프롬프트 템플릿 없음
+        }
+    }
+
+    /// 현재 설정에서 이 직업의 프롬프트가 활성화되어 있는지 확인
+    public var isPromptEnabledInSettings: Bool {
+        guard let key = promptRoleKey else { return true }
+        return AppSettings.shared.isPromptEnabled(for: key)
+    }
+
+    /// 설정에서 활성화된 직업만 반환
+    public static var enabledCases: [WorkerJob] {
+        allCases.filter { $0.isPromptEnabledInSettings }
+    }
 
     public var displayName: String {
         switch self {
@@ -131,6 +157,32 @@ public struct WorkerCharacter: Identifiable, Codable, Equatable {
 
     public var isPluginCharacter: Bool { id.hasPrefix("plugin_") }
     public var isFleaMarketHiddenCharacter: Bool { id.hasPrefix("plugin_flea-market-hidden-pack_") }
+
+    /// 플러그인 팩 이름 추출 (예: "plugin_vacation-beach-pack_lifeguard" → "vacation-beach-pack")
+    public var pluginPackName: String? {
+        guard isPluginCharacter else { return nil }
+        let parts = id.split(separator: "_", maxSplits: 2)
+        guard parts.count >= 2 else { return nil }
+        return String(parts[1])
+    }
+
+    /// 플러그인 팩 뱃지 텍스트
+    public var pluginBadgeText: String? {
+        guard let pack = pluginPackName else { return nil }
+        switch pack {
+        case "flea-market-hidden-pack": return "히든"
+        case "vacation-beach-pack": return "바캉스"
+        case "battleground-pack": return "배그"
+        case "typing-combo-pack": return "콤보"
+        case "premium-furniture-pack": return "프리미엄"
+        default:
+            // 알 수 없는 플러그인 → 팩 이름에서 추출
+            let name = pack.replacingOccurrences(of: "-pack", with: "")
+                .replacingOccurrences(of: "-", with: " ")
+                .prefix(8)
+            return String(name)
+        }
+    }
 
     public enum HatType: String, Codable, CaseIterable {
         case none, beanie, cap, hardhat, wizard, crown, headphones, beret

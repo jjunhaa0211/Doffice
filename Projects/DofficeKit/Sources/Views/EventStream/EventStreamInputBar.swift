@@ -197,6 +197,10 @@ extension EventStreamView {
                 }
                 .onChange(of: inputText) { old, new in
                     selectedCommandIndex = 0
+                    // 타이핑 이벤트 발행 (플러그인 이펙트용)
+                    if new.count > old.count && new.count - old.count <= 2 {
+                        PluginHost.shared.fireEvent(.onPromptKeyPress)
+                    }
                     // Detect paste: if many new lines appeared at once
                     let addedLen = new.count - old.count
                     if addedLen > 0 {

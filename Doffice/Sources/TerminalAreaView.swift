@@ -1660,7 +1660,12 @@ struct EventStreamView: View {
                     guard isCommandMode else { return .ignored }
                     return handleCommandKeyNavigation(event)
                 }
-                .onChange(of: inputText) { _, _ in selectedCommandIndex = 0 }
+                .onChange(of: inputText) { old, new in
+                    selectedCommandIndex = 0
+                    if new.count > old.count && new.count - old.count <= 2 {
+                        PluginHost.shared.fireEvent(.onPromptKeyPress)
+                    }
+                }
 
                 // 이미지 첨부
                 Button(action: { pickImage() }) {

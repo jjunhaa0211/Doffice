@@ -41,12 +41,12 @@ extension MainView {
                             AppStatusBadge(title: String(format: NSLocalizedString("main.processing.count", comment: ""), counts.processing), symbol: "gearshape.2.fill", tint: Theme.accent)
                         }
                         if counts.attention > 0 {
-                            Button(action: { showActionCenter = true }) {
+                            Button(action: { vm.showActionCenter = true }) {
                                 AppStatusBadge(title: String(format: NSLocalizedString("main.attention.count", comment: ""), counts.attention), symbol: "exclamationmark.triangle.fill", tint: Theme.red)
                             }.buttonStyle(.plain)
                         }
                         if counts.completed > 0 {
-                            Button(action: { showActionCenter = true }) {
+                            Button(action: { vm.showActionCenter = true }) {
                                 AppStatusBadge(title: String(format: NSLocalizedString("main.completed.count", comment: ""), counts.completed), symbol: "checkmark.circle.fill", tint: Theme.green)
                             }.buttonStyle(.plain)
                         }
@@ -60,7 +60,7 @@ extension MainView {
                 ForEach(pluginHost.panels) { panel in
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.15)) {
-                            activePluginPanelId = activePluginPanelId == panel.id ? nil : panel.id
+                            vm.activePluginPanelId = vm.activePluginPanelId == panel.id ? nil : panel.id
                         }
                     }) {
                         HStack(spacing: 3) {
@@ -69,9 +69,9 @@ extension MainView {
                             Text(panel.title)
                                 .font(Theme.chrome(8))
                         }
-                        .foregroundColor(activePluginPanelId == panel.id ? Theme.accent : Theme.textDim)
+                        .foregroundColor(vm.activePluginPanelId == panel.id ? Theme.accent : Theme.textDim)
                         .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(activePluginPanelId == panel.id ? Theme.accent.opacity(0.1) : Color.clear))
+                        .background(RoundedRectangle(cornerRadius: 4).fill(vm.activePluginPanelId == panel.id ? Theme.accent.opacity(0.1) : Color.clear))
                     }.buttonStyle(.plain)
                 }
             }
@@ -119,7 +119,7 @@ extension MainView {
                 .font(Theme.mono(8))
                 .foregroundColor(Theme.textDim)
             Spacer()
-            Button(action: { withAnimation { activePluginPanelId = nil } }) {
+            Button(action: { withAnimation { vm.activePluginPanelId = nil } }) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 14))
                     .foregroundColor(Theme.textDim)

@@ -982,7 +982,7 @@ struct OfficeSpriteRenderer {
     // MARK: - Detailed Furniture Drawing
     // ═══════════════════════════════════════════════════
 
-    private static func drawDetailedFurniture(_ ctx: GraphicsContext, type: FurnitureType,
+    static func drawDetailedFurniture(_ ctx: GraphicsContext, type: FurnitureType,
                                                x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
                                                dark: Bool, frame: Int,
                                                pluginFurnitureId: String? = nil) {

@@ -845,9 +845,18 @@ class PluginManager: ObservableObject {
                     return
                 }
 
+                if let error = error {
+                    CrashLogger.shared.warning("PluginManager: Registry fetch failed — \(error.localizedDescription)")
+                    self.registryError = error.localizedDescription
+                } else if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                    let msg = "HTTP \(http.statusCode)"
+                    CrashLogger.shared.warning("PluginManager: Registry fetch failed — \(msg)")
+                    self.registryError = msg
+                } else {
+                    self.registryError = nil
+                }
                 let remoteItems = Self.resolveRegistryItems(data: data, response: response, error: error)
                 self.registryPlugins = Self.mergedRegistry(remote: remoteItems)
-                self.registryError = nil
             }
         }
         currentFetchTask = task
@@ -923,15 +932,23 @@ class PluginManager: ObservableObject {
 
             let uniqueFiles = Array(Set(filesToDownload))
 
+            var failedFiles: [String] = []
             for fileName in uniqueFiles {
                 let fileURL = baseURL.appendingPathComponent(fileName)
                 let destPath = pluginDir.appendingPathComponent(fileName)
                 let parentDir = destPath.deletingLastPathComponent()
                 try? fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
 
-                if let data = try? Data(contentsOf: fileURL) {
-                    try? data.write(to: destPath)
+                do {
+                    let data = try Data(contentsOf: fileURL)
+                    try data.write(to: destPath, options: .atomicWrite)
+                } catch {
+                    CrashLogger.shared.warning("PluginManager: Failed to download/write \(fileName) — \(error.localizedDescription)")
+                    failedFiles.append(fileName)
                 }
+            }
+            if !failedFiles.isEmpty {
+                CrashLogger.shared.error("PluginManager: \(failedFiles.count) file(s) failed during install: \(failedFiles.joined(separator: ", "))")
             }
 
             let claudeMDPath = pluginDir.appendingPathComponent("CLAUDE.md")

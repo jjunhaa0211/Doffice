@@ -5,38 +5,18 @@ import DofficeKit
 struct MainView: View {
     @EnvironmentObject var manager: SessionManager
     @Environment(\.accessibilityReduceMotion) var reduceMotion
-    @StateObject var settings = AppSettings.shared
-    @StateObject var achievementManager = AchievementManager.shared
-    @State var sidebarWidth: CGFloat = 216
-    @State var showSettings = false
-    @State var showClaudeNotInstalledAlert = false
-    @State var showRoleNoticeAlert = false
-    @State var roleNoticeTitle = ""
-    @State var roleNoticeMessage = ""
-    @State var showBugReport = false
-    @State var showUpdateSheet = false
-    @State var showActionCenter = false
-    @State var showCommandPalette = false
-    @State var showDailyReward = false
-    @State var dailyRewardData: AchievementManager.DailyRewardResult?
-    @State var showBillingAlert = false
-    @State var billingAlertMessage = ""
-    @StateObject var updater = UpdateChecker.shared
-    @StateObject var pluginHost = PluginHost.shared
-    @StateObject var effectEngine = PluginEffectEngine.shared
-    @State var activePluginPanelId: String?
-    @StateObject var sessionNotifications = SessionNotificationManager.shared
+    @StateObject var vm = MainViewModel()
+    @State var sidebarWidth: CGFloat = AppConstants.Layout.preferredSidebarWidth
+    @State var viewModeBeforeEdit: Int?
     @Environment(\.openWindow) var openWindow
-    @AppStorage("officeExpanded") var officeExpanded = true
-    @AppStorage("viewMode") var viewModeRaw: Int = 1
-    @AppStorage("sidebarCollapsed") var sidebarCollapsed = false
 
-    enum ViewMode: Int { case split = 0, office = 1, terminal = 2, strip = 3 }
-    var viewMode: ViewMode { ViewMode(rawValue: viewModeRaw) ?? .split }
-    var officeHeight: CGFloat { officeExpanded ? 380 : 240 }
-    let minimumSidebarWidth: CGFloat = 196
-    let preferredSidebarWidth: CGFloat = 216
-    let minimumPrimaryContentWidth: CGFloat = 880
+    // Convenience accessors for ViewModel properties used frequently in View
+    var settings: AppSettings { vm.settings }
+    var achievementManager: AchievementManager { vm.achievementManager }
+    var updater: UpdateChecker { vm.updater }
+    var pluginHost: PluginHost { vm.pluginHost }
+    var effectEngine: PluginEffectEngine { vm.effectEngine }
+    var sessionNotifications: SessionNotificationManager { vm.sessionNotifications }
 
     var chromeAnimation: Animation {
         reduceMotion ? .linear(duration: 0.01) : .easeInOut(duration: 0.2)
@@ -48,14 +28,14 @@ struct MainView: View {
             titleBar
 
             GeometryReader { geometry in
-                let effectiveSidebarWidth = protectedSidebarWidth(totalWidth: geometry.size.width)
-                let forceCompactSidebar = shouldForceCompactSidebar(
+                let effectiveSidebarWidth = vm.protectedSidebarWidth(totalWidth: geometry.size.width, sidebarWidth: sidebarWidth)
+                let forceCompactSidebar = vm.shouldForceCompactSidebar(
                     totalWidth: geometry.size.width,
                     sidebarWidth: effectiveSidebarWidth
                 )
 
                 HStack(spacing: 0) {
-                    if !sidebarCollapsed {
+                    if !vm.sidebarCollapsed {
                         SidebarView(forceCompact: forceCompactSidebar)
                             .frame(width: effectiveSidebarWidth)
                             .clipped()
@@ -65,7 +45,7 @@ struct MainView: View {
                     }
 
                     ZStack {
-                        if let panelId = activePluginPanelId,
+                        if let panelId = vm.activePluginPanelId,
                            let panel = pluginHost.panels.first(where: { $0.id == panelId }) {
                             // 플러그인 패널 표시
                             VStack(spacing: 0) {
@@ -74,7 +54,7 @@ struct MainView: View {
                                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
                         } else {
-                            switch viewMode {
+                            switch vm.viewMode {
                             case .split:
                                 splitView
                             case .office:
@@ -130,18 +110,18 @@ struct MainView: View {
                 if settings.isLocked {
                     SessionLockOverlay()
                 }
-                if showCommandPalette {
+                if vm.showCommandPalette {
                     CommandPaletteView(
-                        isPresented: $showCommandPalette,
+                        isPresented: $vm.showCommandPalette,
                         onNewSession: { manager.showNewTabSheet = true },
-                        onSettings: { showSettings = true },
-                        onBugReport: { showBugReport = true },
-                        onExportLog: { exportActiveLog() },
-                        onCopyConversation: { copyActiveConversation() },
-                        onSetViewMode: { viewModeRaw = $0 }
+                        onSettings: { vm.showSettings = true },
+                        onBugReport: { vm.showBugReport = true },
+                        onExportLog: { vm.exportActiveLog(manager: manager) },
+                        onCopyConversation: { vm.copyActiveConversation(manager: manager) },
+                        onSetViewMode: { vm.viewModeRaw = $0 }
                     )
                     .transition(.opacity)
-                    .animation(.easeOut(duration: 0.15), value: showCommandPalette)
+                    .animation(.easeOut(duration: 0.15), value: vm.showCommandPalette)
                     .zIndex(20)
                 }
             }
@@ -190,11 +170,11 @@ struct MainView: View {
             get: { !settings.hasCompletedOnboarding },
             set: { if !$0 { settings.hasCompletedOnboarding = true } }
         )) { OnboardingView().dofficeSheetPresentation() }
-        .sheet(isPresented: $showSettings) { SettingsView().dofficeSheetPresentation() }
-        .sheet(isPresented: $showBugReport) { BugReportView().dofficeSheetPresentation() }
-        .sheet(isPresented: $showUpdateSheet) { UpdateSheet().dofficeSheetPresentation() }
+        .sheet(isPresented: $vm.showSettings) { SettingsView().dofficeSheetPresentation() }
+        .sheet(isPresented: $vm.showBugReport) { BugReportView().dofficeSheetPresentation() }
+        .sheet(isPresented: $vm.showUpdateSheet) { UpdateSheet().dofficeSheetPresentation() }
         .sheet(isPresented: $manager.showNewTabSheet) { NewTabSheet().dofficeSheetPresentation() }
-        .sheet(isPresented: $showActionCenter) {
+        .sheet(isPresented: $vm.showActionCenter) {
             ActionCenterView()
                 .frame(minWidth: 500, minHeight: 400)
                 .dofficeSheetPresentation()
@@ -203,7 +183,7 @@ struct MainView: View {
 
     private var bodyWithAlerts: some View {
         bodyWithSheets
-        .alert(NSLocalizedString("claude.not.installed", comment: ""), isPresented: $showClaudeNotInstalledAlert) {
+        .alert(NSLocalizedString("claude.not.installed", comment: ""), isPresented: $vm.showClaudeNotInstalledAlert) {
             Button(NSLocalizedString("main.install.guide", comment: "")) {
                 if let url = URL(string: "https://docs.anthropic.com/en/docs/claude-code/overview") {
                     NSWorkspace.shared.open(url)
@@ -213,9 +193,9 @@ struct MainView: View {
                 DispatchQueue.global(qos: .userInitiated).async {
                     ClaudeInstallChecker.shared.check()
                     CodexInstallChecker.shared.check()
-                    DispatchQueue.main.async {
+                    DispatchQueue.main.async { [vm] in
                         if !ClaudeInstallChecker.shared.isInstalled && !CodexInstallChecker.shared.isInstalled {
-                            showClaudeNotInstalledAlert = true
+                            vm.showClaudeNotInstalledAlert = true
                         }
                     }
                 }
@@ -224,24 +204,24 @@ struct MainView: View {
         } message: {
             Text(NSLocalizedString("claude.install.message", comment: ""))
         }
-        .alert(roleNoticeTitle, isPresented: $showRoleNoticeAlert) {
+        .alert(vm.roleNoticeTitle, isPresented: $vm.showRoleNoticeAlert) {
             Button(NSLocalizedString("confirm", comment: ""), role: .cancel) {}
         } message: {
-            Text(roleNoticeMessage)
+            Text(vm.roleNoticeMessage)
         }
         .overlay {
-            if showDailyReward, let reward = dailyRewardData {
+            if vm.showDailyReward, let reward = vm.dailyRewardData {
                 DailyRewardOverlay(reward: reward) {
-                    withAnimation(.easeOut(duration: 0.25)) { showDailyReward = false }
+                    withAnimation(.easeOut(duration: 0.25)) { vm.showDailyReward = false }
                 }
                 .transition(.scale(scale: 0.8).combined(with: .opacity))
                 .zIndex(100)
             }
         }
         .overlay {
-            if showBillingAlert {
-                BillingAlertOverlay(message: billingAlertMessage) {
-                    withAnimation(.easeOut(duration: 0.25)) { showBillingAlert = false }
+            if vm.showBillingAlert {
+                BillingAlertOverlay(message: vm.billingAlertMessage) {
+                    withAnimation(.easeOut(duration: 0.25)) { vm.showBillingAlert = false }
                 }
                 .transition(.scale(scale: 0.8).combined(with: .opacity))
                 .zIndex(101)
@@ -252,41 +232,52 @@ struct MainView: View {
     var body: some View {
         bodyWithLifecycle
             .withNotificationHandlers(manager: manager, chromeAnimation: chromeAnimation,
-                                       viewModeRaw: $viewModeRaw,
-                                       showClaudeNotInstalledAlert: $showClaudeNotInstalledAlert,
-                                       showRoleNoticeAlert: $showRoleNoticeAlert,
-                                       roleNoticeTitle: $roleNoticeTitle,
-                                       roleNoticeMessage: $roleNoticeMessage,
-                                       showCommandPalette: $showCommandPalette,
-                                       showActionCenter: $showActionCenter,
-                                       exportActiveLog: exportActiveLog,
-                                       copyActiveConversation: copyActiveConversation)
+                                       viewModeRaw: $vm.viewModeRaw,
+                                       showClaudeNotInstalledAlert: $vm.showClaudeNotInstalledAlert,
+                                       showRoleNoticeAlert: $vm.showRoleNoticeAlert,
+                                       roleNoticeTitle: $vm.roleNoticeTitle,
+                                       roleNoticeMessage: $vm.roleNoticeMessage,
+                                       showCommandPalette: $vm.showCommandPalette,
+                                       showActionCenter: $vm.showActionCenter,
+                                       exportActiveLog: { [vm] in vm.exportActiveLog(manager: manager) },
+                                       copyActiveConversation: { [vm] in vm.copyActiveConversation(manager: manager) })
     }
 
     private var bodyWithLifecycle: some View {
         bodyWithAlerts
         .onChange(of: manager.showNewTabSheet) { _, isPresented in
-            guard isPresented else { return }
-            showSettings = false
-            showBugReport = false
-            showUpdateSheet = false
-            showActionCenter = false
+            vm.ensureNoSheetConflict(with: isPresented)
         }
-        .onChange(of: showSettings) { _, isPresented in
+        .onChange(of: vm.showSettings) { _, isPresented in
             guard isPresented, manager.showNewTabSheet else { return }
-            showSettings = false
+            vm.showSettings = false
         }
-        .onChange(of: showBugReport) { _, isPresented in
+        .onChange(of: vm.showBugReport) { _, isPresented in
             guard isPresented, manager.showNewTabSheet else { return }
-            showBugReport = false
+            vm.showBugReport = false
         }
-        .onChange(of: showUpdateSheet) { _, isPresented in
+        .onChange(of: vm.showUpdateSheet) { _, isPresented in
             guard isPresented, manager.showNewTabSheet else { return }
-            showUpdateSheet = false
+            vm.showUpdateSheet = false
         }
-        .onChange(of: showActionCenter) { _, isPresented in
+        .onChange(of: vm.showActionCenter) { _, isPresented in
             guard isPresented, manager.showNewTabSheet else { return }
-            showActionCenter = false
+            vm.showActionCenter = false
+        }
+        .onReceive(AppSettings.shared.$isEditMode) { isEditMode in
+            if isEditMode {
+                // 편집 모드 진입 시 오피스 전체 화면으로 전환
+                if vm.viewMode != .office {
+                    viewModeBeforeEdit = vm.viewModeRaw
+                    withAnimation(.easeInOut(duration: 0.2)) { vm.viewModeRaw = MainViewModel.ViewMode.office.rawValue }
+                }
+            } else {
+                // 편집 모드 종료 시 이전 뷰모드 복원
+                if let previous = viewModeBeforeEdit {
+                    withAnimation(.easeInOut(duration: 0.2)) { vm.viewModeRaw = previous }
+                    viewModeBeforeEdit = nil
+                }
+            }
         }
         .onAppear {
             if SmokeTestHarness.isEnabled {
@@ -295,45 +286,7 @@ struct MainView: View {
                 }
                 return
             }
-            settings.ensureCoffeeSupportPreset()
-            if manager.userVisibleTabs.isEmpty {
-                // Let the first frame render before session restoration work kicks in.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    manager.restoreSessions()
-                }
-                // Runtime session scanning can still start automatically, but keep it
-                // behind restoration so launch feels responsive even with shell probes.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                    manager.autoDetectAndConnect()
-                }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                ClaudeInstallChecker.shared.check()
-                CodexInstallChecker.shared.check()
-                if !ClaudeInstallChecker.shared.isInstalled && !CodexInstallChecker.shared.isInstalled {
-                    showClaudeNotInstalledAlert = true
-                }
-            }
-            // 플러그인 확장 포인트 로드
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.6) {
-                PluginHost.shared.reload()
-            }
-            // Daily login reward
-            if let reward = AchievementManager.shared.claimDailyReward() {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    dailyRewardData = reward
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                        showDailyReward = true
-                    }
-                }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                updater.checkForUpdates()
-            }
-            // 결제일 알림 체크
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                checkBillingDay()
-            }
+            vm.initialize(manager: manager)
         }
         .onDisappear { manager.stopScanning() }
     }
@@ -366,10 +319,10 @@ struct MainView: View {
                     // 확장/축소
                     Button(action: {
                         withAnimation(chromeAnimation) {
-                            officeExpanded.toggle()
+                            vm.officeExpanded.toggle()
                         }
                     }) {
-                        Image(systemName: officeExpanded ? "chevron.up.2" : "chevron.down.2")
+                        Image(systemName: vm.officeExpanded ? "chevron.up.2" : "chevron.down.2")
                             .font(.system(size: Theme.iconSize(10), weight: .bold))
                             .foregroundColor(Theme.textDim.opacity(0.5))
                             .frame(width: 26, height: 20)
@@ -377,11 +330,11 @@ struct MainView: View {
                             .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.border.opacity(0.3), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                    .help(officeExpanded ? NSLocalizedString("main.office.shrink", comment: "") : NSLocalizedString("main.office.expand", comment: ""))
+                    .help(vm.officeExpanded ? NSLocalizedString("main.office.shrink", comment: "") : NSLocalizedString("main.office.expand", comment: ""))
                 }
                 .padding(4)
             }
-            .frame(height: officeHeight)
+            .frame(height: vm.officeHeight)
             .clipped()
 
             Rectangle().fill(Theme.border).frame(height: 1)
@@ -437,58 +390,7 @@ struct MainView: View {
         openWindow(id: "office-window")
         // 메인 창을 터미널 모드로 전환
         withAnimation(chromeAnimation) {
-            viewModeRaw = ViewMode.terminal.rawValue
-        }
-    }
-
-    private func checkBillingDay() {
-        let day = settings.billingDay
-        guard day > 0 else { return }
-
-        let cal = Calendar.current
-        let now = Date()
-        let todayDay = cal.component(.day, from: now)
-        let monthKey = "\(cal.component(.year, from: now))-\(cal.component(.month, from: now))"
-
-        // 이미 이번 달에 알림을 보냈으면 스킵
-        guard settings.billingLastNotifiedMonth != monthKey else { return }
-
-        // 결제일 당일 또는 결제일이 지났는데 아직 알림 안 보낸 경우
-        guard todayDay >= day else { return }
-
-        settings.billingLastNotifiedMonth = monthKey
-
-        let tracker = TokenTracker.shared
-        let costStr = String(format: "$%.2f", tracker.todayCost)
-        let tokens = tracker.todayTokens
-
-        billingAlertMessage = String(format: NSLocalizedString("main.billing.alert", comment: ""), tokens > 1000 ? String(format: "%.1fK", Double(tokens)/1000) : "\(tokens)", costStr)
-
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-            showBillingAlert = true
-        }
-    }
-
-    private func copyActiveConversation() {
-        guard let tab = manager.activeTab else { return }
-        tab.copyConversation()
-    }
-
-    private func exportActiveLog() {
-        guard let tab = manager.activeTab, let url = tab.exportLog() else { return }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = url.lastPathComponent
-        panel.allowedContentTypes = [.plainText]
-        if panel.runModal() == .OK, let dest = panel.url {
-            do {
-                try FileManager.default.copyItem(at: url, to: dest)
-            } catch {
-                let alert = NSAlert()
-                alert.messageText = NSLocalizedString("main.log.export.fail", comment: "")
-                alert.informativeText = error.localizedDescription
-                alert.alertStyle = .warning
-                alert.runModal()
-            }
+            vm.viewModeRaw = MainViewModel.ViewMode.terminal.rawValue
         }
     }
 

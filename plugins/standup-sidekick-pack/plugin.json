@@ -1,0 +1,16 @@
+{
+  "name": "스탠드업 사이드킥 팩",
+  "version": "1.0.0",
+  "description": "최근 커밋과 변경 파일을 바탕으로 팀 공유용 스탠드업 업데이트를 바로 만들어 줍니다.",
+  "author": "Doffice",
+  "contributes": {
+    "commands": [
+      {
+        "id": "copy-standup-update",
+        "title": "Copy Standup Update",
+        "icon": "person.2.wave.2.fill",
+        "script": "scripts/copy-standup-update.sh"
+      }
+    ]
+  }
+}

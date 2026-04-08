@@ -16,6 +16,7 @@ struct OfficeSceneView: View {
     @State private var dragFurnitureOffset = TileCoord(col: 0, row: 0)
     @State private var currentFPS: Double = OfficeConstants.fps
     @State private var tappedCharacterTabId: String?
+    @State private var pluginPlacementNotice: String?
 
     private let map: OfficeMap
     /// Single consolidated timer — fires at max FPS, advance() throttles internally
@@ -137,7 +138,8 @@ struct OfficeSceneView: View {
                         }
                 )
 
-                if let activeTab = manager.activeTab {
+                // 편집 모드에서는 가구 드래그를 방해하므로 숨김
+                if !settings.isEditMode, let activeTab = manager.activeTab {
                     selectionPanel(tab: activeTab)
                         .padding(14)
                         .frame(maxWidth: .infinity, maxHeight: .infinity,
@@ -444,55 +446,227 @@ struct OfficeSceneView: View {
         )
     }
 
+    // MARK: - Furniture Catalog Data
+
+    private struct FurnitureCatalogItem: Identifiable {
+        let id: String
+        let type: FurnitureType?
+        let isDeskSet: Bool
+        let name: String
+        let icon: String
+        let size: TileSize
+
+        init(type: FurnitureType, name: String, icon: String, size: TileSize) {
+            self.id = type.rawValue
+            self.type = type
+            self.isDeskSet = false
+            self.name = name
+            self.icon = icon
+            self.size = size
+        }
+
+        init(deskSetName: String, icon: String) {
+            self.id = "deskSet"
+            self.type = nil
+            self.isDeskSet = true
+            self.name = deskSetName
+            self.icon = icon
+            self.size = TileSize(w: 3, h: 2)
+        }
+    }
+
+    private var furnitureCatalog: [FurnitureCatalogItem] {
+        [
+            FurnitureCatalogItem(deskSetName: NSLocalizedString("furniture.deskSet", value: "책상 세트", comment: ""), icon: "desktopcomputer"),
+            FurnitureCatalogItem(type: .roundTable, name: NSLocalizedString("furniture.roundTable", value: "원탁", comment: ""), icon: "circle.grid.2x2", size: TileSize(w: 2, h: 2)),
+            FurnitureCatalogItem(type: .sofa, name: NSLocalizedString("furniture.sofa", value: "소파", comment: ""), icon: "sofa", size: TileSize(w: 3, h: 2)),
+            FurnitureCatalogItem(type: .bookshelf, name: NSLocalizedString("furniture.bookshelf", value: "책장", comment: ""), icon: "books.vertical", size: TileSize(w: 2, h: 1)),
+            FurnitureCatalogItem(type: .plant, name: NSLocalizedString("furniture.plant", value: "화분", comment: ""), icon: "leaf", size: TileSize(w: 1, h: 1)),
+            FurnitureCatalogItem(type: .coffeeMachine, name: NSLocalizedString("furniture.coffeeMachine", value: "커피머신", comment: ""), icon: "cup.and.saucer", size: TileSize(w: 1, h: 1)),
+            FurnitureCatalogItem(type: .waterCooler, name: NSLocalizedString("furniture.waterCooler", value: "정수기", comment: ""), icon: "drop", size: TileSize(w: 1, h: 1)),
+            FurnitureCatalogItem(type: .printer, name: NSLocalizedString("furniture.printer", value: "프린터", comment: ""), icon: "printer", size: TileSize(w: 1, h: 1)),
+            FurnitureCatalogItem(type: .trashBin, name: NSLocalizedString("furniture.trashBin", value: "휴지통", comment: ""), icon: "trash", size: TileSize(w: 1, h: 1)),
+            FurnitureCatalogItem(type: .lamp, name: NSLocalizedString("furniture.lamp", value: "조명", comment: ""), icon: "lamp.desk", size: TileSize(w: 1, h: 1)),
+            FurnitureCatalogItem(type: .rug, name: NSLocalizedString("furniture.rug", value: "러그", comment: ""), icon: "rectangle.checkered", size: TileSize(w: 5, h: 3)),
+            FurnitureCatalogItem(type: .whiteboard, name: NSLocalizedString("furniture.whiteboard", value: "화이트보드", comment: ""), icon: "rectangle.on.rectangle", size: TileSize(w: 4, h: 1)),
+            FurnitureCatalogItem(type: .pictureFrame, name: NSLocalizedString("furniture.pictureFrame", value: "액자", comment: ""), icon: "photo", size: TileSize(w: 3, h: 1)),
+            FurnitureCatalogItem(type: .clock, name: NSLocalizedString("furniture.clock", value: "시계", comment: ""), icon: "clock", size: TileSize(w: 1, h: 1)),
+        ]
+    }
+
+    // MARK: - Edit Panel
+
+    private var selectedFurniture: FurniturePlacement? {
+        guard let selectedFurnitureId else { return nil }
+        return map.furniture.first(where: { $0.id == selectedFurnitureId })
+    }
+
     private var editPanel: some View {
         VStack(alignment: .trailing, spacing: 8) {
             Text("LAYOUT EDIT")
                 .font(Theme.mono(9, weight: .bold))
                 .foregroundColor(Theme.textDim)
 
-            if let selectedFurnitureId,
-               let furniture = map.furniture.first(where: { $0.id == selectedFurnitureId }) {
-                Text(furniture.type.rawValue.uppercased())
-                    .font(Theme.mono(9, weight: .bold))
-                    .foregroundColor(Theme.yellow)
+            // 선택된 가구 정보 + 액션 버튼
+            if let furniture = selectedFurniture {
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(furniture.type.rawValue.uppercased())
+                        .font(Theme.mono(9, weight: .bold))
+                        .foregroundColor(Theme.yellow)
+
+                    HStack(spacing: 4) {
+                        Button {
+                            let id = furniture.id
+                            _ = map.removeFurniture(id: id)
+                            selectedFurnitureId = nil
+                            store.refreshLayout(with: manager.userVisibleTabs)
+                            store.saveCurrentLayout()
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: Theme.iconSize(8)))
+                                Text("Delete")
+                                    .font(Theme.mono(8, weight: .bold))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(Theme.red)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(Theme.red.opacity(0.12)))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(Theme.red.opacity(0.28), lineWidth: 1))
+
+                        Button {
+                            toggleMirror(for: furniture.id)
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
+                                    .font(.system(size: Theme.iconSize(8)))
+                                Text("Mirror")
+                                    .font(Theme.mono(8, weight: .bold))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(Theme.purple)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(Theme.purple.opacity(0.12)))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(Theme.purple.opacity(0.28), lineWidth: 1))
+                    }
+                }
             } else {
                 Text(NSLocalizedString("office.furniture.move", comment: ""))
                     .font(Theme.mono(9))
                     .foregroundColor(Theme.textSecondary)
             }
 
-            // Plugin furniture placement section
-            if !pluginHost.furniture.isEmpty {
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("PLUGIN FURNITURE")
-                        .font(Theme.mono(8, weight: .bold))
-                        .foregroundColor(Theme.purple)
+            if let pluginPlacementNotice {
+                Text(pluginPlacementNotice)
+                    .font(Theme.mono(7, weight: .bold))
+                    .foregroundColor(Theme.green)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(Theme.green.opacity(0.1)))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(Theme.green.opacity(0.24), lineWidth: 1))
+            }
 
-                    ForEach(pluginHost.furniture) { item in
-                        HStack(spacing: 6) {
-                            VStack(alignment: .trailing, spacing: 1) {
-                                Text(item.decl.name)
-                                    .font(Theme.mono(8, weight: .bold))
-                                    .foregroundColor(Theme.textPrimary)
-                                    .lineLimit(1)
-                                Text("\(item.decl.width)x\(item.decl.height)")
-                                    .font(Theme.mono(7))
-                                    .foregroundColor(Theme.textDim)
-                            }
-                            Button("Place") {
-                                placePluginFurniture(item)
-                            }
-                            .buttonStyle(.plain)
+            ScrollView(.vertical, showsIndicators: false) {
+                let gridColumns = [GridItem(.adaptive(minimum: 72, maximum: 90), spacing: 6)]
+                VStack(alignment: .trailing, spacing: 8) {
+                    // 기본 가구 카탈로그
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("FURNITURE")
                             .font(Theme.mono(8, weight: .bold))
-                            .foregroundColor(Theme.green)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(Theme.green.opacity(0.14)))
-                            .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(Theme.green.opacity(0.34), lineWidth: 1))
+                            .foregroundColor(Theme.orange)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+
+                        LazyVGrid(columns: gridColumns, spacing: 6) {
+                            ForEach(furnitureCatalog) { item in
+                                Button {
+                                    placeStandardFurniture(item)
+                                } label: {
+                                    VStack(spacing: 3) {
+                                        Canvas { ctx, canvasSize in
+                                            let furnitureType = item.type ?? .desk
+                                            OfficeSpriteRenderer.drawDetailedFurniture(
+                                                ctx, type: furnitureType,
+                                                x: 2, y: 2,
+                                                w: canvasSize.width - 4,
+                                                h: canvasSize.height - 4,
+                                                dark: false, frame: 0
+                                            )
+                                        }
+                                        .frame(width: 48, height: 48)
+                                        .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(Theme.bgSurface.opacity(0.6)))
+                                        .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(Theme.border.opacity(0.3), lineWidth: 1))
+
+                                        Text(item.name)
+                                            .font(Theme.mono(7, weight: .bold))
+                                            .foregroundColor(Theme.textPrimary)
+                                            .lineLimit(1)
+                                        Text("\(item.size.w)x\(item.size.h)")
+                                            .font(Theme.mono(6))
+                                            .foregroundColor(Theme.textDim)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 4)
+                                    .background(RoundedRectangle(cornerRadius: Theme.cornerLarge).fill(Theme.bgCard.opacity(0.6)))
+                                    .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge).stroke(Theme.green.opacity(0.2), lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    // Plugin furniture placement section
+                    if !pluginHost.furniture.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("PLUGIN FURNITURE")
+                                .font(Theme.mono(8, weight: .bold))
+                                .foregroundColor(Theme.purple)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+
+                            LazyVGrid(columns: gridColumns, spacing: 6) {
+                                ForEach(pluginHost.furniture) { item in
+                                    Button {
+                                        placePluginFurniture(item)
+                                    } label: {
+                                        VStack(spacing: 3) {
+                                            Canvas { ctx, canvasSize in
+                                                OfficeSpriteRenderer.drawDetailedFurniture(
+                                                    ctx, type: .plugin,
+                                                    x: 2, y: 2,
+                                                    w: canvasSize.width - 4,
+                                                    h: canvasSize.height - 4,
+                                                    dark: false, frame: 0,
+                                                    pluginFurnitureId: item.decl.id
+                                                )
+                                            }
+                                            .frame(width: 48, height: 48)
+                                            .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(Theme.bgSurface.opacity(0.6)))
+                                            .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(Theme.purple.opacity(0.3), lineWidth: 1))
+
+                                            Text(item.decl.name)
+                                                .font(Theme.mono(7, weight: .bold))
+                                                .foregroundColor(Theme.textPrimary)
+                                                .lineLimit(1)
+                                            Text("\(item.decl.width)x\(item.decl.height)")
+                                                .font(Theme.mono(6))
+                                                .foregroundColor(Theme.purple)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 4)
+                                        .background(RoundedRectangle(cornerRadius: Theme.cornerLarge).fill(Theme.bgCard.opacity(0.6)))
+                                        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge).stroke(Theme.purple.opacity(0.2), lineWidth: 1))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
                         }
                     }
                 }
             }
+            .frame(maxHeight: 400)
 
             HStack(spacing: 6) {
                 Button(NSLocalizedString("office.save", comment: "")) {
@@ -507,6 +681,7 @@ struct OfficeSceneView: View {
                 Button(NSLocalizedString("office.reset", comment: "")) {
                     store.resetCurrentLayout(with: manager.userVisibleTabs)
                     selectedFurnitureId = nil
+                    pluginPlacementNotice = nil
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, Theme.sp3)
@@ -600,6 +775,56 @@ struct OfficeSceneView: View {
         map.rebuildWalkability()
         selectedFurnitureId = uniqueId
         store.refreshLayout(with: manager.userVisibleTabs)
+        store.saveCurrentLayout()
+    }
+
+    private func placeStandardFurniture(_ item: FurnitureCatalogItem) {
+        if item.isDeskSet {
+            let maxRow = map.rows - 2
+            let maxCol = map.cols - 3
+            for row in 1..<maxRow {
+                for col in 1..<maxCol {
+                    let pos = TileCoord(col: col, row: row)
+                    if map.addDeskSet(at: pos, zone: .mainOffice) {
+                        selectedFurnitureId = map.furniture.last(where: { $0.id.hasPrefix("desk_") })?.id
+                        pluginPlacementNotice = "ADDED \(item.name.uppercased())"
+                        store.refreshLayout(with: manager.userVisibleTabs)
+                        store.saveCurrentLayout()
+                        return
+                    }
+                }
+            }
+            pluginPlacementNotice = "NO OPEN SPACE"
+            return
+        }
+
+        guard let type = item.type else { return }
+        let size = item.size
+        let maxRow = map.rows - size.h
+        let maxCol = map.cols - size.w
+        guard maxRow >= 1 && maxCol >= 1 else {
+            pluginPlacementNotice = "NO OPEN SPACE"
+            return
+        }
+        for row in 1..<maxRow {
+            for col in 1..<maxCol {
+                let pos = TileCoord(col: col, row: row)
+                if let placed = map.addFurniture(type, at: pos, zone: .mainOffice, size: size) {
+                    selectedFurnitureId = placed.id
+                    pluginPlacementNotice = "ADDED \(item.name.uppercased())"
+                    store.refreshLayout(with: manager.userVisibleTabs)
+                    store.saveCurrentLayout()
+                    return
+                }
+            }
+        }
+        pluginPlacementNotice = "NO OPEN SPACE"
+    }
+
+    private func toggleMirror(for furnitureId: String) {
+        guard let idx = map.furniture.firstIndex(where: { $0.id == furnitureId }) else { return }
+        map.furniture[idx].mirrored.toggle()
+        store.invalidateBackgroundSnapshot()
         store.saveCurrentLayout()
     }
 

@@ -30,7 +30,7 @@ extension SidebarView {
                         Spacer()
                         Text(tracker.formatTokens(tracker.dailyRemaining))
                             .font(Theme.chrome(8, weight: .semibold))
-                            .foregroundColor(tracker.dailyUsagePercent > 0.8 ? Theme.red : Theme.green)
+                            .foregroundColor(tracker.dailyUsagePercent > AppConstants.TokenThreshold.high ? Theme.red : Theme.green)
                     }
                     if tracker.todayCost > 0 {
                         HStack {
@@ -67,7 +67,7 @@ extension SidebarView {
                         Spacer()
                         Text(tracker.formatTokens(tracker.weeklyRemaining))
                             .font(Theme.chrome(8, weight: .semibold))
-                            .foregroundColor(tracker.weeklyUsagePercent > 0.8 ? Theme.red : Theme.green)
+                            .foregroundColor(tracker.weeklyUsagePercent > AppConstants.TokenThreshold.high ? Theme.red : Theme.green)
                     }
                     if tracker.weekCost > 0 {
                         HStack {
@@ -126,14 +126,14 @@ extension SidebarView {
     }
 
     var dailyBarColor: Color {
-        if tracker.dailyUsagePercent > 0.9 { return Theme.red }
-        if tracker.dailyUsagePercent > 0.7 { return Theme.yellow }
+        if tracker.dailyUsagePercent > AppConstants.TokenThreshold.critical { return Theme.red }
+        if tracker.dailyUsagePercent > AppConstants.TokenThreshold.warning { return Theme.yellow }
         return Theme.green
     }
 
     var weeklyBarColor: Color {
-        if tracker.weeklyUsagePercent > 0.9 { return Theme.red }
-        if tracker.weeklyUsagePercent > 0.7 { return Theme.yellow }
+        if tracker.weeklyUsagePercent > AppConstants.TokenThreshold.critical { return Theme.red }
+        if tracker.weeklyUsagePercent > AppConstants.TokenThreshold.warning { return Theme.yellow }
         return Theme.cyan
     }
 

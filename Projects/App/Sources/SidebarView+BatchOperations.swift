@@ -4,34 +4,9 @@ import DesignSystem
 import DofficeKit
 
 extension SidebarView {
-    func batchRestart() {
-        for id in selectedTabIds {
-            if let tab = manager.tabs.first(where: { $0.id == id }) {
-                tab.stop()
-                tab.start()
-            }
-        }
-        selectedTabIds.removeAll()
-        isMultiSelectMode = false
-    }
-
-    func batchStop() {
-        for id in selectedTabIds {
-            if let tab = manager.tabs.first(where: { $0.id == id }) {
-                tab.forceStop()
-            }
-        }
-        selectedTabIds.removeAll()
-        isMultiSelectMode = false
-    }
-
-    func batchClose() {
-        for id in selectedTabIds {
-            manager.removeTab(id)
-        }
-        selectedTabIds.removeAll()
-        isMultiSelectMode = false
-    }
+    func batchRestart() { vm.batchRestart(manager: manager) }
+    func batchStop() { vm.batchStop(manager: manager) }
+    func batchClose() { vm.batchClose(manager: manager) }
 
     var managementButtons: some View {
         VStack(spacing: 6) {
@@ -41,14 +16,14 @@ extension SidebarView {
             utilityButton(title: NSLocalizedString("sidebar.achievements", comment: ""), icon: "trophy.fill", countText: "\(AchievementManager.shared.unlockedCount)/\(AchievementManager.shared.achievements.count)", tone: .yellow) { showAchievementSheet = true }
         }
         .padding(.horizontal, 10).padding(.bottom, 6)
-        .sheet(isPresented: $showCharacterSheet) {
+        .sheet(isPresented: $vm.showCharacterSheet) {
             CharacterCollectionView()
-                .frame(minWidth: 940, idealWidth: 1040, minHeight: 760, idealHeight: 840)
+                .frame(minWidth: AppConstants.Sheet.characterMinSize.width, idealWidth: AppConstants.Sheet.characterIdealSize.width, minHeight: AppConstants.Sheet.characterMinSize.height, idealHeight: AppConstants.Sheet.characterIdealSize.height)
                 .dofficeSheetPresentation()
         }
-        .sheet(isPresented: $showAccessorySheet) { AccessoryView().frame(minWidth: 480, minHeight: 560).dofficeSheetPresentation() }
-        .sheet(isPresented: $showReportSheet) { ReportCenterView().frame(minWidth: 760, minHeight: 620).dofficeSheetPresentation() }
-        .sheet(isPresented: $showAchievementSheet) { AchievementCollectionView().frame(minWidth: 880, idealWidth: 960, minHeight: 680, idealHeight: 740).dofficeSheetPresentation() }
+        .sheet(isPresented: $vm.showAccessorySheet) { AccessoryView().frame(minWidth: AppConstants.Sheet.accessoryMinSize.width, minHeight: AppConstants.Sheet.accessoryMinSize.height).dofficeSheetPresentation() }
+        .sheet(isPresented: $vm.showReportSheet) { ReportCenterView().frame(minWidth: AppConstants.Sheet.reportMinSize.width, minHeight: AppConstants.Sheet.reportMinSize.height).dofficeSheetPresentation() }
+        .sheet(isPresented: $vm.showAchievementSheet) { AchievementCollectionView().frame(minWidth: AppConstants.Sheet.achievementMinSize.width, idealWidth: AppConstants.Sheet.achievementIdealSize.width, minHeight: AppConstants.Sheet.achievementMinSize.height, idealHeight: AppConstants.Sheet.achievementIdealSize.height).dofficeSheetPresentation() }
     }
 
     var lightweightManagementButtons: some View {
@@ -59,14 +34,14 @@ extension SidebarView {
             lightweightButton(title: NSLocalizedString("sidebar.achievements", comment: ""), icon: "trophy.fill") { showAchievementSheet = true }
         }
         .padding(.horizontal, 10).padding(.bottom, 6)
-        .sheet(isPresented: $showCharacterSheet) {
+        .sheet(isPresented: $vm.showCharacterSheet) {
             CharacterCollectionView()
-                .frame(minWidth: 940, idealWidth: 1040, minHeight: 760, idealHeight: 840)
+                .frame(minWidth: AppConstants.Sheet.characterMinSize.width, idealWidth: AppConstants.Sheet.characterIdealSize.width, minHeight: AppConstants.Sheet.characterMinSize.height, idealHeight: AppConstants.Sheet.characterIdealSize.height)
                 .dofficeSheetPresentation()
         }
-        .sheet(isPresented: $showAccessorySheet) { AccessoryView().frame(minWidth: 480, minHeight: 560).dofficeSheetPresentation() }
-        .sheet(isPresented: $showReportSheet) { ReportCenterView().frame(minWidth: 760, minHeight: 620).dofficeSheetPresentation() }
-        .sheet(isPresented: $showAchievementSheet) { AchievementCollectionView().frame(minWidth: 880, idealWidth: 960, minHeight: 680, idealHeight: 740).dofficeSheetPresentation() }
+        .sheet(isPresented: $vm.showAccessorySheet) { AccessoryView().frame(minWidth: AppConstants.Sheet.accessoryMinSize.width, minHeight: AppConstants.Sheet.accessoryMinSize.height).dofficeSheetPresentation() }
+        .sheet(isPresented: $vm.showReportSheet) { ReportCenterView().frame(minWidth: AppConstants.Sheet.reportMinSize.width, minHeight: AppConstants.Sheet.reportMinSize.height).dofficeSheetPresentation() }
+        .sheet(isPresented: $vm.showAchievementSheet) { AchievementCollectionView().frame(minWidth: AppConstants.Sheet.achievementMinSize.width, idealWidth: AppConstants.Sheet.achievementIdealSize.width, minHeight: AppConstants.Sheet.achievementMinSize.height, idealHeight: AppConstants.Sheet.achievementIdealSize.height).dofficeSheetPresentation() }
     }
 
     func lightweightButton(title: String, icon: String, action: @escaping () -> Void) -> some View {

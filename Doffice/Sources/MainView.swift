@@ -3,38 +3,43 @@ import SwiftUI
 struct MainView: View {
     @EnvironmentObject var manager: SessionManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ObservedObject var settings = AppSettings.shared
-    @ObservedObject private var achievementManager = AchievementManager.shared
-    @State private var sidebarWidth: CGFloat = 216
-    @State private var showSettings = false
-    @State private var showClaudeNotInstalledAlert = false
-    @State private var showRoleNoticeAlert = false
-    @State private var roleNoticeTitle = ""
-    @State private var roleNoticeMessage = ""
-    @State private var showBugReport = false
-    @State private var showUpdateSheet = false
-    @State private var showActionCenter = false
-    @State private var showCommandPalette = false
-    @State private var showDailyReward = false
-    @State private var dailyRewardData: AchievementManager.DailyRewardResult?
-    @State private var showBillingAlert = false
-    @State private var billingAlertMessage = ""
-    @ObservedObject private var updater = UpdateChecker.shared
-    @ObservedObject private var pluginHost = PluginHost.shared
-    @ObservedObject private var effectEngine = PluginEffectEngine.shared
-    @State private var activePluginPanelId: String?
-    @ObservedObject private var sessionNotifications = SessionNotificationManager.shared
+    @StateObject private var vm = MainViewModel()
+    @State private var sidebarWidth: CGFloat = AppConstants.Layout.preferredSidebarWidth
+    @State private var viewModeBeforeEdit: Int?
     @Environment(\.openWindow) private var openWindow
-    @AppStorage("officeExpanded") private var officeExpanded = true
-    @AppStorage("viewMode") private var viewModeRaw: Int = 1
-    @AppStorage("sidebarCollapsed") private var sidebarCollapsed = false
 
-    private enum ViewMode: Int { case split = 0, office = 1, terminal = 2, strip = 3 }
-    private var viewMode: ViewMode { ViewMode(rawValue: viewModeRaw) ?? .split }
-    private var officeHeight: CGFloat { officeExpanded ? 380 : 240 }
-    private let minimumSidebarWidth: CGFloat = 196
-    private let preferredSidebarWidth: CGFloat = 216
-    private let minimumPrimaryContentWidth: CGFloat = 880
+    // Convenience accessors for ViewModel properties
+    private var settings: AppSettings { vm.settings }
+    private var achievementManager: AchievementManager { vm.achievementManager }
+    private var updater: UpdateChecker { vm.updater }
+    private var pluginHost: PluginHost { vm.pluginHost }
+    private var effectEngine: PluginEffectEngine { vm.effectEngine }
+    private var sessionNotifications: SessionNotificationManager { vm.sessionNotifications }
+
+    // State accessors
+    private var showSettings: Bool { get { vm.showSettings } nonmutating set { vm.showSettings = newValue } }
+    private var showClaudeNotInstalledAlert: Bool { get { vm.showClaudeNotInstalledAlert } nonmutating set { vm.showClaudeNotInstalledAlert = newValue } }
+    private var showRoleNoticeAlert: Bool { get { vm.showRoleNoticeAlert } nonmutating set { vm.showRoleNoticeAlert = newValue } }
+    private var roleNoticeTitle: String { get { vm.roleNoticeTitle } nonmutating set { vm.roleNoticeTitle = newValue } }
+    private var roleNoticeMessage: String { get { vm.roleNoticeMessage } nonmutating set { vm.roleNoticeMessage = newValue } }
+    private var showBugReport: Bool { get { vm.showBugReport } nonmutating set { vm.showBugReport = newValue } }
+    private var showUpdateSheet: Bool { get { vm.showUpdateSheet } nonmutating set { vm.showUpdateSheet = newValue } }
+    private var showActionCenter: Bool { get { vm.showActionCenter } nonmutating set { vm.showActionCenter = newValue } }
+    private var showCommandPalette: Bool { get { vm.showCommandPalette } nonmutating set { vm.showCommandPalette = newValue } }
+    private var showDailyReward: Bool { get { vm.showDailyReward } nonmutating set { vm.showDailyReward = newValue } }
+    private var dailyRewardData: AchievementManager.DailyRewardResult? { get { vm.dailyRewardData } nonmutating set { vm.dailyRewardData = newValue } }
+    private var showBillingAlert: Bool { get { vm.showBillingAlert } nonmutating set { vm.showBillingAlert = newValue } }
+    private var billingAlertMessage: String { get { vm.billingAlertMessage } nonmutating set { vm.billingAlertMessage = newValue } }
+    private var activePluginPanelId: String? { get { vm.activePluginPanelId } nonmutating set { vm.activePluginPanelId = newValue } }
+    private var officeExpanded: Bool { get { vm.officeExpanded } nonmutating set { vm.officeExpanded = newValue } }
+    private var viewModeRaw: Int { get { vm.viewModeRaw } nonmutating set { vm.viewModeRaw = newValue } }
+    private var sidebarCollapsed: Bool { get { vm.sidebarCollapsed } nonmutating set { vm.sidebarCollapsed = newValue } }
+
+    private var viewMode: MainViewModel.ViewMode { vm.viewMode }
+    private var officeHeight: CGFloat { vm.officeHeight }
+    private let minimumSidebarWidth: CGFloat = AppConstants.Layout.minimumSidebarWidth
+    private let preferredSidebarWidth: CGFloat = AppConstants.Layout.preferredSidebarWidth
+    private let minimumPrimaryContentWidth: CGFloat = AppConstants.Layout.minimumPrimaryContentWidth
 
     private var chromeAnimation: Animation {
         reduceMotion ? .linear(duration: 0.01) : .easeInOut(duration: 0.2)
@@ -129,7 +134,7 @@ struct MainView: View {
         .overlay {
             if showCommandPalette {
                 CommandPaletteView(
-                    isPresented: $showCommandPalette,
+                    isPresented: $vm.showCommandPalette,
                     onNewSession: { manager.showNewTabSheet = true },
                     onSettings: { showSettings = true },
                     onBugReport: { showBugReport = true },
@@ -186,10 +191,10 @@ struct MainView: View {
             get: { !settings.hasCompletedOnboarding },
             set: { if !$0 { settings.hasCompletedOnboarding = true } }
         )) { OnboardingView() }
-        .sheet(isPresented: $showSettings) { SettingsView() }
-        .sheet(isPresented: $showBugReport) { BugReportView() }
-        .sheet(isPresented: $showUpdateSheet) { UpdateSheet() }
-        .sheet(isPresented: $showActionCenter) {
+        .sheet(isPresented: $vm.showSettings) { SettingsView() }
+        .sheet(isPresented: $vm.showBugReport) { BugReportView() }
+        .sheet(isPresented: $vm.showUpdateSheet) { UpdateSheet() }
+        .sheet(isPresented: $vm.showActionCenter) {
             ActionCenterView()
                 .frame(minWidth: 500, minHeight: 400)
         }
@@ -197,7 +202,7 @@ struct MainView: View {
 
     private var bodyWithAlerts: some View {
         bodyWithSheets
-        .alert(NSLocalizedString("claude.not.installed", comment: ""), isPresented: $showClaudeNotInstalledAlert) {
+        .alert(NSLocalizedString("claude.not.installed", comment: ""), isPresented: $vm.showClaudeNotInstalledAlert) {
             Button(NSLocalizedString("main.install.guide", comment: "")) {
                 if let url = URL(string: "https://docs.anthropic.com/en/docs/claude-code/overview") {
                     NSWorkspace.shared.open(url)
@@ -217,7 +222,7 @@ struct MainView: View {
         } message: {
             Text(NSLocalizedString("claude.install.message", comment: ""))
         }
-        .alert(roleNoticeTitle, isPresented: $showRoleNoticeAlert) {
+        .alert(roleNoticeTitle, isPresented: $vm.showRoleNoticeAlert) {
             Button(NSLocalizedString("confirm", comment: ""), role: .cancel) {}
         } message: {
             Text(roleNoticeMessage)
@@ -245,13 +250,13 @@ struct MainView: View {
     var body: some View {
         bodyWithLifecycle
             .withNotificationHandlers(manager: manager, chromeAnimation: chromeAnimation,
-                                       viewModeRaw: $viewModeRaw,
-                                       showClaudeNotInstalledAlert: $showClaudeNotInstalledAlert,
-                                       showRoleNoticeAlert: $showRoleNoticeAlert,
-                                       roleNoticeTitle: $roleNoticeTitle,
-                                       roleNoticeMessage: $roleNoticeMessage,
-                                       showCommandPalette: $showCommandPalette,
-                                       showActionCenter: $showActionCenter,
+                                       viewModeRaw: $vm.viewModeRaw,
+                                       showClaudeNotInstalledAlert: $vm.showClaudeNotInstalledAlert,
+                                       showRoleNoticeAlert: $vm.showRoleNoticeAlert,
+                                       roleNoticeTitle: $vm.roleNoticeTitle,
+                                       roleNoticeMessage: $vm.roleNoticeMessage,
+                                       showCommandPalette: $vm.showCommandPalette,
+                                       showActionCenter: $vm.showActionCenter,
                                        exportActiveLog: exportActiveLog,
                                        copyActiveConversation: copyActiveConversation)
     }
@@ -259,6 +264,7 @@ struct MainView: View {
     private var bodyWithLifecycle: some View {
         bodyWithAlerts
         .onAppear {
+            settings.migrateTokenProtectionDefault()
             settings.ensureCoffeeSupportPreset()
             if manager.userVisibleTabs.isEmpty {
                 // Let the first frame render before session restoration work kicks in.
@@ -298,6 +304,19 @@ struct MainView: View {
             }
         }
         .onDisappear { manager.stopScanning() }
+        .onReceive(AppSettings.shared.$isEditMode) { isEditMode in
+            if isEditMode {
+                if vm.viewMode != .office {
+                    viewModeBeforeEdit = vm.viewModeRaw
+                    withAnimation(.easeInOut(duration: 0.2)) { vm.viewModeRaw = MainViewModel.ViewMode.office.rawValue }
+                }
+            } else {
+                if let previous = viewModeBeforeEdit {
+                    withAnimation(.easeInOut(duration: 0.2)) { vm.viewModeRaw = previous }
+                    viewModeBeforeEdit = nil
+                }
+            }
+        }
     }
 
     private func viewModeButton(icon: String, mode: ViewMode, label: String) -> some View {

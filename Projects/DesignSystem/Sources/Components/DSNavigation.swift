@@ -30,7 +30,7 @@ public struct DSTabBar: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: Theme.cornerMedium)
-                            .stroke(index == selectedIndex ? Theme.border : .clear, lineWidth: 1)
+                            .strokeBorder(index == selectedIndex ? Theme.border : .clear, lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)
@@ -77,7 +77,7 @@ public struct DSFilterChip: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.cornerMedium)
-                    .stroke(isSelected ? Theme.border : Theme.borderSubtle, lineWidth: 1)
+                    .strokeBorder(isSelected ? Theme.border : Theme.borderSubtle, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)

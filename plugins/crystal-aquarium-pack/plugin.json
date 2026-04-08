@@ -1,0 +1,9 @@
+{
+  "name": "크리스털 아쿠아리움 팩",
+  "version": "1.0.0",
+  "description": "유리 수조와 산호빛 반짝임을 닮은 맑고 투명한 캐릭터 4종을 추가합니다.",
+  "author": "Doffice",
+  "contributes": {
+    "characters": "characters.json"
+  }
+}

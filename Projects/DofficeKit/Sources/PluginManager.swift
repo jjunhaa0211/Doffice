@@ -252,6 +252,7 @@ public class PluginHost: ObservableObject {
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            OfficeSpriteRenderer.clearPluginFurnitureImageCache()
             self.panels = newPanels.filter { !disabled.contains($0.id) }
             self.commands = newCommands.filter { !disabled.contains($0.id) }
             self.statusBarItems = newStatusBars.filter { !disabled.contains($0.id) }
@@ -273,15 +274,110 @@ public class PluginHost: ObservableObject {
 
     public func applyTheme(_ theme: LoadedTheme) {
         let d = theme.decl
-        var config = AppSettings.shared.customTheme
-        config.accentHex = d.accentHex
-        config.useGradient = d.useGradient ?? false
-        config.gradientStartHex = d.gradientStartHex
-        config.gradientEndHex = d.gradientEndHex
-        config.fontName = d.fontName
-        AppSettings.shared.isDarkMode = d.isDark
-        AppSettings.shared.saveCustomTheme(config)
+        let current = AppSettings.shared.customTheme
+        let config = CustomThemeConfig(
+            accentHex: d.accentHex,
+            useGradient: d.useGradient ?? false,
+            gradientStartHex: d.gradientStartHex,
+            gradientEndHex: d.gradientEndHex,
+            fontName: d.fontName,
+            fontSize: current.fontSize,
+            bgHex: d.bgHex,
+            bgCardHex: d.cardHex,
+            bgSurfaceHex: d.cardHex ?? d.bgHex,
+            bgTertiaryHex: d.bgHex,
+            textPrimaryHex: d.textHex,
+            textSecondaryHex: d.textHex,
+            textDimHex: d.textHex,
+            textMutedHex: current.textMutedHex,
+            borderHex: current.borderHex,
+            borderStrongHex: current.borderStrongHex,
+            greenHex: d.greenHex,
+            redHex: d.redHex,
+            yellowHex: d.yellowHex,
+            purpleHex: d.purpleHex,
+            orangeHex: current.orangeHex,
+            cyanHex: d.cyanHex,
+            pinkHex: current.pinkHex
+        )
+
+        AppSettings.shared.performBatchUpdate {
+            AppSettings.shared.isDarkMode = d.isDark
+            AppSettings.shared.themeMode = "custom"
+            AppSettings.shared.saveCustomTheme(config)
+        }
         AppSettings.shared.requestRefreshIfNeeded()
+    }
+
+    // MARK: - 오피스 프리셋 적용
+
+    @discardableResult
+    public func applyOfficePreset(_ preset: LoadedOfficePreset, to map: OfficeMap) -> [FurniturePlacement] {
+        guard let placements = preset.decl.furniture, !placements.isEmpty else { return [] }
+
+        var inserted: [FurniturePlacement] = []
+
+        for placement in placements {
+            guard let furnitureDecl = furniture.first(where: { $0.decl.id == placement.furnitureId })?.decl else {
+                continue
+            }
+
+            guard !furnitureDecl.sprite.isEmpty,
+                  furnitureDecl.sprite.contains(where: { $0.contains(where: { !$0.isEmpty }) }) else {
+                continue
+            }
+
+            guard placement.col >= 0, placement.row >= 0,
+                  placement.col + furnitureDecl.width <= map.cols,
+                  placement.row + furnitureDecl.height <= map.rows else {
+                continue
+            }
+
+            let zone: OfficeZone = {
+                switch furnitureDecl.zone ?? "mainOffice" {
+                case "pantry": return .pantry
+                case "meetingRoom": return .meetingRoom
+                case "hallway": return .hallway
+                default: return .mainOffice
+                }
+            }()
+
+            let furniturePlacement = FurniturePlacement(
+                id: "plugin_\(preset.pluginName)_\(placement.furnitureId)_\(placement.col)_\(placement.row)",
+                type: .plugin,
+                position: TileCoord(col: placement.col, row: placement.row),
+                size: TileSize(w: furnitureDecl.width, h: furnitureDecl.height),
+                zone: zone,
+                pluginFurnitureId: furnitureDecl.id
+            )
+
+            let collidesWithExisting = map.furniture.contains { existing in
+                guard existing.type != .rug else { return false }
+                let eMinCol = existing.position.col
+                let eMaxCol = existing.position.col + existing.size.w
+                let eMinRow = existing.position.row
+                let eMaxRow = existing.position.row + existing.size.h
+                let pMinCol = placement.col
+                let pMaxCol = placement.col + furnitureDecl.width
+                let pMinRow = placement.row
+                let pMaxRow = placement.row + furnitureDecl.height
+                return pMinCol < eMaxCol && pMaxCol > eMinCol && pMinRow < eMaxRow && pMaxRow > eMinRow
+            }
+
+            guard !collidesWithExisting,
+                  !map.furniture.contains(where: { $0.id == furniturePlacement.id }) else {
+                continue
+            }
+
+            map.furniture.append(furniturePlacement)
+            inserted.append(furniturePlacement)
+        }
+
+        if !inserted.isEmpty {
+            map.rebuildWalkability()
+        }
+
+        return inserted
     }
 
     // MARK: - 명령어 실행
@@ -626,8 +722,17 @@ public class PluginManager: ObservableObject {
     // MARK: - 활성 플러그인 경로 목록 (세션에 주입)
 
     public var activePluginPaths: [String] {
-        plugins.filter { $0.enabled && FileManager.default.fileExists(atPath: $0.localPath) }
-            .map { $0.localPath }
+        plugins.compactMap { plugin in
+            guard plugin.enabled else { return nil }
+
+            if let bundledID = Self.bundledPluginID(from: plugin.source),
+               let bundledPath = Self.resolvedBundledRuntimePath(id: bundledID) {
+                return bundledPath
+            }
+
+            guard FileManager.default.fileExists(atPath: plugin.localPath) else { return nil }
+            return plugin.localPath
+        }
     }
 
     // MARK: - 마켓플레이스 (레지스트리)
@@ -648,9 +753,18 @@ public class PluginManager: ObservableObject {
                 guard let self = self else { return }
                 self.isLoadingRegistry = false
 
+                if let error = error {
+                    CrashLogger.shared.warning("PluginManager: Registry fetch failed — \(error.localizedDescription)")
+                    self.registryError = error.localizedDescription
+                } else if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                    let msg = "HTTP \(http.statusCode)"
+                    CrashLogger.shared.warning("PluginManager: Registry fetch failed — \(msg)")
+                    self.registryError = msg
+                } else {
+                    self.registryError = nil
+                }
                 let remoteItems = Self.resolveRegistryItems(data: data, response: response, error: error)
                 self.registryPlugins = Self.mergedRegistry(remote: remoteItems)
-                self.registryError = nil
                 self.checkForUpdates()
             }
         }.resume()
@@ -730,15 +844,23 @@ public class PluginManager: ObservableObject {
             let uniqueFiles = Array(Set(filesToDownload))
 
             // 4) 각 파일 다운로드 (manifest와 같은 디렉토리에서)
+            var failedFiles: [String] = []
             for fileName in uniqueFiles {
                 let fileURL = baseURL.appendingPathComponent(fileName)
                 let destPath = pluginDir.appendingPathComponent(fileName)
                 let parentDir = destPath.deletingLastPathComponent()
                 try? fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
 
-                if let data = try? Data(contentsOf: fileURL) {
-                    try? data.write(to: destPath)
+                do {
+                    let data = try Data(contentsOf: fileURL)
+                    try data.write(to: destPath, options: .atomicWrite)
+                } catch {
+                    CrashLogger.shared.warning("PluginManager: Failed to download/write \(fileName) — \(error.localizedDescription)")
+                    failedFiles.append(fileName)
                 }
+            }
+            if !failedFiles.isEmpty {
+                CrashLogger.shared.error("PluginManager: \(failedFiles.count) file(s) failed during install: \(failedFiles.joined(separator: ", "))")
             }
 
             // 5) CLAUDE.md가 없으면 manifest에서 생성
@@ -2143,6 +2265,210 @@ public class PluginManager: ObservableObject {
                 tags: ["theme", "battle", "furniture", "characters", "effects"],
                 previewImageURL: nil,
                 stars: 201
+            ),
+            RegistryPlugin(
+                id: "cozy-cafe-pack",
+                name: "아늑한 카페 팩",
+                author: "Doffice",
+                description: "따뜻한 카페 분위기의 배경, 커피 바 가구, 카페 캐릭터를 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://cozy-cafe-pack",
+                characterCount: 2,
+                tags: ["theme", "cafe", "furniture", "characters", "cozy"],
+                previewImageURL: nil,
+                stars: 94
+            ),
+            RegistryPlugin(
+                id: "cyberpunk-neon-pack",
+                name: "사이버펑크 네온 팩",
+                author: "Doffice",
+                description: "네온 테마, 홀로그램 가구, 사이버 캐릭터와 글리치 연출을 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://cyberpunk-neon-pack",
+                characterCount: 3,
+                tags: ["theme", "cyberpunk", "furniture", "characters", "effects"],
+                previewImageURL: nil,
+                stars: 173
+            ),
+            RegistryPlugin(
+                id: "retro-arcade-pack",
+                name: "레트로 아케이드 팩",
+                author: "Doffice",
+                description: "오락실 감성 배경과 아케이드 가구, 픽셀 캐릭터를 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://retro-arcade-pack",
+                characterCount: 2,
+                tags: ["theme", "arcade", "furniture", "characters", "retro"],
+                previewImageURL: nil,
+                stars: 119
+            ),
+            RegistryPlugin(
+                id: "space-station-pack",
+                name: "우주 정거장 팩",
+                author: "Doffice",
+                description: "딥 스페이스 테마, 우주 정거장 가구, 우주 캐릭터와 미션 연출을 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://space-station-pack",
+                characterCount: 3,
+                tags: ["theme", "space", "furniture", "characters", "effects"],
+                previewImageURL: nil,
+                stars: 167
+            ),
+            RegistryPlugin(
+                id: "pastel-dream-pack",
+                name: "파스텔 드림 팩",
+                author: "Doffice",
+                description: "말랑하고 화사한 색감의 예쁜 캐릭터 4종을 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://pastel-dream-pack",
+                characterCount: 4,
+                tags: ["characters", "pretty", "pastel", "dreamy"],
+                previewImageURL: nil,
+                stars: 141
+            ),
+            RegistryPlugin(
+                id: "moonlit-garden-pack",
+                name: "문라이트 가든 팩",
+                author: "Doffice",
+                description: "달빛 정원 분위기의 우아한 캐릭터 4종을 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://moonlit-garden-pack",
+                characterCount: 4,
+                tags: ["characters", "pretty", "moonlight", "garden"],
+                previewImageURL: nil,
+                stars: 133
+            ),
+            RegistryPlugin(
+                id: "sakura-atelier-pack",
+                name: "사쿠라 아틀리에 팩",
+                author: "Doffice",
+                description: "벚꽃빛 작업실 무드의 사랑스러운 캐릭터 4종을 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://sakura-atelier-pack",
+                characterCount: 4,
+                tags: ["characters", "pretty", "sakura", "atelier"],
+                previewImageURL: nil,
+                stars: 152
+            ),
+            RegistryPlugin(
+                id: "aurora-synth-pack",
+                name: "오로라 신스 팩",
+                author: "Doffice",
+                description: "오로라와 신스웨이브 감성의 세련된 캐릭터 4종을 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://aurora-synth-pack",
+                characterCount: 4,
+                tags: ["characters", "pretty", "aurora", "synthwave"],
+                previewImageURL: nil,
+                stars: 164
+            ),
+            RegistryPlugin(
+                id: "velvet-noir-pack",
+                name: "벨벳 느와르 팩",
+                author: "Doffice",
+                description: "짙은 벨벳과 와인빛 포인트가 살아있는 시크한 캐릭터 4종을 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://velvet-noir-pack",
+                characterCount: 4,
+                tags: ["characters", "pretty", "velvet", "noir"],
+                previewImageURL: nil,
+                stars: 127
+            ),
+            RegistryPlugin(
+                id: "crystal-aquarium-pack",
+                name: "크리스털 아쿠아리움 팩",
+                author: "Doffice",
+                description: "맑고 투명한 아쿠아 팔레트의 캐릭터 4종을 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://crystal-aquarium-pack",
+                characterCount: 4,
+                tags: ["characters", "pretty", "aquarium", "crystal"],
+                previewImageURL: nil,
+                stars: 138
+            ),
+            RegistryPlugin(
+                id: "storybook-forest-pack",
+                name: "스토리북 포레스트 팩",
+                author: "Doffice",
+                description: "동화책 숲의 따뜻한 색감을 담은 캐릭터 4종을 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://storybook-forest-pack",
+                characterCount: 4,
+                tags: ["characters", "pretty", "storybook", "forest"],
+                previewImageURL: nil,
+                stars: 129
+            ),
+            RegistryPlugin(
+                id: "sunset-lagoon-pack",
+                name: "선셋 라군 팩",
+                author: "Doffice",
+                description: "노을과 라군 물빛을 닮은 화사한 캐릭터 4종을 추가합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://sunset-lagoon-pack",
+                characterCount: 4,
+                tags: ["characters", "pretty", "sunset", "lagoon"],
+                previewImageURL: nil,
+                stars: 146
+            ),
+            RegistryPlugin(
+                id: "standup-sidekick-pack",
+                name: "스탠드업 사이드킥 팩",
+                author: "Doffice",
+                description: "최근 커밋과 변경 파일을 읽어서 팀 공유용 스탠드업 초안을 만들어 줍니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://standup-sidekick-pack",
+                characterCount: 0,
+                tags: ["utility", "git", "standup", "team", "command"],
+                previewImageURL: nil,
+                stars: 118
+            ),
+            RegistryPlugin(
+                id: "commit-coach-pack",
+                name: "커밋 코치 팩",
+                author: "Doffice",
+                description: "현재 변경 내용을 바탕으로 바로 쓸 수 있는 커밋 메시지 후보를 제안합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://commit-coach-pack",
+                characterCount: 0,
+                tags: ["utility", "git", "commit", "command", "workflow"],
+                previewImageURL: nil,
+                stars: 124
+            ),
+            RegistryPlugin(
+                id: "branch-janitor-pack",
+                name: "브랜치 청소부 팩",
+                author: "Doffice",
+                description: "정리해도 비교적 안전한 머지 완료 브랜치를 찾아서 삭제 명령까지 준비합니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://branch-janitor-pack",
+                characterCount: 0,
+                tags: ["utility", "git", "branch", "cleanup", "command"],
+                previewImageURL: nil,
+                stars: 109
+            ),
+            RegistryPlugin(
+                id: "pr-brief-pack",
+                name: "PR 브리프 팩",
+                author: "Doffice",
+                description: "현재 브랜치의 변경 사항을 읽고 PR 설명 초안을 빠르게 정리해 줍니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://pr-brief-pack",
+                characterCount: 0,
+                tags: ["utility", "git", "pr", "review", "command"],
+                previewImageURL: nil,
+                stars: 121
+            ),
+            RegistryPlugin(
+                id: "context-capsule-pack",
+                name: "컨텍스트 캡슐 팩",
+                author: "Doffice",
+                description: "프로젝트 구조와 현재 Git 상태를 한 번에 정리한 공유용 스냅샷을 만들어 줍니다.",
+                version: "1.0.0",
+                downloadURL: "bundled://context-capsule-pack",
+                characterCount: 0,
+                tags: ["utility", "snapshot", "context", "handoff", "command"],
+                previewImageURL: nil,
+                stars: 115
             )
         ]
     }
@@ -2216,34 +2542,27 @@ public class PluginManager: ObservableObject {
         return identifier.isEmpty ? nil : identifier
     }
 
-    private struct BundledPluginFile {
+    struct BundledPluginFile {
         let path: String
         let contents: String
     }
 
-    private struct BundledPluginDefinition {
+    struct BundledPluginDefinition {
         let directoryName: String
         let files: [BundledPluginFile]
     }
 
-    /// Bundle 리소스에서 번들 플러그인 로드 (plugins/ 디렉토리)
-    private static func loadBundledFromBundle(id: String) -> BundledPluginDefinition? {
-        // Bundle.main에서 plugins/<id> 디렉토리 찾기
-        guard let bundleURL = Bundle.main.resourceURL?.appendingPathComponent("plugins").appendingPathComponent(id),
-              FileManager.default.fileExists(atPath: bundleURL.path) else {
-            return nil
-        }
-
+    private static func bundledDefinition(from directoryURL: URL, directoryName: String) -> BundledPluginDefinition? {
         let fm = FileManager.default
         var files: [BundledPluginFile] = []
 
         // 재귀적으로 모든 파일 수집
-        if let enumerator = fm.enumerator(at: bundleURL, includingPropertiesForKeys: nil) {
+        if let enumerator = fm.enumerator(at: directoryURL, includingPropertiesForKeys: nil) {
             while let fileURL = enumerator.nextObject() as? URL {
                 var isDir: ObjCBool = false
                 fm.fileExists(atPath: fileURL.path, isDirectory: &isDir)
                 if !isDir.boolValue {
-                    let relativePath = fileURL.path.replacingOccurrences(of: bundleURL.path + "/", with: "")
+                    let relativePath = fileURL.path.replacingOccurrences(of: directoryURL.path + "/", with: "")
                     do {
                         let content = try String(contentsOf: fileURL, encoding: .utf8)
                         files.append(BundledPluginFile(path: relativePath, contents: content))
@@ -2258,12 +2577,92 @@ public class PluginManager: ObservableObject {
             return nil
         }
 
-        return BundledPluginDefinition(directoryName: id, files: files)
+        return BundledPluginDefinition(directoryName: directoryName, files: files)
     }
 
-    private static func bundledPluginDefinition(for id: String) -> BundledPluginDefinition? {
+    /// Bundle 리소스에서 번들 플러그인 로드 (plugins/ 디렉토리)
+    private static func loadBundledFromBundle(id: String) -> BundledPluginDefinition? {
+        guard let bundleURL = Bundle.main.resourceURL?.appendingPathComponent("plugins").appendingPathComponent(id),
+              FileManager.default.fileExists(atPath: bundleURL.path) else {
+            return nil
+        }
+
+        return bundledDefinition(from: bundleURL, directoryName: id)
+    }
+
+    /// 개발 워크스페이스 루트의 plugins/ 디렉토리에서 번들 플러그인 로드
+    private static func loadBundledFromWorkspace(id: String) -> BundledPluginDefinition? {
+        let fm = FileManager.default
+        let seeds = [
+            Bundle.main.bundleURL,
+            Bundle.main.resourceURL,
+            URL(fileURLWithPath: fm.currentDirectoryPath, isDirectory: true),
+            URL(fileURLWithPath: #filePath, isDirectory: false).deletingLastPathComponent()
+        ].compactMap { $0?.standardizedFileURL }
+
+        var visited = Set<String>()
+
+        for seed in seeds {
+            var current = seed
+
+            while true {
+                let candidate = current.appendingPathComponent("plugins", isDirectory: true)
+                    .appendingPathComponent(id, isDirectory: true)
+                    .standardizedFileURL
+
+                if visited.insert(candidate.path).inserted,
+                   fm.fileExists(atPath: candidate.path),
+                   let definition = bundledDefinition(from: candidate, directoryName: id) {
+                    return definition
+                }
+
+                let parent = current.deletingLastPathComponent().standardizedFileURL
+                if parent.path == current.path { break }
+                current = parent
+            }
+        }
+
+        return nil
+    }
+
+    private static func resolvedBundledRuntimePath(id: String) -> String? {
+        let fm = FileManager.default
+        let seeds = [
+            Bundle.main.resourceURL,
+            Bundle.main.bundleURL,
+            URL(fileURLWithPath: fm.currentDirectoryPath, isDirectory: true),
+            URL(fileURLWithPath: #filePath, isDirectory: false).deletingLastPathComponent()
+        ].compactMap { $0?.standardizedFileURL }
+
+        var visited = Set<String>()
+
+        for seed in seeds {
+            var current = seed
+
+            while true {
+                let candidate = current.appendingPathComponent("plugins", isDirectory: true)
+                    .appendingPathComponent(id, isDirectory: true)
+                    .standardizedFileURL
+
+                if visited.insert(candidate.path).inserted,
+                   fm.fileExists(atPath: candidate.path),
+                   fm.fileExists(atPath: candidate.appendingPathComponent("plugin.json").path) {
+                    return candidate.path
+                }
+
+                let parent = current.deletingLastPathComponent().standardizedFileURL
+                if parent.path == current.path { break }
+                current = parent
+            }
+        }
+
+        return nil
+    }
+
+    static func bundledPluginDefinition(for id: String) -> BundledPluginDefinition? {
         // 먼저 Bundle 리소스에서 찾기
         if let def = loadBundledFromBundle(id: id) { return def }
+        if let def = loadBundledFromWorkspace(id: id) { return def }
 
         // fallback: 인라인 데이터 (flea-market-hidden-pack만)
         switch id {
@@ -2351,7 +2750,7 @@ public class PluginManager: ObservableObject {
 
         // typing-combo-pack removed
 
-        case "_removed_typing_combo_pack_":
+        case "typing-combo-pack":
             let pluginJSON = """
             {
               "name": "타이핑 콤보 팩",

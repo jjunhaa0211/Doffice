@@ -193,7 +193,7 @@ public struct GridSinglePanel: View {
             }
         }
         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgCard))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(isSelected ? Theme.accent.opacity(0.5) : Theme.border, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(isSelected ? Theme.accent.opacity(0.5) : Theme.border, lineWidth: 1))
     }
 }
 
@@ -243,7 +243,7 @@ public struct GridGroupPanel: View {
                     EventStreamView(tab: activeTab, compact: true)
                 }
                 .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgCard))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(group.hasActiveTab ? Theme.accent.opacity(0.5) : Theme.border, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(group.hasActiveTab ? Theme.accent.opacity(0.5) : Theme.border, lineWidth: 1))
                 .onTapGesture { manager.selectTab(activeTab.id) }
             } else {
                 EmptyView()

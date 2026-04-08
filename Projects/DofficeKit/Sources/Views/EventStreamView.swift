@@ -10,25 +10,67 @@ public struct EventStreamView: View {
     @EnvironmentObject var manager: SessionManager
     @ObservedObject var tab: TerminalTab
     @StateObject var settings = AppSettings.shared
+    @StateObject private var vm = EventStreamViewModel()
     public let compact: Bool
     @State var inputText = ""
     @State var pastedChunks: [(id: Int, text: String)] = []
     @State var pasteCounter: Int = 0
     @FocusState var isFocused: Bool
-    @State var autoScroll = true
-    @State var lastBlockCount = 0
-    @State var blockFilter = BlockFilter()
-    @State var showFilterBar = false
-    @State var showFilePanel = false
-    @State var elapsedSeconds: Int = 0
-    @State var selectedCommandIndex: Int = 0
-    @State var planSelectionDraft: [String: String] = [:]
-    @State var planSelectionSignature: String = ""
-    @State var sentPlanSignatures: Set<String> = []
-    @State var scrollWorkItem: DispatchWorkItem?
-    @State var showSleepWorkSetup = false
-    @State var unavailableProviderAlert: AgentProvider?
     public let elapsedTimer = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
+
+    // Convenience accessors for backward compatibility with extensions
+    var autoScroll: Bool {
+        get { vm.autoScroll }
+        nonmutating set { vm.autoScroll = newValue }
+    }
+    var lastBlockCount: Int {
+        get { vm.lastBlockCount }
+        nonmutating set { vm.lastBlockCount = newValue }
+    }
+    var blockFilter: BlockFilter {
+        get { vm.blockFilter }
+        nonmutating set { vm.blockFilter = newValue }
+    }
+    var showFilterBar: Bool {
+        get { vm.showFilterBar }
+        nonmutating set { vm.showFilterBar = newValue }
+    }
+    var showFilePanel: Bool {
+        get { vm.showFilePanel }
+        nonmutating set { vm.showFilePanel = newValue }
+    }
+    var elapsedSeconds: Int {
+        get { vm.elapsedSeconds }
+        nonmutating set { vm.elapsedSeconds = newValue }
+    }
+    var selectedCommandIndex: Int {
+        get { vm.selectedCommandIndex }
+        nonmutating set { vm.selectedCommandIndex = newValue }
+    }
+    var planSelectionDraft: [String: String] {
+        get { vm.planSelectionDraft }
+        nonmutating set { vm.planSelectionDraft = newValue }
+    }
+    var planSelectionSignature: String {
+        get { vm.planSelectionSignature }
+        nonmutating set { vm.planSelectionSignature = newValue }
+    }
+    var sentPlanSignatures: Set<String> {
+        get { vm.sentPlanSignatures }
+        nonmutating set { vm.sentPlanSignatures = newValue }
+    }
+    var scrollWorkItem: DispatchWorkItem? {
+        get { vm.scrollWorkItem }
+        nonmutating set { vm.scrollWorkItem = newValue }
+    }
+    var showSleepWorkSetup: Bool {
+        get { vm.showSleepWorkSetup }
+        nonmutating set { vm.showSleepWorkSetup = newValue }
+    }
+    var unavailableProviderAlert: AgentProvider? {
+        get { vm.unavailableProviderAlert }
+        nonmutating set { vm.unavailableProviderAlert = newValue }
+    }
 
     // ═══════════════════════════════════════════
     var matchingCommands: [SlashCommand] {
@@ -59,16 +101,7 @@ public struct EventStreamView: View {
     }
 
     func selectProvider(_ provider: AgentProvider) {
-        guard tab.provider != provider else { return }
-        guard provider.refreshAvailability(force: false) else {
-            unavailableProviderAlert = provider
-            return
-        }
-        // Reset session state when switching providers
-        tab.isProcessing = false
-        tab.claudeActivity = .idle
-        tab.selectedModel = provider.defaultModel
-        tab.isClaude = provider == .claude
+        vm.selectProvider(provider, tab: tab)
     }
 
     // MARK: - Raw Terminal Body (NSView 기반 진짜 CLI)
@@ -346,27 +379,9 @@ public struct EventStreamView: View {
         .overlay(Rectangle().fill(Theme.border).frame(height: 1), alignment: .bottom)
     }
 
-    var activityLabel: String {
-        switch tab.claudeActivity {
-        case .idle: return NSLocalizedString("terminal.status.idle", comment: ""); case .thinking: return NSLocalizedString("terminal.status.thinking", comment: ""); case .reading: return NSLocalizedString("terminal.status.reading", comment: "")
-        case .writing: return NSLocalizedString("terminal.status.writing", comment: ""); case .searching: return NSLocalizedString("terminal.status.searching", comment: ""); case .running: return NSLocalizedString("terminal.status.running", comment: "")
-        case .done: return NSLocalizedString("terminal.status.done", comment: ""); case .error: return NSLocalizedString("terminal.status.error", comment: "")
-        }
-    }
-
-    var activityLabelColor: Color {
-        switch tab.claudeActivity {
-        case .thinking: return Theme.purple; case .reading: return Theme.accent; case .writing: return Theme.green
-        case .searching: return Theme.cyan; case .running: return Theme.yellow; case .done: return Theme.green
-        case .error: return Theme.red; case .idle: return Theme.textDim
-        }
-    }
-
-    func formatElapsed(_ secs: Int) -> String {
-        if secs < 60 { return "\(secs)s" }
-        if secs < 3600 { return "\(secs / 60)m \(secs % 60)s" }
-        return "\(secs / 3600)h \((secs % 3600) / 60)m"
-    }
+    var activityLabel: String { vm.activityLabel(for: tab.claudeActivity) }
+    var activityLabelColor: Color { vm.activityLabelColor(for: tab.claudeActivity) }
+    func formatElapsed(_ secs: Int) -> String { vm.formatElapsed(secs) }
 
     // ═══════════════════════════════════════════
     // MARK: - [Feature 6] Filter Bar
@@ -375,7 +390,7 @@ public struct EventStreamView: View {
     var filterBar: some View {
         HStack(spacing: 4) {
             Text("Filter").font(Theme.chrome(8, weight: .bold)).foregroundColor(Theme.textDim)
-            ForEach(["Bash", "Read", "Write", "Edit", "Grep", "Glob"], id: \.self) { tool in
+            ForEach(EventStreamViewModel.filterToolNames, id: \.self) { tool in
                 filterChip(tool, color: toolColor(tool))
             }
             Rectangle().fill(Theme.border).frame(width: 1, height: 12)
@@ -394,7 +409,13 @@ public struct EventStreamView: View {
             // Search
             HStack(spacing: 3) {
                 Image(systemName: "magnifyingglass").font(Theme.chrome(8)).foregroundColor(Theme.textDim)
-                TextField(NSLocalizedString("terminal.search.placeholder", comment: ""), text: $blockFilter.searchText)
+                TextField(
+                    NSLocalizedString("terminal.search.placeholder", comment: ""),
+                    text: Binding(
+                        get: { blockFilter.searchText },
+                        set: { blockFilter.searchText = $0 }
+                    )
+                )
                     .textFieldStyle(.plain).font(Theme.chrome(9)).frame(width: 80)
             }
         }
@@ -417,13 +438,7 @@ public struct EventStreamView: View {
         .accessibilityLabel(String(format: NSLocalizedString("terminal.filter.a11y", comment: ""), tool))
     }
 
-    func toolColor(_ name: String) -> Color {
-        switch name {
-        case "Bash": return Theme.yellow; case "Read": return Theme.accent
-        case "Write", "Edit": return Theme.green; case "Grep", "Glob": return Theme.cyan
-        default: return Theme.textSecondary
-        }
-    }
+    func toolColor(_ name: String) -> Color { vm.toolColor(name) }
 
     // ═══════════════════════════════════════════
     // MARK: - [Feature 4] File Change Panel
@@ -476,40 +491,9 @@ public struct EventStreamView: View {
     // MARK: - Filtered Blocks (기존 확장)
     // ═══════════════════════════════════════════
 
-    func scrollToEnd(_ proxy: ScrollViewProxy) {
-        proxy.scrollTo("streamEnd", anchor: .bottom)
-    }
-
-    func debouncedScroll(_ proxy: ScrollViewProxy, delay: Double) {
-        scrollWorkItem?.cancel()
-        let item = DispatchWorkItem { scrollToEnd(proxy) }
-        scrollWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
-    }
-
-    var filteredBlocks: [StreamBlock] {
-        // Fast path: no filtering needed
-        if tab.outputMode == .full && !blockFilter.isActive {
-            return tab.blocks
-        }
-        var blocks: [StreamBlock]
-        switch tab.outputMode {
-        case .full: blocks = tab.blocks
-        case .realtime: blocks = tab.blocks.filter { if case .sessionStart = $0.blockType { return false }; return true }
-        case .resultOnly:
-            blocks = tab.blocks.filter {
-                switch $0.blockType {
-                case .userPrompt, .thought, .completion, .error: return true
-                default: return false
-                }
-            }
-        }
-        // 추가 필터 적용
-        if blockFilter.isActive {
-            blocks = blocks.filter { blockFilter.matches($0) }
-        }
-        return blocks
-    }
+    func scrollToEnd(_ proxy: ScrollViewProxy) { vm.scrollToEnd(proxy) }
+    func debouncedScroll(_ proxy: ScrollViewProxy, delay: Double) { vm.debouncedScroll(proxy, delay: delay) }
+    var filteredBlocks: [StreamBlock] { vm.filteredBlocks(tab: tab) }
 
     // MARK: - Setting Helpers
 
@@ -543,7 +527,7 @@ public struct EventStreamView: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
-                        .stroke(isSelected ? color.opacity(0.3) : .clear, lineWidth: 1)
+                        .strokeBorder(isSelected ? color.opacity(0.3) : .clear, lineWidth: 1)
                 )
         }.buttonStyle(.plain)
     }

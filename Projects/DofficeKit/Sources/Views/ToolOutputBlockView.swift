@@ -1,7 +1,7 @@
 import SwiftUI
 import DesignSystem
 
-// MARK: - Tool Output Block View (truncated)
+// MARK: - Tool Output Block View
 // ═══════════════════════════════════════════════════════
 
 public struct ToolOutputBlockView: View {
@@ -38,25 +38,29 @@ public struct ToolOutputBlockView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 0) {
-                Text("  | ").font(Theme.mono(11)).foregroundColor(Theme.textDim)
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Theme.textMuted.opacity(0.25))
+                    .frame(width: 2)
+                    .padding(.leading, 7)
+
                 Text(displayText)
                     .font(Theme.mono(compact ? 10 : 11))
-                    .foregroundColor(Theme.textTerminal)
+                    .foregroundColor(Theme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
-            }.padding(.leading, 8)
+                    .padding(.leading, 10).padding(.vertical, 2)
+            }
 
             if isTruncatable {
-                Button(action: { isExpanded.toggle() }) {
-                    HStack(spacing: 4) {
+                Button(action: { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } }) {
+                    HStack(spacing: 5) {
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: Theme.iconSize(7)))
+                            .font(.system(size: Theme.iconSize(7), weight: .semibold))
                         Text(isExpanded ? NSLocalizedString("terminal.collapse", comment: "") : String(format: NSLocalizedString("terminal.expand.all", comment: ""), lines.count))
-                            .font(Theme.mono(9))
+                            .font(Theme.mono(compact ? 8 : 9, weight: .medium))
                     }
-                    .foregroundColor(Theme.textDim)
-                    .padding(.leading, 28)
-                    .padding(.vertical, 2)
+                    .foregroundColor(Theme.accent.opacity(0.6))
+                    .padding(.leading, 20).padding(.vertical, 3)
                 }
                 .buttonStyle(.plain)
             }

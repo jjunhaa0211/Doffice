@@ -1,0 +1,54 @@
+[
+  {
+    "id": "cotton_mina",
+    "name": "미나",
+    "archetype": "솜사탕 구름 위에서 와이어프레임을 그리는 파스텔 디자이너",
+    "hairColor": "F6B7D8",
+    "skinTone": "F7DDCC",
+    "shirtColor": "F7CFE3",
+    "pantsColor": "B7C9F2",
+    "hatType": "beret",
+    "accessory": "earring",
+    "species": "Human",
+    "jobRole": "designer"
+  },
+  {
+    "id": "cloud_mellow",
+    "name": "멜로",
+    "archetype": "말랑한 구름 메모를 쌓아두는 드림 플래너",
+    "hairColor": "EFE3FF",
+    "skinTone": "F8F0FF",
+    "shirtColor": "CEE7FF",
+    "pantsColor": "8FA8E8",
+    "hatType": "none",
+    "accessory": "scarf",
+    "species": "Rabbit",
+    "jobRole": "planner"
+  },
+  {
+    "id": "mint_lumi",
+    "name": "루미",
+    "archetype": "민트 크림 라떼처럼 부드러운 리뷰를 남기는 고양이",
+    "hairColor": "BFE8D6",
+    "skinTone": "D2F0E6",
+    "shirtColor": "FFF3C7",
+    "pantsColor": "7DAA9E",
+    "hatType": "none",
+    "accessory": "glasses",
+    "species": "Cat",
+    "jobRole": "reviewer"
+  },
+  {
+    "id": "sugar_prism",
+    "name": "프리즘",
+    "archetype": "달콤한 반짝임으로 빌드 로그를 장식하는 유니콘 개발자",
+    "hairColor": "FF8BC2",
+    "skinTone": "FFF1FB",
+    "shirtColor": "BFA7FF",
+    "pantsColor": "7A65C7",
+    "hatType": "crown",
+    "accessory": "none",
+    "species": "Unicorn",
+    "jobRole": "developer"
+  }
+]

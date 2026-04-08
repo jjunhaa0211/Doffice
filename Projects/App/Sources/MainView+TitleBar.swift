@@ -33,8 +33,8 @@ extension MainView {
         HStack(spacing: Theme.sp2) {
             Color.clear.frame(width: 68, height: 1)
 
-            chromeIconButton(sidebarCollapsed ? "sidebar.left" : "sidebar.leading", help: sidebarCollapsed ? NSLocalizedString("main.sidebar.open", comment: "") : NSLocalizedString("main.sidebar.close", comment: "")) {
-                withAnimation(.easeInOut(duration: 0.2)) { sidebarCollapsed.toggle() }
+            chromeIconButton(vm.sidebarCollapsed ? "sidebar.left" : "sidebar.leading", help: vm.sidebarCollapsed ? NSLocalizedString("main.sidebar.open", comment: "") : NSLocalizedString("main.sidebar.close", comment: "")) {
+                withAnimation(.easeInOut(duration: 0.2)) { vm.sidebarCollapsed.toggle() }
             }
 
             // 앱 이름
@@ -63,7 +63,7 @@ extension MainView {
                 ForEach(settings.layoutPresets) { preset in
                     Button(action: {
                         settings.applyPreset(preset)
-                        viewModeRaw = preset.viewModeRaw
+                        vm.viewModeRaw = preset.viewModeRaw
                     }) {
                         Text(preset.name)
                     }
@@ -72,7 +72,7 @@ extension MainView {
                 Button(NSLocalizedString("main.save.layout", comment: "")) {
                     settings.saveCurrentAsPreset(
                         name: String(format: NSLocalizedString("main.preset.name", comment: ""), settings.layoutPresets.count + 1),
-                        viewModeRaw: viewModeRaw,
+                        viewModeRaw: vm.viewModeRaw,
                         sidebarWidth: Double(sidebarWidth)
                     )
                 }
@@ -89,7 +89,7 @@ extension MainView {
 
             // 업데이트 배지
             if updater.hasUpdate {
-                Button(action: { showUpdateSheet = true }) {
+                Button(action: { vm.showUpdateSheet = true }) {
                     HStack(spacing: 4) {
                         AppStatusDot(color: Theme.green, size: 6)
                         Text("v\(updater.latestVersion)").font(Theme.chrome(9, weight: .medium)).foregroundColor(Theme.green)
@@ -126,8 +126,8 @@ extension MainView {
             // 유틸리티 버튼들
             HStack(spacing: 0) {
                 chromeIconButton("rectangle.on.rectangle", help: NSLocalizedString("main.office.detach", comment: "")) { openOfficeWindow() }
-                chromeIconButton("ladybug.fill", help: NSLocalizedString("main.bug.report", comment: "")) { showBugReport = true }
-                chromeIconButton("gearshape.fill", help: NSLocalizedString("settings", comment: "")) { showSettings = true }
+                chromeIconButton("ladybug.fill", help: NSLocalizedString("main.bug.report", comment: "")) { vm.showBugReport = true }
+                chromeIconButton("gearshape.fill", help: NSLocalizedString("settings", comment: "")) { vm.showSettings = true }
                 chromeIconButton("arrow.clockwise", help: NSLocalizedString("main.refresh.shortcut", comment: "")) { manager.refresh() }
                 chromeIconButton(settings.isLocked ? "lock.fill" : "lock.open", help: NSLocalizedString("main.session.lock", comment: "")) {
                     if settings.lockPIN.isEmpty { settings.isLocked.toggle() } else { settings.isLocked = true }
@@ -147,11 +147,11 @@ extension MainView {
         .padding(.top, -1)
     }
 
-    func viewModeButton(icon: String, mode: ViewMode, label: String) -> some View {
-        let isActive = viewMode == mode
+    func viewModeButton(icon: String, mode: MainViewModel.ViewMode, label: String) -> some View {
+        let isActive = vm.viewMode == mode
         return Button(action: {
             withAnimation(chromeAnimation) {
-                viewModeRaw = mode.rawValue
+                vm.viewModeRaw = mode.rawValue
             }
         }) {
             Image(systemName: icon)
@@ -164,13 +164,4 @@ extension MainView {
         .help(label)
     }
 
-    func protectedSidebarWidth(totalWidth: CGFloat) -> CGFloat {
-        let requestedWidth = max(sidebarWidth, preferredSidebarWidth)
-        let safeMaximum = max(minimumSidebarWidth, totalWidth - minimumPrimaryContentWidth)
-        return min(requestedWidth, safeMaximum)
-    }
-
-    func shouldForceCompactSidebar(totalWidth: CGFloat, sidebarWidth: CGFloat) -> Bool {
-        totalWidth < 1240 || sidebarWidth <= 204
-    }
 }

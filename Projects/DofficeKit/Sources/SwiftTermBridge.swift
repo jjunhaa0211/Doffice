@@ -69,7 +69,10 @@ public class SwiftTermContainer: NSView, LocalProcessTerminalViewDelegate {
     required init?(coder: NSCoder) { return nil }
 
     deinit {
-        // PTY 프로세스 정리 — 뷰 파괴 시 리소스 누수 방지
+        // 셸 프로세스 종료 — PTY 및 자식 프로세스 누수 방지
+        if let process = terminalView.process, process.running, process.shellPid > 0 {
+            kill(process.shellPid, SIGHUP)
+        }
         terminalView.processDelegate = nil
     }
 

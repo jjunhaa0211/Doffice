@@ -18,6 +18,7 @@ public extension Notification.Name {
     static let dofficeTabCycleCompleted = Notification.Name("dofficeTabCycleCompleted")
     static let dofficeRoleNotice = Notification.Name("dofficeRoleNotice")
     static let dofficeSessionStoreDidChange = Notification.Name("dofficeSessionStoreDidChange")
+    static let dofficeSessionSaveFailed = Notification.Name("dofficeSessionSaveFailed")
     static let dofficeScrollToBlock = Notification.Name("dofficeScrollToBlock")
     static let dofficeCommandPalette = Notification.Name("dofficeCommandPalette")
     static let dofficeActionCenter = Notification.Name("dofficeActionCenter")

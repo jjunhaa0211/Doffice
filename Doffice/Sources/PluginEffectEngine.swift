@@ -284,7 +284,8 @@ struct PluginEffectOverlay: View {
             if engine.comboCount > 0 {
                 comboView
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(20)
+                    .padding(.top, 48)
+                    .padding(.trailing, 20)
             }
 
             // 파티클 (최대 20개 제한)

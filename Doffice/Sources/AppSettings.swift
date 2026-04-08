@@ -62,11 +62,13 @@ class AppSettings: ObservableObject {
 
     // ── Batch Update Support ──
     // Prevents multiple objectWillChange.send() calls during bulk settings changes.
+    // Must be accessed from main thread only (UI state).
     private var _batchUpdateInProgress = false
 
     /// Perform multiple settings changes with only a single objectWillChange notification.
     /// 중첩 호출 안전: 이미 batch 중이면 내부에서 다시 send하지 않음.
     func performBatchUpdate(_ changes: () -> Void) {
+        assert(Thread.isMainThread, "performBatchUpdate must be called on main thread")
         let wasAlreadyInBatch = _batchUpdateInProgress
         _batchUpdateInProgress = true
         changes()
@@ -79,6 +81,10 @@ class AppSettings: ObservableObject {
 
     /// Sends objectWillChange only if not inside a batch update.
     private func notifyIfNeeded() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.notifyIfNeeded() }
+            return
+        }
         guard !_batchUpdateInProgress else { return }
         objectWillChange.send()
     }
@@ -115,8 +121,11 @@ class AppSettings: ObservableObject {
     }
 
     // ── 토큰 보호 ──
-    @AppStorage("tokenProtectionEnabled") var tokenProtectionEnabled: Bool = true {
-        didSet { notifyIfNeeded() }
+    @AppStorage("tokenProtectionEnabled") var tokenProtectionEnabled: Bool = false {
+        didSet {
+            tokenProtectionUserSet = true
+            notifyIfNeeded()
+        }
     }
 
     // ── 캐릭터 속도 ──
@@ -570,6 +579,15 @@ class AppSettings: ObservableObject {
 
     func resetFurniturePositions() {
         furniturePositionsJSON = ""
+    }
+
+    /// 토큰 보호 기본값 마이그레이션: 사용자가 명시적으로 켠 적 없으면 off 처리
+    @AppStorage("tokenProtectionUserSet") private var tokenProtectionUserSet: Bool = false
+
+    func migrateTokenProtectionDefault() {
+        if !tokenProtectionUserSet && tokenProtectionEnabled {
+            tokenProtectionEnabled = false
+        }
     }
 
     func ensureCoffeeSupportPreset() {

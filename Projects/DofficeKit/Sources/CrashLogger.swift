@@ -128,12 +128,12 @@ public final class CrashLogger {
 
         let entry = lines.joined(separator: "\n")
         // NSException handler는 signal handler가 아니므로 queue를 통해 안전하게 기록
-        queue.sync {
-            if let data = entry.data(using: .utf8) {
-                self.ensureFileHandle()
-                self.fileHandle?.write(data)
-                self.fileHandle?.synchronizeFile()
-            }
+        // async: 메인 스레드에서 호출 시 UI 블로킹 방지
+        queue.async { [weak self] in
+            guard let self = self, let data = entry.data(using: .utf8) else { return }
+            self.ensureFileHandle()
+            self.fileHandle?.write(data)
+            self.fileHandle?.synchronizeFile()
         }
     }
 

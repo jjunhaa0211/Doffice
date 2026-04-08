@@ -6,6 +6,7 @@ import SwiftUI
 
 struct AccessoryView: View {
     @ObservedObject var settings = AppSettings.shared
+    @ObservedObject var pluginHost = PluginHost.shared
     @Environment(\.dismiss) var dismiss
     @State private var selectedTab = 0  // 0=악세서리, 1=배경
 
@@ -58,10 +59,40 @@ struct AccessoryView: View {
     private var accessoryTabContent: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(spacing: 16) {
-                // 가구 목록 (미리보기 카드 형식)
+                // 가구 목록 (빌트인 + 플러그인 통합 그리드)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                     ForEach(FurnitureItem.all) { item in
                         furnitureCard(item)
+                    }
+                    ForEach(pluginHost.furniture) { item in
+                        pluginFurnitureCard(item)
+                    }
+                }
+
+                // 오피스 프리셋 (플러그인)
+                if !pluginHost.officePresets.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(NSLocalizedString("accessory.presets", comment: "PRESETS"))
+                            .font(Theme.pixel)
+                            .foregroundColor(Theme.textDim)
+                            .tracking(1.5)
+                        ForEach(pluginHost.officePresets) { preset in
+                            HStack(spacing: 8) {
+                                Image(systemName: "square.grid.2x2.fill")
+                                    .font(.system(size: Theme.iconSize(9)))
+                                    .foregroundColor(Theme.cyan)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(preset.decl.name)
+                                        .font(Theme.mono(8, weight: .bold))
+                                        .foregroundColor(Theme.textPrimary)
+                                    Text(preset.pluginName)
+                                        .font(Theme.mono(7))
+                                        .foregroundColor(Theme.cyan)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                            }
+                        }
                     }
                 }
 
@@ -180,6 +211,57 @@ struct AccessoryView: View {
         let previewRect = CGRect(x: pos.x - 8, y: pos.y - 6, width: max(item.width + 16, 52), height: max(item.height + 12, 34))
         drawAccessoryPreviewRoom(context: context, item: item, rect: previewRect, theme: theme, dark: dark, frame: 18)
         drawAccessoryPixelFurniture(context: context, itemId: item.id, at: pos, dark: dark, frame: 18)
+    }
+
+    // MARK: - 플러그인 가구 카드 (빌트인과 동일한 스타일)
+
+    private func pluginFurnitureCard(_ item: PluginHost.LoadedFurniture) -> some View {
+        VStack(spacing: 6) {
+            // 스프라이트 미리보기 영역
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Theme.bgSurface)
+                    .frame(height: 50)
+
+                Canvas { context, size in
+                    drawPluginSpritePreview(context: context, size: size, sprite: item.decl.sprite)
+                }
+                .frame(height: 50)
+            }
+
+            // 이름 (빌트인 가구와 동일한 레이아웃)
+            HStack(spacing: 3) {
+                Image(systemName: "puzzlepiece.fill")
+                    .font(.system(size: Theme.iconSize(8)))
+                    .foregroundColor(Theme.purple)
+                Text(item.decl.name)
+                    .font(Theme.mono(8, weight: .medium))
+                    .foregroundColor(Theme.textDim)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(6)
+        .background(RoundedRectangle(cornerRadius: 8)
+            .stroke(Theme.border.opacity(0.2), lineWidth: 0.5))
+    }
+
+    private func drawPluginSpritePreview(context: GraphicsContext, size: CGSize, sprite: [[String]]) {
+        guard !sprite.isEmpty, !sprite[0].isEmpty else { return }
+        let rows = sprite.count
+        let cols = sprite[0].count
+        let px = min(size.width / CGFloat(cols), size.height / CGFloat(rows))
+        let offX = (size.width - CGFloat(cols) * px) / 2
+        let offY = (size.height - CGFloat(rows) * px) / 2
+        for r in 0..<rows {
+            let row = sprite[r]
+            for c in 0..<min(cols, row.count) {
+                let hex = row[c]
+                guard !hex.isEmpty, hex != "transparent" else { continue }
+                let rect = CGRect(x: offX + CGFloat(c) * px, y: offY + CGFloat(r) * px, width: px, height: px)
+                context.fill(Path(rect), with: .color(Color(hex: hex)))
+            }
+        }
     }
 
     // MARK: - Helpers

@@ -1,0 +1,9 @@
+{
+  "name": "문라이트 가든 팩",
+  "version": "1.0.0",
+  "description": "달빛, 아이리스, 이슬빛이 감도는 우아한 야간 정원 캐릭터 4종을 추가합니다.",
+  "author": "Doffice",
+  "contributes": {
+    "characters": "characters.json"
+  }
+}

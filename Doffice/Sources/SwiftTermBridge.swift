@@ -103,6 +103,10 @@ class SwiftTermContainer: NSView, LocalProcessTerminalViewDelegate {
     required init?(coder: NSCoder) { return nil }
 
     deinit {
+        // 셸 프로세스 종료 — PTY 및 자식 프로세스 누수 방지
+        if let process = terminalView.process, process.running, process.shellPid > 0 {
+            kill(process.shellPid, SIGHUP)
+        }
         terminalView.processDelegate = nil
         if let observer = sendKeysObserver {
             NotificationCenter.default.removeObserver(observer)

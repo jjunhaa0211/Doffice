@@ -119,6 +119,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 파일 로거 시작
         CrashLogger.shared.info("App launched — v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
 
+        // 세션 캐시 백그라운드 프리로드 — 첫 접근 시 메인 스레드 블로킹 방지
+        SessionStore.shared.preloadCacheIfNeeded()
+
         // 글로벌 크래시 핸들러 — 예기치 않은 종료 시 세션 자동 저장
         setupCrashRecovery()
 

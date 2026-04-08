@@ -17,7 +17,7 @@ extension SettingsView {
                     }
 
                     // 플러그인 테마
-                    if !PluginHost.shared.themes.isEmpty {
+                    if !pluginHost.themes.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 4) {
                                 Image(systemName: "puzzlepiece.fill")
@@ -27,16 +27,23 @@ extension SettingsView {
                             }.foregroundColor(Theme.textDim)
 
                             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
-                                ForEach(PluginHost.shared.themes) { theme in
-                                    Button(action: { PluginHost.shared.applyTheme(theme) }) {
-                                        VStack(spacing: 4) {
+                                ForEach(pluginHost.themes) { theme in
+                                    Button(action: { pluginHost.applyTheme(theme) }) {
+                                        VStack(spacing: 6) {
                                             Circle()
                                                 .fill(Color(hex: theme.decl.accentHex))
                                                 .frame(width: 16, height: 16)
                                             Text(theme.decl.name)
                                                 .font(Theme.mono(7, weight: .medium))
-                                                .foregroundColor(Theme.textSecondary)
+                                                .foregroundColor(Theme.textPrimary)
                                                 .lineLimit(1)
+                                            Text(theme.pluginName)
+                                                .font(Theme.mono(6, weight: .bold))
+                                                .foregroundColor(Theme.purple)
+                                                .lineLimit(1)
+                                                .padding(.horizontal, 4)
+                                                .padding(.vertical, 2)
+                                                .background(RoundedRectangle(cornerRadius: 4).fill(Theme.purple.opacity(0.1)))
                                         }
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 6)

@@ -1,0 +1,16 @@
+{
+  "name": "브랜치 청소부 팩",
+  "version": "1.0.0",
+  "description": "지워도 비교적 안전한 머지 완료 브랜치를 찾아서 정리 명령까지 만들어 줍니다.",
+  "author": "Doffice",
+  "contributes": {
+    "commands": [
+      {
+        "id": "list-safe-branch-cleanup",
+        "title": "List Safe Branch Cleanup",
+        "icon": "tree.fill",
+        "script": "scripts/list-safe-branch-cleanup.sh"
+      }
+    ]
+  }
+}

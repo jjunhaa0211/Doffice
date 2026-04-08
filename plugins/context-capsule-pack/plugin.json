@@ -1,0 +1,16 @@
+{
+  "name": "컨텍스트 캡슐 팩",
+  "version": "1.0.0",
+  "description": "프로젝트 구조와 현재 Git 상태를 한 번에 정리한 공유용 스냅샷을 만들어 줍니다.",
+  "author": "Doffice",
+  "contributes": {
+    "commands": [
+      {
+        "id": "create-context-capsule",
+        "title": "Create Context Capsule",
+        "icon": "archivebox.fill",
+        "script": "scripts/create-context-capsule.sh"
+      }
+    ]
+  }
+}

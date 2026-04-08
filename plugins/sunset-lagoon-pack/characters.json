@@ -1,0 +1,54 @@
+[
+  {
+    "id": "coral_seri",
+    "name": "세리",
+    "archetype": "석양빛 스케치를 펼치는 라군 디자이너",
+    "hairColor": "FF8A7A",
+    "skinTone": "F3CFBE",
+    "shirtColor": "FFC7A5",
+    "pantsColor": "C56B5D",
+    "hatType": "none",
+    "accessory": "earring",
+    "species": "Human",
+    "jobRole": "designer"
+  },
+  {
+    "id": "guava_marin",
+    "name": "마린",
+    "archetype": "구아바빛 플랜 보드를 들고 해변 일정을 짜는 강아지 플래너",
+    "hairColor": "F2D9C0",
+    "skinTone": "F6E4D5",
+    "shirtColor": "FFA9B8",
+    "pantsColor": "8E6FB5",
+    "hatType": "none",
+    "accessory": "scarf",
+    "species": "Dog",
+    "jobRole": "planner"
+  },
+  {
+    "id": "hibiscus_nova",
+    "name": "히비스",
+    "archetype": "저녁 하늘처럼 화사한 빌드를 완성하는 유니콘 개발자",
+    "hairColor": "FF5EA8",
+    "skinTone": "FEF2F8",
+    "shirtColor": "FFB96D",
+    "pantsColor": "9A4EDB",
+    "hatType": "crown",
+    "accessory": "none",
+    "species": "Unicorn",
+    "jobRole": "developer"
+  },
+  {
+    "id": "dusk_sora",
+    "name": "소라",
+    "archetype": "청록 물결 메모로 피드백을 정리하는 황혼빛 여우 리뷰어",
+    "hairColor": "FFB36B",
+    "skinTone": "F7DFC8",
+    "shirtColor": "7AC7D9",
+    "pantsColor": "426B92",
+    "hatType": "none",
+    "accessory": "glasses",
+    "species": "Fox",
+    "jobRole": "reviewer"
+  }
+]

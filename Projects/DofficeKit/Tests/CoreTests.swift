@@ -204,6 +204,140 @@ final class CoreTests: XCTestCase {
         }))
     }
 
+    func testBundledRegistryIncludesAdditionalVisualPluginPacks() {
+        let items = PluginManager.bundledRegistryCatalog()
+        let ids = Set(items.map(\.id))
+
+        XCTAssertTrue(ids.contains("cozy-cafe-pack"))
+        XCTAssertTrue(ids.contains("cyberpunk-neon-pack"))
+        XCTAssertTrue(ids.contains("retro-arcade-pack"))
+        XCTAssertTrue(ids.contains("space-station-pack"))
+        XCTAssertTrue(ids.contains("typing-combo-pack"))
+    }
+
+    func testBundledRegistryIncludesAdditionalCharacterCollectionPacks() {
+        let items = PluginManager.bundledRegistryCatalog()
+        let counts = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0.characterCount) })
+
+        XCTAssertEqual(counts["pastel-dream-pack"], 4)
+        XCTAssertEqual(counts["moonlit-garden-pack"], 4)
+        XCTAssertEqual(counts["sakura-atelier-pack"], 4)
+        XCTAssertEqual(counts["aurora-synth-pack"], 4)
+        XCTAssertEqual(counts["velvet-noir-pack"], 4)
+        XCTAssertEqual(counts["crystal-aquarium-pack"], 4)
+        XCTAssertEqual(counts["storybook-forest-pack"], 4)
+        XCTAssertEqual(counts["sunset-lagoon-pack"], 4)
+    }
+
+    func testBundledRegistryIncludesUtilityPluginPacks() {
+        let items = PluginManager.bundledRegistryCatalog()
+        let ids = Set(items.map(\.id))
+
+        XCTAssertTrue(ids.contains("standup-sidekick-pack"))
+        XCTAssertTrue(ids.contains("commit-coach-pack"))
+        XCTAssertTrue(ids.contains("branch-janitor-pack"))
+        XCTAssertTrue(ids.contains("pr-brief-pack"))
+        XCTAssertTrue(ids.contains("context-capsule-pack"))
+    }
+
+    func testBundledPluginDefinitionsLoadForAdditionalPacks() {
+        let cozyPack = PluginManager.bundledPluginDefinition(for: "cozy-cafe-pack")
+        XCTAssertEqual(cozyPack?.directoryName, "cozy-cafe-pack")
+        XCTAssertTrue(cozyPack?.files.contains(where: { $0.path == "plugin.json" }) == true)
+        XCTAssertTrue(cozyPack?.files.contains(where: { $0.path == "characters.json" }) == true)
+
+        let typingPack = PluginManager.bundledPluginDefinition(for: "typing-combo-pack")
+        XCTAssertEqual(typingPack?.directoryName, "typing-combo-pack")
+        XCTAssertTrue(typingPack?.files.contains(where: { $0.path == "plugin.json" }) == true)
+    }
+
+    func testBundledPluginDefinitionsLoadForCharacterCollectionPacks() {
+        let ids = [
+            "pastel-dream-pack",
+            "velvet-noir-pack",
+            "storybook-forest-pack"
+        ]
+
+        for id in ids {
+            let pack = PluginManager.bundledPluginDefinition(for: id)
+            XCTAssertEqual(pack?.directoryName, id)
+            XCTAssertTrue(pack?.files.contains(where: { $0.path == "plugin.json" }) == true)
+            XCTAssertTrue(pack?.files.contains(where: { $0.path == "characters.json" }) == true)
+        }
+    }
+
+    func testBundledRuntimePathsPreferWorkspacePluginDefinitions() throws {
+        let defaults = makeSuite()
+        let baseDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: baseDir) }
+
+        let manager = PluginManager(
+            pluginBaseDir: baseDir,
+            userDefaults: defaults,
+            installSideEffectHandler: { _ in }
+        )
+
+        manager.plugins = [
+            PluginEntry(
+                id: UUID().uuidString,
+                name: "아늑한 카페 팩",
+                source: "bundled://cozy-cafe-pack",
+                localPath: baseDir.appendingPathComponent("missing-cozy-pack").path,
+                version: "1.0.0",
+                installedAt: Date(),
+                enabled: true,
+                sourceType: .rawURL
+            )
+        ]
+
+        XCTAssertTrue(manager.activePluginPaths.contains { $0.hasSuffix("/plugins/cozy-cafe-pack") })
+    }
+
+    func testBundledFurnitureSpritesUseUpgradedDetailGrids() throws {
+        func manifest(for bundledID: String) throws -> PluginManifest {
+            let definition = try XCTUnwrap(PluginManager.bundledPluginDefinition(for: bundledID))
+            let pluginFile = try XCTUnwrap(definition.files.first(where: { $0.path == "plugin.json" }))
+            let data = Data(pluginFile.contents.utf8)
+            return try JSONDecoder().decode(PluginManifest.self, from: data)
+        }
+
+        let cozyManifest = try manifest(for: "cozy-cafe-pack")
+        let cozyFurniture = try XCTUnwrap(cozyManifest.contributes?.furniture)
+        let shelf = try XCTUnwrap(cozyFurniture.first(where: { $0.id == "bookshelf-cafe" }))
+        let sofa = try XCTUnwrap(cozyFurniture.first(where: { $0.id == "sofa-corner" }))
+
+        XCTAssertGreaterThanOrEqual(shelf.sprite.count, 10)
+        XCTAssertGreaterThanOrEqual(shelf.sprite.first?.count ?? 0, 8)
+        XCTAssertGreaterThanOrEqual(sofa.sprite.first?.count ?? 0, 12)
+
+        let premiumManifest = try manifest(for: "premium-furniture-pack")
+        let premiumFurniture = try XCTUnwrap(premiumManifest.contributes?.furniture)
+        let aquarium = try XCTUnwrap(premiumFurniture.first(where: { $0.id == "aquarium" }))
+        let vendingMachine = try XCTUnwrap(premiumFurniture.first(where: { $0.id == "vending-machine" }))
+
+        XCTAssertGreaterThanOrEqual(aquarium.sprite.count, 8)
+        XCTAssertGreaterThanOrEqual(aquarium.sprite.first?.count ?? 0, 8)
+        XCTAssertGreaterThanOrEqual(vendingMachine.sprite.first?.count ?? 0, 8)
+    }
+
+    func testBundledPluginDefinitionsLoadForUtilityPacks() {
+        let expectedScripts = [
+            ("standup-sidekick-pack", "scripts/copy-standup-update.sh"),
+            ("commit-coach-pack", "scripts/draft-commit-message.sh"),
+            ("branch-janitor-pack", "scripts/list-safe-branch-cleanup.sh"),
+            ("pr-brief-pack", "scripts/draft-pr-brief.sh"),
+            ("context-capsule-pack", "scripts/create-context-capsule.sh")
+        ]
+
+        for (id, scriptPath) in expectedScripts {
+            let pack = PluginManager.bundledPluginDefinition(for: id)
+            XCTAssertEqual(pack?.directoryName, id)
+            XCTAssertTrue(pack?.files.contains(where: { $0.path == "plugin.json" }) == true)
+            XCTAssertTrue(pack?.files.contains(where: { $0.path == scriptPath }) == true)
+        }
+    }
+
     func testFleaMarketHiddenCharactersPreferHiddenNames() {
         XCTAssertEqual(
             CharacterRegistry.syncedPluginCharacterName(
@@ -329,6 +463,112 @@ final class CoreTests: XCTestCase {
         XCTAssertNotNil(manager.lastError)
         XCTAssertTrue(manager.plugins.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: baseDir.appendingPathComponent("Broken").path))
+    }
+
+    func testPluginHostApplyThemeSwitchesToCustomThemeMode() {
+        let host = PluginHost.shared
+        let settings = AppSettings.shared
+        let originalThemeMode = settings.themeMode
+        let originalDarkMode = settings.isDarkMode
+        let originalCustomThemeJSON = settings.customThemeJSON
+        let originalAutoRefresh = settings.autoRefreshOnSettingsChange
+
+        defer {
+            settings.customThemeJSON = originalCustomThemeJSON
+            settings.isDarkMode = originalDarkMode
+            settings.themeMode = originalThemeMode
+            settings.autoRefreshOnSettingsChange = originalAutoRefresh
+            settings.pendingRefresh = false
+        }
+
+        settings.autoRefreshOnSettingsChange = false
+        settings.pendingRefresh = false
+
+        let decl = PluginManifest.ThemeDecl(
+            id: "sunset-beach",
+            name: "선셋 비치",
+            isDark: true,
+            accentHex: "ff6f00",
+            bgHex: "1a0a2e",
+            cardHex: "2d1b4e",
+            textHex: "ffe0b2",
+            greenHex: "66bb6a",
+            redHex: "ff7043",
+            yellowHex: "ffca28",
+            purpleHex: "ab47bc",
+            cyanHex: "4dd0e1",
+            useGradient: true,
+            gradientStartHex: "ff6f00",
+            gradientEndHex: "e91e63",
+            fontName: "Monaco"
+        )
+
+        host.applyTheme(.init(id: "beach-pack::sunset-beach", pluginName: "비치 팩", decl: decl))
+
+        let customTheme = settings.customTheme
+        XCTAssertEqual(settings.themeMode, "custom")
+        XCTAssertTrue(settings.isDarkMode)
+        XCTAssertEqual(customTheme.accentHex, "ff6f00")
+        XCTAssertEqual(customTheme.bgHex, "1a0a2e")
+        XCTAssertEqual(customTheme.bgCardHex, "2d1b4e")
+        XCTAssertEqual(customTheme.bgSurfaceHex, "2d1b4e")
+        XCTAssertEqual(customTheme.textPrimaryHex, "ffe0b2")
+        XCTAssertEqual(customTheme.greenHex, "66bb6a")
+        XCTAssertEqual(customTheme.redHex, "ff7043")
+        XCTAssertEqual(customTheme.yellowHex, "ffca28")
+        XCTAssertEqual(customTheme.purpleHex, "ab47bc")
+        XCTAssertEqual(customTheme.cyanHex, "4dd0e1")
+        XCTAssertEqual(customTheme.fontName, "Monaco")
+        XCTAssertTrue(settings.pendingRefresh)
+    }
+
+    func testPluginHostApplyOfficePresetAddsPluginFurnitureToMap() {
+        let host = PluginHost.shared
+        let originalFurniture = host.furniture
+        let originalOfficePresets = host.officePresets
+
+        defer {
+            host.furniture = originalFurniture
+            host.officePresets = originalOfficePresets
+        }
+
+        let furnitureDecl = PluginManifest.FurnitureDecl(
+            id: "test-banner",
+            name: "테스트 배너",
+            sprite: [["ff9900"]],
+            width: 1,
+            height: 1,
+            zone: "mainOffice"
+        )
+
+        host.furniture = [
+            .init(id: "test-pack::test-banner", pluginName: "테스트 팩", decl: furnitureDecl)
+        ]
+
+        let preset = PluginHost.LoadedOfficePreset(
+            id: "test-pack::preset",
+            pluginName: "테스트 팩",
+            decl: .init(
+                id: "preset",
+                name: "테스트 프리셋",
+                description: nil,
+                tileMap: nil,
+                furniture: [
+                    .init(furnitureId: "test-banner", col: 24, row: 3)
+                ]
+            )
+        )
+
+        let map = OfficeMap.defaultOffice()
+        let inserted = host.applyOfficePreset(preset, to: map)
+
+        XCTAssertEqual(inserted.count, 1)
+        XCTAssertEqual(inserted.first?.type, .plugin)
+        XCTAssertEqual(inserted.first?.pluginFurnitureId, "test-banner")
+        XCTAssertEqual(inserted.first?.position, TileCoord(col: 24, row: 3))
+
+        let duplicateInsert = host.applyOfficePreset(preset, to: map)
+        XCTAssertTrue(duplicateInsert.isEmpty)
     }
 
     // MARK: - VT100Terminal Regression Tests

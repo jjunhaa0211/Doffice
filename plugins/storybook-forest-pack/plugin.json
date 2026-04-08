@@ -1,0 +1,9 @@
+{
+  "name": "스토리북 포레스트 팩",
+  "version": "1.0.0",
+  "description": "동화책 속 숲처럼 포근하고 따뜻한 색감의 캐릭터 4종을 추가합니다.",
+  "author": "Doffice",
+  "contributes": {
+    "characters": "characters.json"
+  }
+}

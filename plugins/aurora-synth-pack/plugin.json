@@ -1,0 +1,9 @@
+{
+  "name": "오로라 신스 팩",
+  "version": "1.0.0",
+  "description": "오로라와 신스웨이브 감성을 담은 선명하고 세련된 캐릭터 4종을 추가합니다.",
+  "author": "Doffice",
+  "contributes": {
+    "characters": "characters.json"
+  }
+}

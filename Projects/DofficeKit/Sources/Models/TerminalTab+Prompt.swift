@@ -100,7 +100,20 @@ extension TerminalTab {
             SessionManager.shared.prepareDirectDeveloperWorkflowIfNeeded(for: self, prompt: prompt)
         }
 
-        guard !isProcessing else { return }
+        // isProcessing 상태 복구: 프로세스 없이 stuck된 경우 자동 리셋
+        if isProcessing {
+            let hasNoProcess = currentProcess == nil || !(currentProcess?.isRunning ?? false)
+            let staleTimeout: TimeInterval = 30
+            let isStale = Date().timeIntervalSince(lastActivityTime) > staleTimeout
+            if hasNoProcess && isStale {
+                CrashLogger.shared.warning("TerminalTab: isProcessing stuck without running process — auto-resetting (tab=\(id))")
+                isProcessing = false
+                claudeActivity = .idle
+                currentProcess = nil
+            } else {
+                return
+            }
+        }
 
         // 이전 프로세스 및 취소 상태 정리
         cancelledProcessIds.removeAll()
@@ -390,6 +403,9 @@ extension TerminalTab {
                     let pid = p.processIdentifier
                     DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) {
                         if p.isRunning { kill(pid, SIGKILL) }
+                        // Reap zombie process to prevent resource leak
+                        var status: Int32 = 0
+                        waitpid(pid, &status, WNOHANG)
                     }
                 }
                 DispatchQueue.global().asyncAfter(deadline: .now() + 1800, execute: watchdog)

@@ -175,7 +175,7 @@ public extension View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.cornerMedium)
-                    .stroke(isSelected ? Theme.accentBorder(Theme.accent) : .clear, lineWidth: 1)
+                    .strokeBorder(isSelected ? Theme.accentBorder(Theme.accent) : .clear, lineWidth: 1)
             )
     }
 
@@ -192,7 +192,7 @@ public extension View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: radius)
-                    .stroke(isSelected ? Theme.border : .clear, lineWidth: 1)
+                    .strokeBorder(isSelected ? Theme.border : .clear, lineWidth: 1)
                     .allowsHitTesting(false)
             )
     }

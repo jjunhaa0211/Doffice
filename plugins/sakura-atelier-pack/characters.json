@@ -1,0 +1,54 @@
+[
+  {
+    "id": "sakura_yuri",
+    "name": "유리",
+    "archetype": "벚꽃 스와치를 고르는 아틀리에의 메인 디자이너",
+    "hairColor": "F08FA8",
+    "skinTone": "F7D8C8",
+    "shirtColor": "FFD9E6",
+    "pantsColor": "C57A92",
+    "hatType": "beret",
+    "accessory": "earring",
+    "species": "Human",
+    "jobRole": "designer"
+  },
+  {
+    "id": "ume_ren",
+    "name": "우메",
+    "archetype": "꽃잎 노트를 펼쳐 일정표를 짜는 토끼 플래너",
+    "hairColor": "F6E6EF",
+    "skinTone": "FBEFF5",
+    "shirtColor": "F8C2D6",
+    "pantsColor": "8E6A86",
+    "hatType": "none",
+    "accessory": "scarf",
+    "species": "Rabbit",
+    "jobRole": "planner"
+  },
+  {
+    "id": "momo_foxy",
+    "name": "모모",
+    "archetype": "복숭아빛 메모로 피드백을 남기는 다정한 여우 리포터",
+    "hairColor": "F6A78B",
+    "skinTone": "FFE7DA",
+    "shirtColor": "FAD4C0",
+    "pantsColor": "B66B5C",
+    "hatType": "none",
+    "accessory": "glasses",
+    "species": "Fox",
+    "jobRole": "reporter"
+  },
+  {
+    "id": "blossom_noa",
+    "name": "노아",
+    "archetype": "꽃잎 도안을 접어 정교한 리뷰를 만드는 고양이 리뷰어",
+    "hairColor": "B66D8C",
+    "skinTone": "EEC8D4",
+    "shirtColor": "FBE7EE",
+    "pantsColor": "7C4C65",
+    "hatType": "none",
+    "accessory": "glasses",
+    "species": "Cat",
+    "jobRole": "reviewer"
+  }
+]

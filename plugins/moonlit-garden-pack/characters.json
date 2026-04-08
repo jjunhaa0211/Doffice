@@ -1,0 +1,54 @@
+[
+  {
+    "id": "iris_lune",
+    "name": "아이리스",
+    "archetype": "밤정원의 색을 스크린 위에 번지게 만드는 달빛 디자이너",
+    "hairColor": "6E62A6",
+    "skinTone": "F3D7C4",
+    "shirtColor": "B8C7FF",
+    "pantsColor": "3B3A6E",
+    "hatType": "beret",
+    "accessory": "earring",
+    "species": "Human",
+    "jobRole": "designer"
+  },
+  {
+    "id": "dew_ren",
+    "name": "렌",
+    "archetype": "새벽 이슬처럼 조용하게 우선순위를 정리하는 여우 플래너",
+    "hairColor": "7CB8A2",
+    "skinTone": "EFD8C6",
+    "shirtColor": "CBE8D5",
+    "pantsColor": "547A71",
+    "hatType": "none",
+    "accessory": "scarf",
+    "species": "Fox",
+    "jobRole": "planner"
+  },
+  {
+    "id": "nocturne_owl",
+    "name": "녹턴",
+    "archetype": "은은한 정원 조명 아래서 작은 오류까지 찾아내는 올빼미 리뷰어",
+    "hairColor": "5B647D",
+    "skinTone": "A3ADC7",
+    "shirtColor": "C8D4F0",
+    "pantsColor": "46506A",
+    "hatType": "wizard",
+    "accessory": "glasses",
+    "species": "Owl",
+    "jobRole": "reviewer"
+  },
+  {
+    "id": "silver_wisp",
+    "name": "위스프",
+    "archetype": "은빛 잔향처럼 테스트 케이스 사이를 스쳐가는 고스트 QA",
+    "hairColor": "C8DAF8",
+    "skinTone": "EAF5FF",
+    "shirtColor": "D4E6FF",
+    "pantsColor": "8AA4D4",
+    "hatType": "none",
+    "accessory": "glasses",
+    "species": "Ghost",
+    "jobRole": "qa"
+  }
+]

@@ -1,0 +1,54 @@
+[
+  {
+    "id": "vivi_noir",
+    "name": "비비",
+    "archetype": "벨벳 재킷과 차분한 시선으로 PR을 살피는 느와르 리뷰어",
+    "hairColor": "1C1A2E",
+    "skinTone": "E8C6B8",
+    "shirtColor": "7A2248",
+    "pantsColor": "221B2D",
+    "hatType": "beret",
+    "accessory": "earring",
+    "species": "Human",
+    "jobRole": "reviewer"
+  },
+  {
+    "id": "rouge_soleil",
+    "name": "루즈",
+    "archetype": "와인빛 노트로 사건을 정리하는 여우 리포터",
+    "hairColor": "A12E4F",
+    "skinTone": "F4D7C5",
+    "shirtColor": "D85B7A",
+    "pantsColor": "5E2337",
+    "hatType": "none",
+    "accessory": "scarf",
+    "species": "Fox",
+    "jobRole": "reporter"
+  },
+  {
+    "id": "velvet_aria",
+    "name": "아리아",
+    "archetype": "보랏빛 조명을 켜고 레이아웃을 맞추는 고양이 디자이너",
+    "hairColor": "38273F",
+    "skinTone": "D6B6D0",
+    "shirtColor": "C48CC8",
+    "pantsColor": "2A1F34",
+    "hatType": "none",
+    "accessory": "glasses",
+    "species": "Cat",
+    "jobRole": "designer"
+  },
+  {
+    "id": "onyx_lace",
+    "name": "오닉스",
+    "archetype": "검은 레이스처럼 조용히 테스트 흐름을 읽는 고스트 QA",
+    "hairColor": "A7B0D9",
+    "skinTone": "E7E9F8",
+    "shirtColor": "565C87",
+    "pantsColor": "2F3350",
+    "hatType": "none",
+    "accessory": "glasses",
+    "species": "Ghost",
+    "jobRole": "qa"
+  }
+]

@@ -43,7 +43,7 @@ public struct DSListRow<Leading: View, Trailing: View>: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: Theme.cornerMedium)
-                .stroke(isSelected ? Theme.border : .clear, lineWidth: 1)
+                .strokeBorder(isSelected ? Theme.border : .clear, lineWidth: 1)
         )
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)

@@ -592,7 +592,7 @@ public final class OfficeSceneStore: ObservableObject {
         return hasher.finalize()
     }
 
-    private func invalidateBackgroundSnapshot() {
+    func invalidateBackgroundSnapshot() {
         backgroundSnapshot = nil
         backgroundSnapshotSignature = nil
         isPreparingBackgroundSnapshot = false

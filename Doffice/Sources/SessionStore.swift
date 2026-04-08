@@ -184,6 +184,14 @@ class SessionStore {
         snapshot().sessions.count
     }
 
+    /// 백그라운드에서 캐시를 미리 로드하여 첫 접근 시 메인 스레드 블로킹 방지
+    func preloadCacheIfNeeded() {
+        guard !hasLoadedCache else { return }
+        ioQueue.async { [weak self] in
+            _ = self?.loadHistory()
+        }
+    }
+
     func save(tabs: [TerminalTab], immediately: Bool = false) {
         let saved = tabs.enumerated().map { (index, tab) in
             SavedSession(
@@ -293,10 +301,10 @@ class SessionStore {
 
     private func loadHistory() -> SessionHistory {
         stateLock.lock()
+        defer { stateLock.unlock() }
+
         if hasLoadedCache {
-            let history = cachedHistory
-            stateLock.unlock()
-            return history
+            return cachedHistory
         }
         // Hold lock during load to prevent concurrent double-loads (TOCTOU fix).
         // File I/O under lock is acceptable here: this only runs once on first access.
@@ -315,16 +323,14 @@ class SessionStore {
 
         cachedHistory = loadedHistory
         hasLoadedCache = true
-        let history = cachedHistory
-        stateLock.unlock()
-        return history
+        return cachedHistory
     }
 
     private func updateCache(_ history: SessionHistory, postNotification: Bool) {
         stateLock.lock()
+        defer { stateLock.unlock() }
         cachedHistory = history
         hasLoadedCache = true
-        stateLock.unlock()
 
         guard postNotification else { return }
         DispatchQueue.main.async {
@@ -353,6 +359,8 @@ class SessionStore {
     private func persist(_ history: SessionHistory) {
         do {
             let data = try JSONEncoder().encode(history)
+            // 저장 전 무결성 검증: 인코딩된 데이터가 다시 디코딩 가능한지 확인
+            _ = try JSONDecoder().decode(SessionHistory.self, from: data)
             try data.write(to: fileURL, options: .atomicWrite)
         } catch {
             print("[도피스] 세션 저장 실패 (\(fileURL.path)): \(error.localizedDescription)")
@@ -367,6 +375,14 @@ class SessionStore {
             } catch {
                 print("[도피스] 임시 디렉토리 백업도 실패: \(error.localizedDescription)")
                 CrashLogger.shared.fatal("SessionStore: Both primary and fallback save failed — \(error.localizedDescription). Sessions may be lost.")
+            }
+            // 사용자에게 저장 실패 알림
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .dofficeSessionSaveFailed,
+                    object: nil,
+                    userInfo: ["error": error.localizedDescription]
+                )
             }
         }
     }

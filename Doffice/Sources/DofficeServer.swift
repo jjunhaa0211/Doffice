@@ -145,11 +145,14 @@ final class DofficeServer {
         acceptSource = nil
 
         // Close all client connections
-        clientLock.lock()
-        let clients = clientSources
-        clientSources.removeAll()
-        clientBuffers.removeAll()
-        clientLock.unlock()
+        let clients: [Int32: DispatchSourceRead]
+        do {
+            clientLock.lock()
+            defer { clientLock.unlock() }
+            clients = clientSources
+            clientSources.removeAll()
+            clientBuffers.removeAll()
+        }
 
         for (fd, source) in clients {
             source.cancel()
@@ -196,9 +199,9 @@ final class DofficeServer {
         source.resume()
 
         clientLock.lock()
+        defer { clientLock.unlock() }
         clientSources[clientFD] = source
         clientBuffers[clientFD] = Data()
-        clientLock.unlock()
     }
 
     private func readFromClient(fd: Int32) {
@@ -253,10 +256,13 @@ final class DofficeServer {
     }
 
     private func disconnectClient(fd: Int32) {
-        clientLock.lock()
-        let source = clientSources.removeValue(forKey: fd)
-        clientBuffers.removeValue(forKey: fd)
-        clientLock.unlock()
+        let source: DispatchSourceRead?
+        do {
+            clientLock.lock()
+            defer { clientLock.unlock() }
+            source = clientSources.removeValue(forKey: fd) as DispatchSourceRead?
+            clientBuffers.removeValue(forKey: fd)
+        }
         if let source = source {
             source.cancel()
         } else {
@@ -266,9 +272,9 @@ final class DofficeServer {
 
     private func removeClient(fd: Int32) {
         clientLock.lock()
+        defer { clientLock.unlock() }
         clientSources.removeValue(forKey: fd)
         clientBuffers.removeValue(forKey: fd)
-        clientLock.unlock()
     }
 
     // MARK: - Request Processing

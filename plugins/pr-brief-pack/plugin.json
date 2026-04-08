@@ -1,0 +1,16 @@
+{
+  "name": "PR 브리프 팩",
+  "version": "1.0.0",
+  "description": "현재 브랜치의 변경 사항을 읽고 PR 설명 초안을 빠르게 만들어 줍니다.",
+  "author": "Doffice",
+  "contributes": {
+    "commands": [
+      {
+        "id": "draft-pr-brief",
+        "title": "Draft PR Brief",
+        "icon": "text.badge.checkmark",
+        "script": "scripts/draft-pr-brief.sh"
+      }
+    ]
+  }
+}

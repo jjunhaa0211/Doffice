@@ -1,0 +1,16 @@
+{
+  "name": "커밋 코치 팩",
+  "version": "1.0.0",
+  "description": "현재 변경 내용을 읽고 바로 붙여 넣을 수 있는 커밋 메시지 후보를 제안합니다.",
+  "author": "Doffice",
+  "contributes": {
+    "commands": [
+      {
+        "id": "draft-commit-message",
+        "title": "Draft Commit Message Options",
+        "icon": "checklist.checked",
+        "script": "scripts/draft-commit-message.sh"
+      }
+    ]
+  }
+}

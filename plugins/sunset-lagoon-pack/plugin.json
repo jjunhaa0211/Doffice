@@ -1,0 +1,9 @@
+{
+  "name": "선셋 라군 팩",
+  "version": "1.0.0",
+  "description": "노을과 열대 색감을 담은 화사하고 시원한 캐릭터 4종을 추가합니다.",
+  "author": "Doffice",
+  "contributes": {
+    "characters": "characters.json"
+  }
+}

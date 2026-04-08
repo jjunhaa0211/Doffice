@@ -127,12 +127,11 @@ final class CrashLogger {
         lines.append("")
 
         let entry = lines.joined(separator: "\n")
-        queue.sync {
-            if let data = entry.data(using: .utf8) {
-                self.ensureFileHandle()
-                self.fileHandle?.write(data)
-                self.fileHandle?.synchronizeFile()
-            }
+        queue.async { [weak self] in
+            guard let self = self, let data = entry.data(using: .utf8) else { return }
+            self.ensureFileHandle()
+            self.fileHandle?.write(data)
+            self.fileHandle?.synchronizeFile()
         }
     }
 

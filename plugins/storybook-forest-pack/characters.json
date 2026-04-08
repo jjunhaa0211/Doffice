@@ -1,0 +1,54 @@
+[
+  {
+    "id": "fern_faye",
+    "name": "페이",
+    "archetype": "양치식물 노트를 들고 다니는 숲속 플래너",
+    "hairColor": "6A8B61",
+    "skinTone": "EDD6C1",
+    "shirtColor": "DDE8BF",
+    "pantsColor": "6D7E52",
+    "hatType": "beret",
+    "accessory": "earring",
+    "species": "Human",
+    "jobRole": "planner"
+  },
+  {
+    "id": "clover_renard",
+    "name": "클로버",
+    "archetype": "잎맥처럼 섬세한 피드백을 남기는 여우 리뷰어",
+    "hairColor": "9C6B45",
+    "skinTone": "F7E5D6",
+    "shirtColor": "B9D9A3",
+    "pantsColor": "5B6D42",
+    "hatType": "none",
+    "accessory": "scarf",
+    "species": "Fox",
+    "jobRole": "reviewer"
+  },
+  {
+    "id": "page_mint",
+    "name": "페이지",
+    "archetype": "책장 사이 메모를 모아 레이아웃을 짜는 토끼 디자이너",
+    "hairColor": "EDE6D0",
+    "skinTone": "F8F1E4",
+    "shirtColor": "C8E6D0",
+    "pantsColor": "7B8D67",
+    "hatType": "none",
+    "accessory": "glasses",
+    "species": "Rabbit",
+    "jobRole": "designer"
+  },
+  {
+    "id": "moss_luna",
+    "name": "루나",
+    "archetype": "숲의 램프 아래서 조용히 빌드를 완성하는 올빼미 개발자",
+    "hairColor": "7B705A",
+    "skinTone": "BBAE96",
+    "shirtColor": "E1D8BF",
+    "pantsColor": "665A49",
+    "hatType": "wizard",
+    "accessory": "none",
+    "species": "Owl",
+    "jobRole": "developer"
+  }
+]

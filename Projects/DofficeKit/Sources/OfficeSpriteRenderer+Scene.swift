@@ -140,53 +140,83 @@ extension OfficeSpriteRenderer {
 
     // MARK: - Plugin Furniture Sprite Renderer
 
-    private static var pluginFurnitureImageCache: [String: CGImage] = [:]
+    private struct PluginFurniturePixel {
+        let row: Int
+        let col: Int
+        let color: Color
+    }
+
+    private struct PluginFurnitureSpriteCacheEntry {
+        let rows: Int
+        let cols: Int
+        let pixels: [PluginFurniturePixel]
+    }
+
+    private static var pluginFurnitureImageCache: [String: PluginFurnitureSpriteCacheEntry] = [:]
+
+    internal static func clearPluginFurnitureImageCache() {
+        pluginFurnitureImageCache.removeAll(keepingCapacity: true)
+    }
 
     private static func drawPluginFurniture(_ ctx: GraphicsContext, pluginId: String,
                                              x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat) {
+        guard let sprite = pluginFurnitureSpriteEntry(for: pluginId) else { return }
+
+        let pixelWidth = w / CGFloat(sprite.cols)
+        let pixelHeight = h / CGFloat(sprite.rows)
+
+        for pixel in sprite.pixels {
+            let rect = CGRect(
+                x: x + CGFloat(pixel.col) * pixelWidth,
+                y: y + CGFloat(pixel.row) * pixelHeight,
+                width: pixelWidth,
+                height: pixelHeight
+            )
+            ctx.fill(Path(rect), with: .color(pixel.color))
+        }
+    }
+
+    private static func pluginFurnitureSpriteEntry(for pluginId: String) -> PluginFurnitureSpriteCacheEntry? {
         if let cached = pluginFurnitureImageCache[pluginId] {
-            ctx.draw(Image(decorative: cached, scale: 1),
-                     in: CGRect(x: x, y: y, width: w, height: h))
-            return
+            return cached
         }
 
-        guard let loaded = PluginHost.shared.furniture.first(where: { $0.decl.id == pluginId }) else { return }
+        guard let loaded = PluginHost.shared.furniture.first(where: { $0.decl.id == pluginId }) else { return nil }
         let sprite = loaded.decl.sprite
-        guard !sprite.isEmpty else { return }
+        guard !sprite.isEmpty else { return nil }
 
         let rows = sprite.count
         let cols = sprite.map(\.count).max() ?? 0
-        guard rows > 0 && cols > 0 else { return }
+        guard rows > 0 && cols > 0 else { return nil }
 
-        let pixelSize = 4
-        let imgW = cols * pixelSize
-        let imgH = rows * pixelSize
-
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let bitmapCtx = CGContext(data: nil, width: imgW, height: imgH,
-                                        bitsPerComponent: 8, bytesPerRow: imgW * 4,
-                                        space: colorSpace,
-                                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        var pixels: [PluginFurniturePixel] = []
+        pixels.reserveCapacity(rows * cols)
 
         for (r, row) in sprite.enumerated() {
             for (c, hex) in row.enumerated() {
                 guard !hex.isEmpty else { continue }
-                var hexVal = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-                if hexVal.count == 3 { hexVal = hexVal.map { "\($0)\($0)" }.joined() }
-                var int: UInt64 = 0
-                guard Scanner(string: hexVal).scanHexInt64(&int), hexVal.count == 6 else { continue }
-                let red = CGFloat((int >> 16) & 0xFF) / 255.0
-                let green = CGFloat((int >> 8) & 0xFF) / 255.0
-                let blue = CGFloat(int & 0xFF) / 255.0
-                bitmapCtx.setFillColor(red: red, green: green, blue: blue, alpha: 1.0)
-                bitmapCtx.fill(CGRect(x: c * pixelSize, y: r * pixelSize, width: pixelSize, height: pixelSize))
+                guard let color = color(from: hex) else { continue }
+                pixels.append(PluginFurniturePixel(row: r, col: c, color: color))
             }
         }
 
-        guard let cgImage = bitmapCtx.makeImage() else { return }
-        pluginFurnitureImageCache[pluginId] = cgImage
-        ctx.draw(Image(decorative: cgImage, scale: 1),
-                 in: CGRect(x: x, y: y, width: w, height: h))
+        let cached = PluginFurnitureSpriteCacheEntry(rows: rows, cols: cols, pixels: pixels)
+        pluginFurnitureImageCache[pluginId] = cached
+        return cached
+    }
+
+    private static func color(from hex: String) -> Color? {
+        var hexVal = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        if hexVal.count == 3 { hexVal = hexVal.map { "\($0)\($0)" }.joined() }
+
+        var int: UInt64 = 0
+        guard Scanner(string: hexVal).scanHexInt64(&int), hexVal.count == 6 else { return nil }
+
+        return Color(
+            red: CGFloat((int >> 16) & 0xFF) / 255.0,
+            green: CGFloat((int >> 8) & 0xFF) / 255.0,
+            blue: CGFloat(int & 0xFF) / 255.0
+        )
     }
 
     internal static func drawFurnitureAmbientShadow(

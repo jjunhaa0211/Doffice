@@ -338,6 +338,7 @@ struct EventStreamView: View {
     @State private var blockFilter = BlockFilter()
     @State private var showFilterBar = false
     @State private var showFilePanel = false
+    @State private var showClearChatAlert = false
     @State private var elapsedSeconds: Int = 0
     @State private var selectedCommandIndex: Int = 0
     @State private var planSelectionDraft: [String: String] = [:]
@@ -954,14 +955,24 @@ struct EventStreamView: View {
     }
 
     var body: some View {
-        if settings.rawTerminalMode {
-            rawTerminalBody
-                .id("raw-\(tab.id)")  // 모드 전환 시 뷰 완전 재생성
-                .overlay(AgentWaitingOverlay(isWaiting: tab.pendingApproval != nil))
-        } else {
-            normalBody
-                .id("normal-\(tab.id)")
-                .overlay(AgentWaitingOverlay(isWaiting: tab.pendingApproval != nil))
+        Group {
+            if settings.rawTerminalMode {
+                rawTerminalBody
+                    .id("raw-\(tab.id)")
+                    .overlay(AgentWaitingOverlay(isWaiting: tab.pendingApproval != nil))
+            } else {
+                normalBody
+                    .id("normal-\(tab.id)")
+                    .overlay(AgentWaitingOverlay(isWaiting: tab.pendingApproval != nil))
+            }
+        }
+        .alert("대화 내용 삭제", isPresented: $showClearChatAlert) {
+            Button("삭제", role: .destructive) {
+                tab.clearBlocks()
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("모든 대화 내용이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.")
         }
     }
 
@@ -1048,7 +1059,6 @@ struct EventStreamView: View {
                             ForEach(filteredBlocks) { block in
                                 EventBlockView(block: block, compact: compact)
                                     .id(block.id)
-                                    .textSelection(.enabled)
                             }
 
                             if tab.isProcessing {
@@ -1058,6 +1068,7 @@ struct EventStreamView: View {
 
                             Color.clear.frame(height: 1).id("streamEnd")
                         }
+                        .textSelection(.enabled)
                         .padding(.horizontal, compact ? 8 : 14)
                         .padding(.vertical, 8)
                     }
@@ -1312,6 +1323,19 @@ struct EventStreamView: View {
                 .foregroundColor(Theme.textDim)
                 .padding(.horizontal, 5).padding(.vertical, 2)
             }.buttonStyle(.plain).help(NSLocalizedString("terminal.help.copyall", comment: ""))
+
+            Button(action: {
+                showClearChatAlert = true
+            }) {
+                HStack(spacing: 3) {
+                    Image(systemName: "trash").font(Theme.chrome(8))
+                    Text("대화 삭제").font(Theme.chrome(8))
+                }
+                .foregroundColor(Theme.red.opacity(0.7))
+                .padding(.horizontal, 5).padding(.vertical, 2)
+            }
+            .buttonStyle(.plain)
+            .help("대화 내용을 모두 삭제합니다")
         }
         .padding(.horizontal, Theme.sp3).padding(.vertical, 5)
         .background(
@@ -2495,99 +2519,236 @@ struct EventBlockView: View {
         }
     }
 
-    // MARK: - Block Styles
+    // ── Helpers ──
+
+    private var fs: CGFloat { compact ? 11 : 12 }
+    private var fsSm: CGFloat { compact ? 9 : 10 }
+
+    // MARK: - Session Start — 중앙 필 배지
 
     private var sessionStartBlock: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "play.circle.fill").font(.system(size: Theme.iconSize(10))).foregroundColor(Theme.green)
-            Text(block.content).font(Theme.monoSmall).foregroundColor(Theme.textSecondary)
-        }
-        .padding(.vertical, 4)
+        Text(block.content)
+            .font(Theme.mono(fsSm))
+            .foregroundColor(Theme.textDim)
+            .padding(.vertical, 4).padding(.horizontal, 12)
+            .background(Capsule(style: .continuous).fill(Theme.bgSurface))
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 4)
     }
+
+    // MARK: - User Prompt — 우측 버블
 
     private var userPromptBlock: some View {
-        HStack(alignment: .top, spacing: 6) {
-            Text(">").font(Theme.mono(13, weight: .bold)).foregroundStyle(Theme.accentBackground)
-            Text(block.content).font(Theme.mono(compact ? 11 : 13)).foregroundStyle(Theme.accentBackground)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(alignment: .bottom, spacing: 0) {
+            Spacer(minLength: compact ? 40 : 72)
+            Text(block.content)
+                .font(Theme.mono(compact ? 11 : 13))
+                .foregroundStyle(.white)
+                .padding(.vertical, 10).padding(.horizontal, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Theme.accent, Theme.accent.opacity(0.78)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: Theme.accent.opacity(0.18), radius: 6, x: 0, y: 3)
+                )
         }
-        .padding(.vertical, 6).padding(.horizontal, 8)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent.opacity(0.06)))
+        .padding(.top, 10).padding(.bottom, 2)
     }
+
+    // MARK: - AI Thought — 좌측 카드 + accent 바
 
     private var thoughtBlock: some View {
-        HStack(alignment: .top, spacing: 6) {
-            Circle().fill(Theme.textDim).frame(width: 4, height: 4).padding(.top, 6)
-            MarkdownTextView(text: block.content, compact: compact)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-        }.padding(.vertical, 2)
+        HStack(alignment: .top, spacing: 0) {
+            // 좌측 그라데이션 바
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(
+                    LinearGradient(
+                        colors: [Theme.purple.opacity(0.6), Theme.accent.opacity(0.4)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .frame(width: 3)
+                .padding(.vertical, 6)
+
+            VStack(alignment: .leading, spacing: 0) {
+                MarkdownTextView(text: block.content, compact: compact)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            .padding(.vertical, 10).padding(.horizontal, 12)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Theme.bgSurface.opacity(0.45))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Theme.border.opacity(0.3), lineWidth: 0.5)
+                )
+        )
+        .padding(.trailing, compact ? 40 : 72)
+        .padding(.vertical, 2)
     }
 
+    // MARK: - Tool Use — 컬러 라인 칩
+
     private func toolUseBlock(name: String) -> some View {
-        HStack(spacing: 6) {
-            Circle().fill(toolColor(name)).frame(width: 6, height: 6)
-            Text("\(name)").font(Theme.mono(compact ? 10 : 11, weight: .bold)).foregroundColor(toolColor(name))
-            Text("(\(block.content))").font(Theme.mono(compact ? 10 : 11)).foregroundColor(Theme.textSecondary).lineLimit(1)
-            if !block.isComplete { ProgressView().scaleEffect(0.4).frame(width: 10, height: 10) }
+        let color = toolColor(name)
+        return HStack(spacing: 0) {
+            // 좌측 컬러 라인
+            RoundedRectangle(cornerRadius: 1)
+                .fill(color)
+                .frame(width: 2.5)
+                .padding(.vertical, 4)
+
+            HStack(spacing: 5) {
+                Image(systemName: toolIcon(name))
+                    .font(.system(size: Theme.iconSize(8), weight: .semibold))
+                    .foregroundColor(color)
+                    .frame(width: 14)
+                Text(name)
+                    .font(Theme.mono(fsSm, weight: .bold))
+                    .foregroundColor(color)
+                Text(block.content)
+                    .font(Theme.mono(fsSm))
+                    .foregroundColor(Theme.textDim)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 0)
+                if !block.isComplete {
+                    ProgressView().scaleEffect(0.35).frame(width: 12, height: 12)
+                }
+            }
+            .padding(.vertical, 4).padding(.horizontal, 8)
         }
-        .padding(.vertical, 4).padding(.horizontal, 6)
-        .background(RoundedRectangle(cornerRadius: 6).fill(toolColor(name).opacity(0.06)))
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(color.opacity(0.04))
+        )
+        .padding(.leading, 6)
     }
+
+    // MARK: - Tool Output
 
     private var toolOutputBlock: some View {
         ToolOutputBlockView(block: block, compact: compact)
+            .padding(.leading, 6)
     }
+
+    // MARK: - Tool Error
 
     private var toolErrorBlock: some View {
         HStack(alignment: .top, spacing: 0) {
-            Text("  x ").font(Theme.mono(11)).foregroundColor(Theme.red)
-            Text(block.content)
-                .font(Theme.mono(compact ? 10 : 11))
-                .foregroundColor(Theme.red)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Theme.red)
+                .frame(width: 2.5)
+                .padding(.vertical, 4)
+
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: Theme.iconSize(9)))
+                    .foregroundColor(Theme.red.opacity(0.8))
+                    .padding(.top, 1)
+                Text(block.content)
+                    .font(Theme.mono(fsSm))
+                    .foregroundColor(Theme.red.opacity(0.85))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.vertical, 5).padding(.horizontal, 8)
         }
-        .padding(.leading, 8)
-        .background(Theme.red.opacity(0.04))
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Theme.red.opacity(0.04))
+        )
+        .padding(.leading, 6)
     }
+
+    // MARK: - Tool End
 
     private func toolEndBlock(success: Bool) -> some View {
         HStack(spacing: 4) {
             Image(systemName: success ? "checkmark" : "xmark")
-                .font(Theme.mono(8, weight: .bold))
-                .foregroundColor(success ? Theme.green : Theme.red)
+                .font(.system(size: Theme.iconSize(7), weight: .bold))
+                .foregroundColor(success ? Theme.green.opacity(0.7) : Theme.red.opacity(0.7))
         }
-        .padding(.leading, 16).padding(.vertical, 1)
+        .padding(.leading, 14).padding(.vertical, 1)
     }
+
+    // MARK: - File Change
 
     private func fileChangeBlock(action: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: action == "Write" ? "doc.badge.plus" : "pencil.line")
-                .font(.system(size: Theme.iconSize(9))).foregroundColor(Theme.green)
-            Text(action).font(Theme.mono(10, weight: .semibold)).foregroundColor(Theme.green)
-            Text(block.content).font(Theme.mono(compact ? 10 : 11)).foregroundColor(Theme.textPrimary)
+        HStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Theme.green)
+                .frame(width: 2.5)
+                .padding(.vertical, 4)
+
+            HStack(spacing: 6) {
+                Image(systemName: action == "Write" ? "doc.badge.plus" : "pencil.line")
+                    .font(.system(size: Theme.iconSize(9), weight: .medium))
+                    .foregroundColor(Theme.green)
+                Text(action)
+                    .font(Theme.mono(fsSm, weight: .semibold))
+                    .foregroundColor(Theme.green)
+                Text(block.content)
+                    .font(Theme.mono(fsSm))
+                    .foregroundColor(Theme.textPrimary)
+            }
+            .padding(.vertical, 3).padding(.horizontal, 8)
         }
-        .padding(.vertical, 3).padding(.horizontal, 6)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.green.opacity(0.06)))
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Theme.green.opacity(0.04))
+        )
+        .padding(.leading, 6)
     }
+
+    // MARK: - Status
 
     private func statusBlock(_ msg: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: "info.circle").font(.system(size: Theme.iconSize(7))).foregroundColor(Theme.textDim)
-            Text(msg).font(Theme.monoTiny).foregroundColor(Theme.textDim).italic()
-        }.padding(.vertical, 1)
+        Text(msg)
+            .font(Theme.mono(8))
+            .foregroundColor(Theme.textMuted)
+            .italic()
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 2)
     }
 
+    // MARK: - Completion — 성공 카드
+
     private func completionBlock(cost: Double?, duration: Int?) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill").font(.system(size: Theme.iconSize(10))).foregroundColor(Theme.green)
-                Text(NSLocalizedString("terminal.complete", comment: "")).font(Theme.mono(10, weight: .bold)).foregroundColor(Theme.green)
-                if let d = duration {
-                    Text("\(d/1000).\(d%1000/100)s").font(Theme.mono(8)).foregroundColor(Theme.textDim)
-                }
-                if let c = cost, c > 0 {
-                    Text(String(format: "$%.4f", c)).font(Theme.mono(8, weight: .semibold)).foregroundColor(Theme.yellow)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: Theme.iconSize(14)))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Theme.green, Theme.green.opacity(0.7)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                Text(NSLocalizedString("terminal.complete", comment: ""))
+                    .font(Theme.mono(compact ? 10 : 12, weight: .bold))
+                    .foregroundColor(Theme.green)
+                Spacer()
+                HStack(spacing: 10) {
+                    if let d = duration {
+                        Label("\(d/1000).\(d%1000/100)s", systemImage: "clock")
+                            .font(Theme.mono(9))
+                            .foregroundColor(Theme.textDim)
+                    }
+                    if let c = cost, c > 0 {
+                        Text(String(format: "$%.4f", c))
+                            .font(Theme.mono(9, weight: .bold))
+                            .foregroundColor(Theme.yellow)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Theme.yellow.opacity(0.12))
+                            )
+                    }
                 }
             }
 
@@ -2597,22 +2758,78 @@ struct EventBlockView: View {
                     .textSelection(.enabled)
             }
         }
-        .padding(.vertical, 5).padding(.horizontal, 8)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Theme.green.opacity(0.03))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [Theme.green.opacity(0.3), Theme.green.opacity(0.08)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+        )
+        .padding(.top, 6)
     }
+
+    // MARK: - Error — 에러 카드
 
     private func errorBlock(_ msg: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: Theme.iconSize(10))).foregroundColor(Theme.red)
-            Text(msg).font(Theme.mono(11)).foregroundColor(Theme.red)
-            if !block.content.isEmpty { Text(block.content).font(Theme.monoSmall).foregroundColor(Theme.red.opacity(0.7)) }
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: Theme.iconSize(12)))
+                .foregroundColor(Theme.red)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(msg).font(Theme.mono(fs, weight: .medium)).foregroundColor(Theme.red)
+                if !block.content.isEmpty {
+                    Text(block.content)
+                        .font(Theme.mono(fsSm))
+                        .foregroundColor(Theme.red.opacity(0.65))
+                        .lineSpacing(2)
+                }
+            }
         }
-        .padding(.vertical, 4).padding(.horizontal, 6)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.red.opacity(0.05)))
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Theme.red.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Theme.red.opacity(0.15), lineWidth: 0.5)
+                )
+        )
     }
 
+    // MARK: - Text
+
     private var textBlock: some View {
-        Text(block.content).font(Theme.mono(compact ? 11 : 12)).foregroundColor(Theme.textTerminal)
+        Text(block.content)
+            .font(Theme.mono(fs))
+            .foregroundColor(Theme.textTerminal)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Lookup
+
+    private func toolIcon(_ name: String) -> String {
+        switch name {
+        case "Bash": return "terminal"
+        case "Read": return "doc.text"
+        case "Write": return "doc.badge.plus"
+        case "Edit": return "pencil.line"
+        case "Grep": return "magnifyingglass"
+        case "Glob": return "folder"
+        case "Agent": return "person.2"
+        case "WebSearch": return "globe"
+        case "WebFetch": return "arrow.down.circle"
+        default: return "wrench.and.screwdriver"
+        }
     }
 
     private func toolColor(_ name: String) -> Color {
@@ -2622,6 +2839,7 @@ struct EventBlockView: View {
         case "Write", "Edit": return Theme.green
         case "Grep", "Glob": return Theme.cyan
         case "Agent": return Theme.purple
+        case "WebSearch", "WebFetch": return Theme.orange
         default: return Theme.textSecondary
         }
     }
@@ -2665,25 +2883,30 @@ struct ToolOutputBlockView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 0) {
-                Text("  | ").font(Theme.mono(11)).foregroundColor(Theme.textDim)
+                // 좌측 연결 라인 (도구 블록과 시각적 연결)
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Theme.textMuted.opacity(0.25))
+                    .frame(width: 2)
+                    .padding(.leading, 7)
+
                 Text(displayText)
                     .font(Theme.mono(compact ? 10 : 11))
-                    .foregroundColor(Theme.textTerminal)
+                    .foregroundColor(Theme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
-            }.padding(.leading, 8)
+                    .padding(.leading, 10).padding(.vertical, 2)
+            }
 
             if isTruncatable {
-                Button(action: { isExpanded.toggle() }) {
-                    HStack(spacing: 4) {
+                Button(action: { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } }) {
+                    HStack(spacing: 5) {
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: Theme.iconSize(7)))
+                            .font(.system(size: Theme.iconSize(7), weight: .semibold))
                         Text(isExpanded ? NSLocalizedString("terminal.collapse", comment: "") : String(format: NSLocalizedString("terminal.expand.all", comment: ""), lines.count))
-                            .font(Theme.mono(9))
+                            .font(Theme.mono(compact ? 8 : 9, weight: .medium))
                     }
-                    .foregroundColor(Theme.textDim)
-                    .padding(.leading, 28)
-                    .padding(.vertical, 2)
+                    .foregroundColor(Theme.accent.opacity(0.6))
+                    .padding(.leading, 20).padding(.vertical, 3)
                 }
                 .buttonStyle(.plain)
             }

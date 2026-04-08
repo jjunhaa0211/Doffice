@@ -1,0 +1,9 @@
+{
+  "name": "벨벳 느와르 팩",
+  "version": "1.0.0",
+  "description": "짙은 벨벳과 와인빛 포인트가 어우러진 시크한 캐릭터 4종을 추가합니다.",
+  "author": "Doffice",
+  "contributes": {
+    "characters": "characters.json"
+  }
+}

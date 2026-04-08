@@ -22,6 +22,7 @@ extension TerminalTab {
                 return false
             }), !blocks[toolIdx].isComplete {
                 blocks[toolIdx].isComplete = true
+                notifyBlocksChanged()
             }
         }
 
@@ -30,11 +31,13 @@ extension TerminalTab {
            shouldMergeBlock(existing: blocks[lastIndex].blockType, new: type),
            blocks[lastIndex].content.count < 50000 {  // Prevent unbounded growth
             blocks[lastIndex].content += "\n" + content
+            notifyBlocksChanged()
             return blocks[lastIndex]
         }
         let block = StreamBlock(type: type, content: content)
         blocks.append(block)
         trimBlocksIfNeeded()
+        notifyBlocksChanged()
         return block
     }
 
@@ -153,7 +156,7 @@ extension TerminalTab {
         }
     }
 
-    public func clearBlocks() { blocks.removeAll() }
+    public func clearBlocks() { blocks.removeAll(); notifyBlocksChanged() }
 
     // MARK: - 프롬프트 히스토리 (되돌리기)
 
@@ -269,5 +272,13 @@ extension TerminalTab {
     public func sendCommand(_ command: String) { sendPrompt(command) }
     public func sendKey(_ key: UInt8) { if key == 3 { cancelProcessing() } }
     public func stop() { cancelProcessing(); isRunning = false }
+
+    /// 프로바이더 전환 시 상태를 안전하게 리셋합니다.
+    public func switchProvider(to provider: AgentProvider) {
+        isProcessing = false
+        claudeActivity = .idle
+        selectedModel = provider.defaultModel
+        isClaude = provider == .claude
+    }
 
 }

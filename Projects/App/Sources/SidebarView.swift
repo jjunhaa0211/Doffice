@@ -104,30 +104,51 @@ enum SidebarSortOption: String, CaseIterable, Identifiable {
 struct SidebarView: View {
     @EnvironmentObject var manager: SessionManager
     @StateObject private var settings = AppSettings.shared
+    @StateObject private var vm = SidebarViewModel()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let forceCompact: Bool
     @AppStorage("viewMode") private var appViewModeRaw: Int = 1
     @State private var draggingTabId: String?
-    @State private var showHistory: Bool = false
-    @State var searchQuery: String = ""
-    @State var isMultiSelectMode = false
-    @State var selectedTabIds: Set<String> = []
-    @AppStorage("doffice.sidebarStatusFilter") private var statusFilterRaw: String = SessionStatusFilter.all.rawValue
-    @AppStorage("doffice.sidebarSortOption") private var sortOptionRaw: String = SidebarSortOption.recent.rawValue
 
+    // Convenience accessors for ViewModel
+    var searchQuery: String {
+        get { vm.searchQuery }
+        nonmutating set { vm.searchQuery = newValue }
+    }
+    var isMultiSelectMode: Bool {
+        get { vm.isMultiSelectMode }
+        nonmutating set { vm.isMultiSelectMode = newValue }
+    }
+    var selectedTabIds: Set<String> {
+        get { vm.selectedTabIds }
+        nonmutating set { vm.selectedTabIds = newValue }
+    }
     var statusFilter: SessionStatusFilter {
-        get { SessionStatusFilter(rawValue: statusFilterRaw) ?? .all }
-        nonmutating set { statusFilterRaw = newValue.rawValue }
+        get { vm.statusFilter }
+        nonmutating set { vm.statusFilter = newValue }
     }
     var sortOption: SidebarSortOption {
-        get { SidebarSortOption(rawValue: sortOptionRaw) ?? .recent }
-        nonmutating set { sortOptionRaw = newValue.rawValue }
+        get { vm.sortOption }
+        nonmutating set { vm.sortOption = newValue }
+    }
+    var showCharacterSheet: Bool {
+        get { vm.showCharacterSheet }
+        nonmutating set { vm.showCharacterSheet = newValue }
+    }
+    var showAchievementSheet: Bool {
+        get { vm.showAchievementSheet }
+        nonmutating set { vm.showAchievementSheet = newValue }
+    }
+    var showAccessorySheet: Bool {
+        get { vm.showAccessorySheet }
+        nonmutating set { vm.showAccessorySheet = newValue }
+    }
+    var showReportSheet: Bool {
+        get { vm.showReportSheet }
+        nonmutating set { vm.showReportSheet = newValue }
     }
     private var sortOptionBinding: Binding<SidebarSortOption> {
-        Binding(
-            get: { SidebarSortOption(rawValue: sortOptionRaw) ?? .recent },
-            set: { sortOptionRaw = $0.rawValue }
-        )
+        vm.sortOptionBinding
     }
 
     private var isTerminalOnlyMode: Bool {
@@ -148,9 +169,9 @@ struct SidebarView: View {
                 Image(systemName: "circle.grid.2x2.fill").font(Theme.chrome(9)).foregroundColor(Theme.textDim)
                 Text(NSLocalizedString("sessions", comment: "").uppercased()).font(Theme.pixel).foregroundColor(Theme.textDim).tracking(2)
                 Spacer()
-                Button(action: { showHistory.toggle() }) {
+                Button(action: { vm.showHistory.toggle() }) {
                     Image(systemName: "clock.arrow.circlepath").font(Theme.chrome(9))
-                        .foregroundColor(showHistory ? Theme.accent : Theme.textDim)
+                        .foregroundColor(vm.showHistory ? Theme.accent : Theme.textDim)
                 }.buttonStyle(.plain).help(NSLocalizedString("sidebar.help.history", comment: ""))
                 Button(action: { isMultiSelectMode.toggle(); if !isMultiSelectMode { selectedTabIds.removeAll() } }) {
                     Image(systemName: isMultiSelectMode ? "checkmark.circle.fill" : "checkmark.circle")
@@ -166,7 +187,7 @@ struct SidebarView: View {
             }
             .padding(.horizontal, Theme.sp3).padding(.vertical, Theme.sp2)
 
-            if showHistory { SessionHistoryView() }
+            if vm.showHistory { SessionHistoryView() }
 
             newSessionQuickAction
                 .padding(.horizontal, Theme.sp2)
@@ -190,7 +211,7 @@ struct SidebarView: View {
             }
 
             ScrollView {
-                let groups = filteredProjectGroups
+                let groups = vm.filteredProjectGroups(manager: manager)
                 VStack(spacing: 4) {
                     if groups.isEmpty {
                         AppEmptyStateView(
@@ -203,44 +224,43 @@ struct SidebarView: View {
                         ForEach(groups) { group in
                             if group.tabs.count == 1 {
                                 let tab = group.tabs[0]
-                                SessionCard(tab: tab)
-                                    .overlay(alignment: .leading) {
-                                        if isMultiSelectMode {
-                                            Image(systemName: selectedTabIds.contains(tab.id) ? "checkmark.circle.fill" : "circle")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(selectedTabIds.contains(tab.id) ? Theme.accent : Theme.textDim)
-                                                .padding(.leading, 6)
-                                                .contentShape(Rectangle())
-                                                .onTapGesture {
-                                                    if selectedTabIds.contains(tab.id) {
-                                                        selectedTabIds.remove(tab.id)
-                                                    } else {
-                                                        selectedTabIds.insert(tab.id)
-                                                    }
-                                                }
-                                        }
-                                    }
-                            } else {
-                                SessionGroupCard(group: group)
-                                    .overlay(alignment: .leading) {
-                                        if isMultiSelectMode {
-                                            VStack(spacing: 4) {
-                                                ForEach(group.tabs) { tab in
-                                                    Image(systemName: selectedTabIds.contains(tab.id) ? "checkmark.circle.fill" : "circle")
-                                                        .font(.system(size: 14))
-                                                        .foregroundColor(selectedTabIds.contains(tab.id) ? Theme.accent : Theme.textDim)
-                                                        .onTapGesture {
-                                                            if selectedTabIds.contains(tab.id) {
-                                                                selectedTabIds.remove(tab.id)
-                                                            } else {
-                                                                selectedTabIds.insert(tab.id)
-                                                            }
-                                                        }
+                                HStack(spacing: 4) {
+                                    if isMultiSelectMode {
+                                        Image(systemName: selectedTabIds.contains(tab.id) ? "checkmark.circle.fill" : "circle")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(selectedTabIds.contains(tab.id) ? Theme.accent : Theme.textDim)
+                                            .contentShape(Rectangle())
+                                            .onTapGesture {
+                                                if selectedTabIds.contains(tab.id) {
+                                                    selectedTabIds.remove(tab.id)
+                                                } else {
+                                                    selectedTabIds.insert(tab.id)
                                                 }
                                             }
-                                            .padding(.leading, 6)
-                                        }
                                     }
+                                    SessionCard(tab: tab)
+                                }
+                            } else {
+                                HStack(alignment: .top, spacing: 4) {
+                                    if isMultiSelectMode {
+                                        VStack(spacing: 4) {
+                                            ForEach(group.tabs) { tab in
+                                                Image(systemName: selectedTabIds.contains(tab.id) ? "checkmark.circle.fill" : "circle")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(selectedTabIds.contains(tab.id) ? Theme.accent : Theme.textDim)
+                                                    .onTapGesture {
+                                                        if selectedTabIds.contains(tab.id) {
+                                                            selectedTabIds.remove(tab.id)
+                                                        } else {
+                                                            selectedTabIds.insert(tab.id)
+                                                        }
+                                                    }
+                                            }
+                                        }
+                                        .padding(.top, 8)
+                                    }
+                                    SessionGroupCard(group: group)
+                                }
                             }
                         }
                     }
@@ -264,6 +284,21 @@ struct SidebarView: View {
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(Theme.bgCard)
                 .overlay(Rectangle().fill(Theme.border).frame(height: 1), alignment: .top)
+            }
+
+            // 세션 요약 바
+            if manager.totalTokensUsed > 0 {
+                HStack(spacing: 8) {
+                    Image(systemName: "bolt.fill").font(Theme.chrome(8)).foregroundColor(Theme.yellow)
+                    Text(NSLocalizedString("sidebar.total.usage", comment: ""))
+                        .font(Theme.chrome(8, weight: .medium)).foregroundColor(Theme.textDim)
+                    Spacer()
+                    Text(manager.totalTokensUsed.tokenFormatted)
+                        .font(Theme.chrome(10, weight: .bold)).foregroundColor(Theme.textPrimary)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(Theme.bgSurface.opacity(0.4))
+                .overlay(Rectangle().fill(Theme.border.opacity(0.3)).frame(height: 1), alignment: .top)
             }
 
             Spacer(minLength: 0)
@@ -371,7 +406,7 @@ struct SidebarView: View {
                     .opacity(count > 0 || statusFilter == filter ? 1 : 0.4)
                 }
                 Spacer(minLength: 2)
-                Text("\(filteredProjectGroups.reduce(0) { $0 + $1.tabs.count })")
+                Text("\(vm.filteredProjectGroups(manager: manager).reduce(0) { $0 + $1.tabs.count })")
                     .font(Theme.chrome(8, weight: .medium))
                     .foregroundColor(Theme.textDim)
                     .lineLimit(1)
@@ -780,7 +815,7 @@ struct SessionGroupCard: View {
                 .background(RoundedRectangle(cornerRadius: 8)
                     .fill(isGroupSelected ? Theme.bgSelected : Theme.bgSurface.opacity(0.5))
                     .overlay(RoundedRectangle(cornerRadius: 8)
-                        .stroke(isGroupSelected ? Theme.accent.opacity(0.4) : .clear, lineWidth: isGroupSelected ? 1.5 : 0)))
+                        .strokeBorder(isGroupSelected ? Theme.accent.opacity(0.4) : .clear, lineWidth: isGroupSelected ? 1.5 : 0)))
             }.buttonStyle(.plain)
 
             if isExpanded {
@@ -822,6 +857,7 @@ struct WorkerMiniCard: View {
     @ObservedObject var tab: TerminalTab
     @EnvironmentObject var manager: SessionManager
     @StateObject private var settings = AppSettings.shared
+    @State private var isHovered = false
     private var isSelected: Bool { manager.activeTabId == tab.id }
     var body: some View {
         Button(action: { manager.focusSingleTab = true; manager.selectTab(tab.id) }) {
@@ -840,10 +876,12 @@ struct WorkerMiniCard: View {
                     Image(systemName: "xmark").font(Theme.chrome(7, weight: .bold)).foregroundColor(Theme.textDim).padding(2) }.buttonStyle(.plain) }
             }
             .padding(.horizontal, Theme.sp2).padding(.vertical, Theme.sp1 + 1)
-            .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(isSelected ? Theme.bgSelected : .clear))
-            .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).stroke(isSelected ? Theme.border : .clear, lineWidth: 1))
+            .contentShape(Rectangle())
+            .background(RoundedRectangle(cornerRadius: Theme.cornerMedium).fill(isSelected ? Theme.bgSelected : (isHovered ? Theme.bgSurface.opacity(0.5) : .clear)))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium).strokeBorder(isSelected ? Theme.border : (isHovered ? Theme.border.opacity(0.3) : .clear), lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .onHover { hovering in isHovered = hovering }
         .accessibilityLabel("\(tab.projectName) \(tab.workerName)")
         .accessibilityValue(tab.statusPresentation.label)
         .accessibilityHint(NSLocalizedString("sidebar.a11y.open.single", comment: ""))
@@ -869,89 +907,117 @@ struct SessionCard: View {
     @StateObject private var settings = AppSettings.shared
     @State private var isEditingName = false
     @State private var editName = ""
+    @State private var isHovered = false
 
     private var isSelected: Bool { manager.activeTabId == tab.id }
 
+    private var tokenProgress: Double {
+        guard tab.tokenLimit > 0 else { return 0 }
+        return min(1.0, Double(tab.tokensUsed) / Double(tab.tokenLimit))
+    }
+
     var body: some View {
         Button(action: { manager.selectedGroupPath = nil; manager.focusSingleTab = true; manager.selectTab(tab.id) }) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Circle().fill(tab.statusPresentation.tint).frame(width: 7, height: 7)
-                    Text(tab.projectName)
-                        .font(Theme.chrome(11, weight: isSelected ? .semibold : .regular))
-                        .foregroundColor(isSelected ? Theme.textPrimary : Theme.textSecondary).lineLimit(1)
-                    Spacer()
-                    if let idx = manager.userVisibleTabs.firstIndex(where: { $0.id == tab.id }), idx < 9 {
-                        Text("Cmd+\(idx + 1)").font(Theme.chrome(7, weight: .medium))
-                            .foregroundColor(Theme.textDim).opacity(isSelected ? 0.7 : 0.3)
-                    }
-                    if isSelected {
-                        Button(action: { manager.removeTab(tab.id) }) {
-                            Image(systemName: "xmark").font(Theme.chrome(7, weight: .bold))
-                                .foregroundColor(Theme.textDim).padding(2)
-                        }.buttonStyle(.plain)
-                    }
-                }
+            HStack(spacing: 0) {
+                // 상태 색상 바 (좌측)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(tab.statusPresentation.tint)
+                    .frame(width: 3)
+                    .padding(.vertical, 4)
 
-                HStack(alignment: .center, spacing: 6) {
-                    HStack(spacing: 3) {
-                        RoundedRectangle(cornerRadius: 1).fill(tab.workerColor).frame(width: 3, height: 10)
-                        if isEditingName {
-                            TextField(NSLocalizedString("sidebar.field.name", comment: ""), text: $editName).textFieldStyle(.plain)
-                                .font(Theme.chrome(10, weight: .bold)).foregroundColor(tab.workerColor).frame(width: 60)
-                                .onSubmit {
-                                    if !editName.trimmingCharacters(in: .whitespaces).isEmpty {
-                                        tab.workerName = editName.trimmingCharacters(in: .whitespaces)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Circle().fill(tab.statusPresentation.tint).frame(width: 7, height: 7)
+                        Text(tab.projectName)
+                            .font(Theme.chrome(11, weight: isSelected ? .semibold : .regular))
+                            .foregroundColor(isSelected ? Theme.textPrimary : Theme.textSecondary).lineLimit(1)
+                        Spacer()
+                        if let idx = manager.userVisibleTabs.firstIndex(where: { $0.id == tab.id }), idx < 9 {
+                            Text("Cmd+\(idx + 1)").font(Theme.chrome(7, weight: .medium))
+                                .foregroundColor(Theme.textDim).opacity(isSelected ? 0.7 : 0.3)
+                        }
+                        if isSelected {
+                            Button(action: { manager.removeTab(tab.id) }) {
+                                Image(systemName: "xmark").font(Theme.chrome(7, weight: .bold))
+                                    .foregroundColor(Theme.textDim).padding(2)
+                            }.buttonStyle(.plain)
+                        }
+                    }
+
+                    HStack(alignment: .center, spacing: 6) {
+                        HStack(spacing: 3) {
+                            RoundedRectangle(cornerRadius: 1).fill(tab.workerColor).frame(width: 3, height: 10)
+                            if isEditingName {
+                                TextField(NSLocalizedString("sidebar.field.name", comment: ""), text: $editName).textFieldStyle(.plain)
+                                    .font(Theme.chrome(10, weight: .bold)).foregroundColor(tab.workerColor).frame(width: 60)
+                                    .onSubmit {
+                                        if !editName.trimmingCharacters(in: .whitespaces).isEmpty {
+                                            tab.workerName = editName.trimmingCharacters(in: .whitespaces)
+                                        }
+                                        isEditingName = false
                                     }
-                                    isEditingName = false
+                            } else {
+                                Text(tab.workerName).font(Theme.chrome(10)).foregroundColor(tab.workerColor)
+                                    .onTapGesture(count: 2) { editName = tab.workerName; isEditingName = true }
+                            }
+                        }
+                        AppStatusBadge(
+                            title: tab.statusPresentation.label,
+                            symbol: tab.statusPresentation.symbol,
+                            tint: tab.statusPresentation.tint
+                        )
+                        if tab.sessionCount > 1 {
+                            Text("x\(tab.sessionCount)").font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.cyan)
+                        }
+                        Spacer()
+                        if tab.tokensUsed > 0 {
+                            HStack(spacing: 4) {
+                                Text(tab.tokensUsed.tokenFormatted).font(Theme.chrome(9)).foregroundColor(Theme.textDim)
+                                if tab.tokenLimit > 0 {
+                                    GeometryReader { geo in
+                                        ZStack(alignment: .leading) {
+                                            RoundedRectangle(cornerRadius: 1.5).fill(Theme.bg).frame(height: 3)
+                                            RoundedRectangle(cornerRadius: 1.5)
+                                                .fill(tokenProgress > 0.8 ? Theme.red : (tokenProgress > 0.5 ? Theme.yellow : tab.workerColor.opacity(0.6)))
+                                                .frame(width: max(2, geo.size.width * tokenProgress), height: 3)
+                                        }
+                                    }.frame(width: 32, height: 3)
                                 }
-                        } else {
-                            Text(tab.workerName).font(Theme.chrome(10)).foregroundColor(tab.workerColor)
-                                .onTapGesture(count: 2) { editName = tab.workerName; isEditingName = true }
+                            }
                         }
                     }
-                    AppStatusBadge(
-                        title: tab.statusPresentation.label,
-                        symbol: tab.statusPresentation.symbol,
-                        tint: tab.statusPresentation.tint
-                    )
-                    if tab.sessionCount > 1 {
-                        Text("x\(tab.sessionCount)").font(Theme.chrome(9, weight: .bold)).foregroundColor(Theme.cyan)
-                    }
-                    Spacer()
-                    if tab.tokensUsed > 0 {
-                        Text(tab.tokensUsed.tokenFormatted).font(Theme.chrome(9)).foregroundColor(Theme.textDim)
-                    }
-                }
 
-                if tab.gitInfo.isGitRepo {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.triangle.branch").font(Theme.chrome(8)).foregroundColor(Theme.cyan.opacity(0.6))
-                        Text(tab.gitInfo.branch).font(Theme.chrome(9)).foregroundColor(Theme.cyan.opacity(0.7)).lineLimit(1)
-                        if tab.gitInfo.changedFiles > 0 {
-                            Text("+\(tab.gitInfo.changedFiles)").font(Theme.chrome(8, weight: .bold)).foregroundColor(Theme.yellow.opacity(0.8))
+                    if tab.gitInfo.isGitRepo {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.branch").font(Theme.chrome(8)).foregroundColor(Theme.cyan.opacity(0.6))
+                            Text(tab.gitInfo.branch).font(Theme.chrome(9)).foregroundColor(Theme.cyan.opacity(0.7)).lineLimit(1)
+                            if tab.gitInfo.changedFiles > 0 {
+                                Text("+\(tab.gitInfo.changedFiles)").font(Theme.chrome(8, weight: .bold)).foregroundColor(Theme.yellow.opacity(0.8))
+                            }
                         }
                     }
-                }
 
-                if let startError = tab.startError, !startError.isEmpty {
-                    Text(startError)
-                        .font(Theme.chrome(8))
-                        .foregroundColor(Theme.red)
-                        .lineLimit(1)
+                    if let startError = tab.startError, !startError.isEmpty {
+                        Text(startError)
+                            .font(Theme.chrome(8))
+                            .foregroundColor(Theme.red)
+                            .lineLimit(1)
+                    }
                 }
+                .padding(.horizontal, Theme.sp3).padding(.vertical, Theme.sp2)
             }
-            .padding(.horizontal, Theme.sp3).padding(.vertical, Theme.sp2)
+            .contentShape(Rectangle())
             .background(
                 RoundedRectangle(cornerRadius: Theme.cornerLarge)
-                    .fill(isSelected ? Theme.bgSelected : .clear)
+                    .fill(isSelected ? Theme.bgSelected : (isHovered ? Theme.bgSurface.opacity(0.5) : .clear))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.cornerLarge)
-                    .stroke(isSelected ? Theme.border : .clear, lineWidth: 1)
+                    .strokeBorder(isSelected ? Theme.border : (isHovered ? Theme.border.opacity(0.3) : .clear), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
+        .onHover { hovering in isHovered = hovering }
         .accessibilityLabel("\(tab.projectName) 세션")
         .accessibilityValue("\(tab.workerName), \(tab.statusPresentation.label)")
         .accessibilityHint(NSLocalizedString("sidebar.a11y.select.session", comment: ""))

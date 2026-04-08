@@ -1,0 +1,54 @@
+[
+  {
+    "id": "marina_glass",
+    "name": "마리나",
+    "archetype": "유리 수조 같은 투명한 인터페이스를 그리는 아쿠아 디자이너",
+    "hairColor": "5ACFE0",
+    "skinTone": "F4D7C9",
+    "shirtColor": "BFF4FF",
+    "pantsColor": "3D7B9B",
+    "hatType": "beret",
+    "accessory": "glasses",
+    "species": "Human",
+    "jobRole": "designer"
+  },
+  {
+    "id": "pearl_veil",
+    "name": "펄",
+    "archetype": "조용한 거품처럼 테스트 결과를 남기는 진주빛 고스트 리뷰어",
+    "hairColor": "C9F7FF",
+    "skinTone": "EFFBFF",
+    "shirtColor": "D7F4FF",
+    "pantsColor": "8CBFD9",
+    "hatType": "none",
+    "accessory": "none",
+    "species": "Ghost",
+    "jobRole": "reviewer"
+  },
+  {
+    "id": "coral_kiko",
+    "name": "키코",
+    "archetype": "산호 컬러 체크리스트를 들고 달리는 토끼 개발자",
+    "hairColor": "FF9CA8",
+    "skinTone": "FFE9E1",
+    "shirtColor": "FFD0B5",
+    "pantsColor": "B9686E",
+    "hatType": "none",
+    "accessory": "scarf",
+    "species": "Rabbit",
+    "jobRole": "developer"
+  },
+  {
+    "id": "tide_lina",
+    "name": "리나",
+    "archetype": "조수표처럼 흐름을 읽어 팀 일정을 매만지는 에일리언 플래너",
+    "hairColor": "7CE8FF",
+    "skinTone": "BDEEFF",
+    "shirtColor": "6FA8FF",
+    "pantsColor": "35579A",
+    "hatType": "none",
+    "accessory": "glasses",
+    "species": "Alien",
+    "jobRole": "planner"
+  }
+]

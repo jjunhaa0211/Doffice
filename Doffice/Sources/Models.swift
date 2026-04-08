@@ -650,6 +650,8 @@ class TokenTracker: ObservableObject {
     }
 
     func startBlockReason(isAutomation: Bool) -> String? {
+        guard AppSettings.shared.tokenProtectionEnabled else { return nil }
+
         if dailyRemaining <= effectiveGlobalDailyReserve ||
             weeklyRemaining <= effectiveGlobalWeeklyReserve ||
             dailyUsagePercent >= 0.985 ||
@@ -669,6 +671,8 @@ class TokenTracker: ObservableObject {
     }
 
     func runningStopReason(isAutomation: Bool, currentTabTokens: Int, tokenLimit: Int) -> String? {
+        guard AppSettings.shared.tokenProtectionEnabled else { return nil }
+
         if currentTabTokens >= tokenLimit {
             return NSLocalizedString("token.protection.session.limit", comment: "")
         }
@@ -846,8 +850,45 @@ class TerminalTab: ObservableObject, Identifiable {
     @Published var workerColor: Color
 
     // 이벤트 스트림 (핵심!)
-    @Published var blocks: [StreamBlock] = []
-    @Published var isProcessing: Bool = false
+    // blocks는 스트림 중 초당 수십 회 변경되므로 @Published 대신 수동 throttle 적용
+    var blocks: [StreamBlock] = []
+    private var blockUpdateThrottleTimer: Timer?
+    private var blockUpdatePending = false
+
+    /// 블록 변경을 UI에 반영 — 스트리밍 중에는 최대 10fps로 throttle
+    func notifyBlocksChanged() {
+        if isProcessing {
+            blockUpdatePending = true
+            if blockUpdateThrottleTimer == nil {
+                blockUpdateThrottleTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                    guard let self = self else { return }
+                    if self.blockUpdatePending {
+                        self.blockUpdatePending = false
+                        self.objectWillChange.send()
+                    }
+                }
+            }
+        } else {
+            blockUpdateThrottleTimer?.invalidate()
+            blockUpdateThrottleTimer = nil
+            blockUpdatePending = false
+            objectWillChange.send()
+        }
+    }
+
+    @Published var isProcessing: Bool = false {
+        didSet {
+            if !isProcessing {
+                // 프로세싱 종료 시 마지막 블록 업데이트 flush + 타이머 정리
+                blockUpdateThrottleTimer?.invalidate()
+                blockUpdateThrottleTimer = nil
+                if blockUpdatePending {
+                    blockUpdatePending = false
+                    objectWillChange.send()
+                }
+            }
+        }
+    }
     @Published var isRunning: Bool = true
 
     // Claude 설정
@@ -1059,6 +1100,7 @@ class TerminalTab: ObservableObject, Identifiable {
         if !blocks.isEmpty, case .sessionStart = blocks[0].blockType {
             let displayLabel = ClaudeModel.detect(from: reportedModel)?.displayName ?? reportedModel
             blocks[0].content = sessionStartSummary(modelLabel: displayLabel)
+            notifyBlocksChanged()
         }
     }
 
@@ -1283,7 +1325,20 @@ class TerminalTab: ObservableObject, Identifiable {
             SessionManager.shared.prepareDirectDeveloperWorkflowIfNeeded(for: self, prompt: prompt)
         }
 
-        guard !isProcessing else { return }
+        // isProcessing 상태 복구: 프로세스 없이 stuck된 경우 자동 리셋
+        if isProcessing {
+            let hasNoProcess = currentProcess == nil || !(currentProcess?.isRunning ?? false)
+            let staleTimeout: TimeInterval = 30
+            let isStale = Date().timeIntervalSince(lastActivityTime) > staleTimeout
+            if hasNoProcess && isStale {
+                CrashLogger.shared.warning("TerminalTab: isProcessing stuck without running process — auto-resetting (tab=\(id))")
+                isProcessing = false
+                claudeActivity = .idle
+                currentProcess = nil
+            } else {
+                return
+            }
+        }
 
         // 이전 프로세스가 남아있으면 안전하게 정리
         if let prev = currentProcess, prev.isRunning {
@@ -1470,6 +1525,9 @@ class TerminalTab: ObservableObject, Identifiable {
                     let pid = p.processIdentifier
                     DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) {
                         if p.isRunning { kill(pid, SIGKILL) }
+                        // Reap zombie process to prevent resource leak
+                        var status: Int32 = 0
+                        waitpid(pid, &status, WNOHANG)
                     }
                 }
                 DispatchQueue.global().asyncAfter(deadline: .now() + 1800, execute: watchdog)
@@ -2067,11 +2125,13 @@ class TerminalTab: ObservableObject, Identifiable {
            shouldMergeBlock(existing: blocks[lastIndex].blockType, new: type),
            blocks[lastIndex].content.count < 50000 {  // Prevent unbounded growth
             blocks[lastIndex].content += "\n" + content
+            notifyBlocksChanged()
             return blocks[lastIndex]
         }
         let block = StreamBlock(type: type, content: content)
         blocks.append(block)
         trimBlocksIfNeeded()
+        notifyBlocksChanged()
         return block
     }
 
@@ -2150,7 +2210,7 @@ class TerminalTab: ObservableObject, Identifiable {
         }
     }
 
-    func clearBlocks() { blocks.removeAll() }
+    func clearBlocks() { blocks.removeAll(); notifyBlocksChanged() }
 
     private static let maxTimelineEvents = 500
 
@@ -2215,6 +2275,14 @@ class TerminalTab: ObservableObject, Identifiable {
     func sendCommand(_ command: String) { sendPrompt(command) }
     func sendKey(_ key: UInt8) { if key == 3 { cancelProcessing() } }
     func stop() { cancelProcessing(); isRunning = false }
+
+    /// 프로바이더 전환 시 상태를 안전하게 리셋합니다.
+    func switchProvider(to provider: AgentProvider) {
+        isProcessing = false
+        claudeActivity = .idle
+        selectedModel = provider.defaultModel
+        isClaude = provider == .claude
+    }
 
     // MARK: - Notifications
 

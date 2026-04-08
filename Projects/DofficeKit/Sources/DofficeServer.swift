@@ -149,11 +149,14 @@ public final class DofficeServer {
         acceptSource = nil
 
         // Close all client connections
-        clientLock.lock()
-        let clients = clientSources
-        clientSources.removeAll()
-        clientBuffers.removeAll()
-        clientLock.unlock()
+        let clients: [Int32: DispatchSourceRead]
+        do {
+            clientLock.lock()
+            defer { clientLock.unlock() }
+            clients = clientSources
+            clientSources.removeAll()
+            clientBuffers.removeAll()
+        }
 
         for (fd, source) in clients {
             source.cancel()
@@ -200,9 +203,9 @@ public final class DofficeServer {
         source.resume()
 
         clientLock.lock()
+        defer { clientLock.unlock() }
         clientSources[clientFD] = source
         clientBuffers[clientFD] = Data()
-        clientLock.unlock()
     }
 
     private func readFromClient(fd: Int32) {
@@ -257,10 +260,13 @@ public final class DofficeServer {
     }
 
     private func disconnectClient(fd: Int32) {
-        clientLock.lock()
-        let source = clientSources.removeValue(forKey: fd)
-        clientBuffers.removeValue(forKey: fd)
-        clientLock.unlock()
+        let source: DispatchSourceRead?
+        do {
+            clientLock.lock()
+            defer { clientLock.unlock() }
+            source = clientSources.removeValue(forKey: fd) as DispatchSourceRead?
+            clientBuffers.removeValue(forKey: fd)
+        }
         if let source = source {
             // cancel handler 내에서 closeSocket + removeClient가 호출되므로
             // 여기서는 source.cancel()만 호출 (중복 close 방지)
@@ -273,9 +279,9 @@ public final class DofficeServer {
 
     private func removeClient(fd: Int32) {
         clientLock.lock()
+        defer { clientLock.unlock() }
         clientSources.removeValue(forKey: fd)
         clientBuffers.removeValue(forKey: fd)
-        clientLock.unlock()
     }
 
     // MARK: - Request Processing

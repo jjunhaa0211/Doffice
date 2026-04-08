@@ -1,0 +1,9 @@
+{
+  "name": "파스텔 드림 팩",
+  "version": "1.0.0",
+  "description": "솜사탕처럼 부드러운 팔레트와 사랑스러운 실루엣의 캐릭터 4종을 추가합니다.",
+  "author": "Doffice",
+  "contributes": {
+    "characters": "characters.json"
+  }
+}

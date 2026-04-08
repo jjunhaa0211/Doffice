@@ -1,0 +1,9 @@
+{
+  "name": "사쿠라 아틀리에 팩",
+  "version": "1.0.0",
+  "description": "벚꽃빛과 스튜디오 무드가 어우러진 사랑스러운 캐릭터 4종을 추가합니다.",
+  "author": "Doffice",
+  "contributes": {
+    "characters": "characters.json"
+  }
+}

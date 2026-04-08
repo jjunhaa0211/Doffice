@@ -42,8 +42,45 @@ public class TerminalTab: ObservableObject, Identifiable {
     @Published public var workerColor: Color
 
     // 이벤트 스트림 (핵심!)
-    @Published public var blocks: [StreamBlock] = []
-    @Published public var isProcessing: Bool = false
+    // blocks는 스트림 중 초당 수십 회 변경되므로 @Published 대신 수동 throttle 적용
+    public var blocks: [StreamBlock] = []
+    private var blockUpdateThrottleTimer: Timer?
+    private var blockUpdatePending = false
+
+    /// 블록 변경을 UI에 반영 — 스트리밍 중에는 최대 10fps로 throttle
+    public func notifyBlocksChanged() {
+        if isProcessing {
+            blockUpdatePending = true
+            if blockUpdateThrottleTimer == nil {
+                blockUpdateThrottleTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                    guard let self = self else { return }
+                    if self.blockUpdatePending {
+                        self.blockUpdatePending = false
+                        self.objectWillChange.send()
+                    }
+                }
+            }
+        } else {
+            blockUpdateThrottleTimer?.invalidate()
+            blockUpdateThrottleTimer = nil
+            blockUpdatePending = false
+            objectWillChange.send()
+        }
+    }
+
+    @Published public var isProcessing: Bool = false {
+        didSet {
+            if !isProcessing {
+                // 프로세싱 종료 시 마지막 블록 업데이트 flush + 타이머 정리
+                blockUpdateThrottleTimer?.invalidate()
+                blockUpdateThrottleTimer = nil
+                if blockUpdatePending {
+                    blockUpdatePending = false
+                    objectWillChange.send()
+                }
+            }
+        }
+    }
     @Published public var isRunning: Bool = true
 
     // 모델/CLI 설정

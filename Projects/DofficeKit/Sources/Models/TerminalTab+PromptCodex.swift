@@ -166,7 +166,11 @@ extension TerminalTab {
             proc.waitUntilExit()
             watchdog.cancel()
         } catch {
-            print("[도피스] Codex 프로세스 실행 실패: \(error)")
+            CrashLogger.shared.error("Codex launch failed: \(error.localizedDescription)")
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
+            try? outPipe.fileHandleForReading.close()
+            try? errPipe.fileHandleForReading.close()
             DispatchQueue.main.async { [weak self] in
                 self?.appendBlock(.error(message: "Codex launch failed"), content: error.localizedDescription)
                 self?.isProcessing = false
@@ -180,6 +184,15 @@ extension TerminalTab {
 
         outPipe.fileHandleForReading.readabilityHandler = nil
         errPipe.fileHandleForReading.readabilityHandler = nil
+        try? outPipe.fileHandleForReading.close()
+        try? errPipe.fileHandleForReading.close()
+
+        // 좀비 프로세스 방지
+        let codexPid = proc.processIdentifier
+        if codexPid > 0 {
+            var status: Int32 = 0
+            waitpid(codexPid, &status, WNOHANG)
+        }
 
         let shouldRetryWithoutResume = stderrStateQueue.sync {
             shouldResume && allowResumeFallback && sawMissingRolloutResumeError

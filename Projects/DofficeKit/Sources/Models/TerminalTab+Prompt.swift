@@ -424,22 +424,34 @@ extension TerminalTab {
                 proc.waitUntilExit()
                 watchdog.cancel()
             } catch {
-                print("[도피스] 프로세스 실행 실패: \(error)")
                 CrashLogger.shared.error("Process launch failed: \(error.localizedDescription)")
                 // 실패 시 파이프 핸들러 정리 — 누수 방지
                 outPipe.fileHandleForReading.readabilityHandler = nil
                 errPipe.fileHandleForReading.readabilityHandler = nil
+                try? outPipe.fileHandleForReading.close()
+                try? errPipe.fileHandleForReading.close()
                 DispatchQueue.main.async { [weak self] in
                     self?.appendBlock(.error(message: NSLocalizedString("tab.process.launch.failed", comment: "")), content: String(format: NSLocalizedString("tab.process.launch.failed.detail", comment: ""), error.localizedDescription))
                     self?.isProcessing = false
                     self?.claudeActivity = .error
                     self?.currentProcess = nil
+                    self?.currentOutPipe = nil
+                    self?.currentErrPipe = nil
                 }
                 return
             }
 
             outPipe.fileHandleForReading.readabilityHandler = nil
             errPipe.fileHandleForReading.readabilityHandler = nil
+            try? outPipe.fileHandleForReading.close()
+            try? errPipe.fileHandleForReading.close()
+
+            // 좀비 프로세스 방지: waitpid로 reap
+            let pid = proc.processIdentifier
+            if pid > 0 {
+                var status: Int32 = 0
+                waitpid(pid, &status, WNOHANG)
+            }
 
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }

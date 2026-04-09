@@ -106,6 +106,8 @@ extension TerminalTab {
         // 프로세스 취소 등록 후 파이프 핸들러 정리
         currentOutPipe?.fileHandleForReading.readabilityHandler = nil
         currentErrPipe?.fileHandleForReading.readabilityHandler = nil
+        try? currentOutPipe?.fileHandleForReading.close()
+        try? currentErrPipe?.fileHandleForReading.close()
         currentOutPipe = nil
         currentErrPipe = nil
 
@@ -136,6 +138,8 @@ extension TerminalTab {
         // 파이프 핸들러 즉시 정리
         currentOutPipe?.fileHandleForReading.readabilityHandler = nil
         currentErrPipe?.fileHandleForReading.readabilityHandler = nil
+        try? currentOutPipe?.fileHandleForReading.close()
+        try? currentErrPipe?.fileHandleForReading.close()
         currentOutPipe = nil
         currentErrPipe = nil
 

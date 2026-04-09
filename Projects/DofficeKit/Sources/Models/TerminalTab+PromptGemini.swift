@@ -125,6 +125,11 @@ extension TerminalTab {
             proc.waitUntilExit()
             watchdog.cancel()
         } catch {
+            CrashLogger.shared.error("Gemini launch failed: \(error.localizedDescription)")
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
+            try? outPipe.fileHandleForReading.close()
+            try? errPipe.fileHandleForReading.close()
             DispatchQueue.main.async { [weak self] in
                 self?.appendBlock(.error(message: "Gemini launch failed"), content: error.localizedDescription)
                 self?.isProcessing = false
@@ -138,6 +143,15 @@ extension TerminalTab {
 
         outPipe.fileHandleForReading.readabilityHandler = nil
         errPipe.fileHandleForReading.readabilityHandler = nil
+        try? outPipe.fileHandleForReading.close()
+        try? errPipe.fileHandleForReading.close()
+
+        // 좀비 프로세스 방지
+        let pid = proc.processIdentifier
+        if pid > 0 {
+            var status: Int32 = 0
+            waitpid(pid, &status, WNOHANG)
+        }
 
         // Flush remaining text in buffer (content without trailing newline)
         let remainingText: String = bufferQueue.sync {

@@ -198,6 +198,27 @@ extension OfficeSpriteRenderer {
             case .highFive:
                 color = Color(hex: "F0D850")
                 texts = role == 0 ? Self.highFiveTexts0 : Self.highFiveTexts1
+            case .arguing:
+                color = Color(hex: "F07070")
+                texts = role == 0 ? Self.arguingTexts0 : Self.arguingTexts1
+            case .napping:
+                color = Color(hex: "8090B0")
+                texts = role == 0 ? Self.nappingTexts0 : Self.nappingTexts1
+            case .dancing:
+                color = Color(hex: "F0A0E0")
+                texts = role == 0 ? Self.dancingTexts0 : Self.dancingTexts1
+            case .snacking:
+                color = Color(hex: "E8C050")
+                texts = role == 0 ? Self.snackingTexts0 : Self.snackingTexts1
+            case .photoTime:
+                color = Color(hex: "50C8F0")
+                texts = role == 0 ? Self.photoTimeTexts0 : Self.photoTimeTexts1
+            case .flirting:
+                color = Color(hex: "F08090")
+                texts = role == 0 ? Self.flirtingTexts0 : Self.flirtingTexts1
+            case .pettingCat:
+                color = Color(hex: "E8B870")
+                texts = role == 0 ? Self.pettingCatTexts0 : Self.pettingCatTexts1
             }
 
             let text = texts[phase % texts.count]
@@ -211,6 +232,38 @@ extension OfficeSpriteRenderer {
 
             // Don't show during social interactions
             guard char.socialMode == nil else { return nil }
+
+            // 고양이 쓰다듬기 리액션
+            if char.pettingCatTimer > 0 {
+                return (Self.pettingReactions[frame / 18 % Self.pettingReactions.count], Color(hex: "E8B870"))
+            }
+
+            // 축하 반응 전파: 근처에서 축하하는 캐릭터에 반응
+            if char.celebrationReactTimer > 0 {
+                return (Self.celebrationReactReactions[frame / 12 % Self.celebrationReactReactions.count], Color(hex: "F0D850"))
+            }
+
+            // 가구 상호작용 전용 리액션
+            if let interaction = char.furnitureInteraction, char.furnitureInteractionTimer > 0 {
+                switch interaction {
+                case .drinkingCoffee:
+                    return (Self.coffeeInteractionReactions[frame / 18 % Self.coffeeInteractionReactions.count], Color(hex: "C8884A"))
+                case .drinkingWater:
+                    return (Self.waterInteractionReactions[frame / 18 % Self.waterInteractionReactions.count], Color(hex: "60B0E8"))
+                case .readingBook:
+                    return (Self.bookInteractionReactions[frame / 18 % Self.bookInteractionReactions.count], Color(hex: "78C8F0"))
+                case .relaxingOnSofa:
+                    return (Self.sofaInteractionReactions[frame / 24 % Self.sofaInteractionReactions.count], Color(hex: "C090D8"))
+                case .usingPrinter:
+                    return (Self.printerInteractionReactions[frame / 12 % Self.printerInteractionReactions.count], Color(hex: "90A0B0"))
+                case .checkingWhiteboard:
+                    return (Self.whiteboardInteractionReactions[frame / 18 % Self.whiteboardInteractionReactions.count], Color(hex: "E8A850"))
+                case .throwingTrash:
+                    return (Self.trashInteractionReactions[frame / 12 % Self.trashInteractionReactions.count], Color(hex: "80A080"))
+                case .wateringPlant:
+                    return (Self.plantInteractionReactions[frame / 18 % Self.plantInteractionReactions.count], Color(hex: "60C878"))
+                }
+            }
 
             switch char.state {
             case .typing:
@@ -234,30 +287,113 @@ extension OfficeSpriteRenderer {
             }
         }
 
-        func drawHighFiveSparkIfNeeded(for char: OfficeCharacter) {
-            guard char.socialMode == .highFive,
-                  char.socialRole == 0,
+        func drawSocialEffectIfNeeded(for char: OfficeCharacter) {
+            guard char.socialRole == 0,
                   char.socialTimer > 0,
                   let partnerKey = char.socialPartnerKey,
                   let partner = characters[partnerKey],
-                  partner.socialMode == .highFive,
                   partner.socialTimer > 0 else { return }
 
-            let sparkCenter = CGPoint(
+            let midCenter = CGPoint(
                 x: (char.pixelX + partner.pixelX) / 2,
                 y: min(char.pixelY, partner.pixelY) - 18
             )
-            let bgRect = CGRect(x: sparkCenter.x - 5.5, y: sparkCenter.y - 5.5, width: 11, height: 11)
-            ctx.fill(
-                Path(ellipseIn: bgRect),
-                with: .color(Theme.yellow.opacity(dark ? 0.22 : 0.15))
-            )
-            ctx.draw(
-                Text("*")
-                    .font(.system(size: 7, weight: .black))
-                    .foregroundColor(Theme.yellow.opacity(0.98)),
-                at: sparkCenter
-            )
+
+            switch char.socialMode {
+            case .highFive:
+                // 기존 하이파이브 스파크
+                let bgRect = CGRect(x: midCenter.x - 5.5, y: midCenter.y - 5.5, width: 11, height: 11)
+                ctx.fill(Path(ellipseIn: bgRect), with: .color(Theme.yellow.opacity(dark ? 0.22 : 0.15)))
+                ctx.draw(
+                    Text("*").font(.system(size: 7, weight: .black)).foregroundColor(Theme.yellow.opacity(0.98)),
+                    at: midCenter
+                )
+
+            case .dancing:
+                // 음표 파티클 이펙트
+                let notePhase = (frame / 6) % 4
+                let noteChars = ["♪", "♫", "♬", "♩"]
+                let noteOffsets: [CGPoint] = [
+                    CGPoint(x: -6, y: -3), CGPoint(x: 5, y: -5),
+                    CGPoint(x: -3, y: -8), CGPoint(x: 7, y: -1)
+                ]
+                for i in 0..<2 {
+                    let idx = (notePhase + i) % noteChars.count
+                    let offset = noteOffsets[idx]
+                    ctx.draw(
+                        Text(noteChars[idx]).font(.system(size: 5, weight: .bold)).foregroundColor(Color(hex: "F0A0E0").opacity(0.85)),
+                        at: CGPoint(x: midCenter.x + offset.x, y: midCenter.y + offset.y)
+                    )
+                }
+
+            case .photoTime:
+                // 카메라 플래시 이펙트
+                let flashPhase = (frame / 8) % 3
+                if flashPhase == 0 {
+                    let flashRect = CGRect(x: midCenter.x - 7, y: midCenter.y - 7, width: 14, height: 14)
+                    ctx.fill(Path(ellipseIn: flashRect), with: .color(Color.white.opacity(dark ? 0.25 : 0.15)))
+                }
+                ctx.draw(
+                    Text("📸").font(.system(size: 6)),
+                    at: CGPoint(x: midCenter.x, y: midCenter.y - 2)
+                )
+
+            case .napping:
+                // ZZZ 부유 이펙트
+                let zPhase = CGFloat((frame / 12) % 3)
+                let zOffset = zPhase * 3
+                ctx.draw(
+                    Text("z").font(.system(size: 4 + zPhase, weight: .bold)).foregroundColor(Color(hex: "8090B0").opacity(0.7 - zPhase * 0.15)),
+                    at: CGPoint(x: midCenter.x + zOffset, y: midCenter.y - zOffset)
+                )
+
+            case .arguing:
+                // 충돌 스파크 이펙트
+                let sparkPhase = (frame / 4) % 2
+                let sparkText = sparkPhase == 0 ? "⚡" : "💥"
+                ctx.draw(
+                    Text(sparkText).font(.system(size: 5)),
+                    at: midCenter
+                )
+
+            case .flirting:
+                // 하트 떠오르는 이펙트
+                let heartPhase = (frame / 8) % 4
+                let hearts = ["♡", "❤", "💕", "♥"]
+                let heartOffsets: [CGPoint] = [
+                    CGPoint(x: -4, y: -2), CGPoint(x: 3, y: -6),
+                    CGPoint(x: -2, y: -9), CGPoint(x: 5, y: -4)
+                ]
+                for i in 0..<2 {
+                    let idx = (heartPhase + i) % hearts.count
+                    let offset = heartOffsets[idx]
+                    ctx.draw(
+                        Text(hearts[idx]).font(.system(size: 4 + CGFloat(idx % 2))).foregroundColor(Color(hex: "F08090").opacity(0.9)),
+                        at: CGPoint(x: midCenter.x + offset.x, y: midCenter.y + offset.y)
+                    )
+                }
+
+            case .pettingCat:
+                // 고양이 발바닥 이펙트
+                let pawPhase = (frame / 10) % 3
+                let pawText = pawPhase == 0 ? "🐾" : pawPhase == 1 ? "♡" : "🐱"
+                ctx.draw(
+                    Text(pawText).font(.system(size: 5)),
+                    at: CGPoint(x: midCenter.x, y: midCenter.y - 3)
+                )
+
+            case .snacking:
+                // 간식 파티클
+                let snackPhase = (frame / 10) % 3
+                let snacks = ["✧", "🍪", "♡"]
+                ctx.draw(
+                    Text(snacks[snackPhase]).font(.system(size: 4.5)),
+                    at: CGPoint(x: midCenter.x + CGFloat(snackPhase * 3 - 3), y: midCenter.y - 4)
+                )
+
+            default:
+                break
+            }
         }
 
         func overlayBaseY(for char: OfficeCharacter) -> CGFloat {
@@ -425,7 +561,7 @@ extension OfficeSpriteRenderer {
                          at: CGPoint(x: bx, y: by+6.5))
             }
 
-            drawHighFiveSparkIfNeeded(for: char)
+            drawSocialEffectIfNeeded(for: char)
 
             if !tab.officeParallelTasks.isEmpty {
                 drawParallelTaskBubble(

@@ -1,6 +1,63 @@
 import SwiftUI
 import DesignSystem
 
+private struct OfficeResizeHandle: View {
+    enum Direction {
+        case horizontal
+        case vertical
+    }
+
+    let direction: Direction
+    let isActive: Bool
+
+    var body: some View {
+        ZStack {
+            Color.clear
+
+            if direction == .horizontal {
+                Rectangle()
+                    .fill(lineColor)
+                    .frame(width: 1)
+                    .frame(maxHeight: .infinity)
+
+                Capsule()
+                    .fill(gripColor)
+                    .frame(width: 4, height: 32)
+            } else {
+                Rectangle()
+                    .fill(lineColor)
+                    .frame(height: 1)
+                    .frame(maxWidth: .infinity)
+
+                Capsule()
+                    .fill(gripColor)
+                    .frame(width: 32, height: 4)
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            if hovering {
+                cursor.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var cursor: NSCursor {
+        direction == .horizontal ? .resizeLeftRight : .resizeUpDown
+    }
+
+    private var lineColor: Color {
+        isActive ? Theme.accent.opacity(0.55) : Theme.border.opacity(0.9)
+    }
+
+    private var gripColor: Color {
+        isActive ? Theme.accent : Theme.textDim.opacity(0.55)
+    }
+}
+
 // ═══════════════════════════════════════════════════════
 // MARK: - Office Scene View (메인 씬 뷰)
 // ═══════════════════════════════════════════════════════
@@ -17,14 +74,26 @@ public struct OfficeSceneView: View {
     @State private var dragFurnitureOffset = TileCoord(col: 0, row: 0)
     @State private var currentFPS: Double = OfficeConstants.fps
     @State private var tappedCharacterTabId: String?
+    @Environment(\.isResizing) private var isResizing: Bool
     @State private var pluginPlacementNotice: String?
     @State private var editPanelCollapsed = false
+    @AppStorage("officeSelectionPanelWidth") private var storedSelectionPanelWidth: Double = 252
+    @State private var liveSelectionPanelWidth: CGFloat?
+    @State private var selectionPanelResizeOriginWidth: CGFloat?
+    @State private var isSelectionPanelResizing = false
 
     private let map: OfficeMap
     /// Single consolidated timer — fires at max FPS, advance() throttles internally
     let timer = Timer.publish(every: 1.0 / OfficeConstants.fps, on: .main, in: .common).autoconnect()
     /// Chrome screenshots & FPS check on slower cadence
     let slowTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
+
+    private enum SelectionPanelLayout {
+        static let minWidth: CGFloat = 220
+        static let maxWidth: CGFloat = 420
+        static let handleWidth: CGFloat = 12
+        static let presentationThreshold: CGFloat = 160
+    }
 
     private static func computeAdaptiveFPS() -> Double {
         if AppSettings.shared.effectivePerformanceMode {
@@ -108,7 +177,7 @@ public struct OfficeSceneView: View {
         GeometryReader { geometry in
             let w = geometry.size.width
             let h = geometry.size.height
-            let panelW = min(200, w - 28)
+            let panelAvailableWidth = max(0, w - 28)
             let panelH = h - 28
 
             ZStack(alignment: .topLeading) {
@@ -124,6 +193,7 @@ public struct OfficeSceneView: View {
                         theme: sceneTheme,
                         selectedTabId: manager.activeTabId,
                         selectedFurnitureId: selectedFurnitureId,
+                        officeCat: controller.officeCat,
                         cachedPalette: palette
                     )
                     renderer.chromeScreenshots = store.chromeScreenshots
@@ -170,8 +240,8 @@ public struct OfficeSceneView: View {
 
                 // Selection panel — positioned within ZStack, not as overlay
                 // 편집 모드에서는 가구 드래그를 방해하므로 숨김
-                if !settings.isEditMode, let activeTab = manager.activeTab, panelW > 80 {
-                    selectionPanel(tab: activeTab, maxWidth: panelW)
+                if !settings.isEditMode, let activeTab = manager.activeTab, panelAvailableWidth > SelectionPanelLayout.presentationThreshold {
+                    selectionPanel(tab: activeTab, availableWidth: panelAvailableWidth)
                         .frame(maxHeight: panelH, alignment: .top)
                         .padding(10)
                         .allowsHitTesting(true)
@@ -216,15 +286,13 @@ public struct OfficeSceneView: View {
             }
         }
         .onReceive(timer) { _ in
-            guard NSApp.windows.contains(where: { $0.isVisible }) else { return }
+            guard !isResizing, NSApp.isActive else { return }
             store.advance(with: manager.userVisibleTabs, activeTabId: manager.activeTab?.id, focusMode: isFocusMode, fps: currentFPS)
         }
         .onReceive(slowTimer) { _ in
-            guard NSApp.windows.contains(where: { $0.isVisible }) else { return }
-            // FPS check
+            guard !isResizing, NSApp.isActive else { return }
             let newFPS = Self.computeAdaptiveFPS()
             if newFPS != currentFPS { currentFPS = newFPS }
-            // Chrome refresh
             Task { @MainActor in
                 store.prepareBackgroundSnapshot(theme: sceneTheme, dark: settings.isDarkMode)
                 await store.refreshChromeScreenshots(for: manager.userVisibleTabs, activeTabId: manager.activeTab?.id)
@@ -357,9 +425,9 @@ public struct OfficeSceneView: View {
 
     // MARK: - Overlay Panels
 
-    private func selectionPanel(tab: TerminalTab, maxWidth: CGFloat) -> some View {
+    private func selectionPanel(tab: TerminalTab, availableWidth: CGFloat) -> some View {
         let status = tab.statusPresentation
-        let w = min(260, maxWidth)
+        let panelWidth = clampedSelectionPanelWidth(availableWidth: availableWidth)
         let rosterCharacter = tab.characterId.flatMap { registry.character(with: $0) }
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 6) {
@@ -433,16 +501,62 @@ public struct OfficeSceneView: View {
                 }
             }
         }
-        .frame(width: w, alignment: .leading)
+        .padding(.trailing, SelectionPanelLayout.handleWidth)
+        .frame(width: panelWidth, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         .appPanelStyle(padding: 8, radius: Theme.cornerXL, fill: Theme.bgCard.opacity(0.92), strokeOpacity: 0.20, shadow: false)
         .overlay(
             RoundedRectangle(cornerRadius: Theme.cornerXL)
                 .stroke(tab.workerColor.opacity(0.26), lineWidth: 1)
         )
+        .overlay(alignment: .trailing) {
+            selectionPanelResizeHandle(availableWidth: availableWidth, currentWidth: panelWidth)
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(String(format: NSLocalizedString("office.accessibility.worker.info", comment: ""), tab.workerName))
         .accessibilityValue(String(format: NSLocalizedString("office.accessibility.worker.value", comment: ""), status.label, tab.officeCompactTokenText, tab.fileChanges.count))
+    }
+
+    private func clampedSelectionPanelWidth(availableWidth: CGFloat) -> CGFloat {
+        let safeMaximum = min(availableWidth, SelectionPanelLayout.maxWidth)
+        let safeMinimum = min(SelectionPanelLayout.minWidth, safeMaximum)
+        let baseWidth = liveSelectionPanelWidth ?? CGFloat(storedSelectionPanelWidth)
+        let requestedWidth = max(baseWidth, safeMinimum)
+        return min(requestedWidth, safeMaximum)
+    }
+
+    private func selectionPanelResizeHandle(availableWidth: CGFloat, currentWidth: CGFloat) -> some View {
+        OfficeResizeHandle(direction: .horizontal, isActive: isSelectionPanelResizing)
+            .frame(width: SelectionPanelLayout.handleWidth)
+            .padding(.vertical, 6)
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        let originWidth = selectionPanelResizeOriginWidth ?? currentWidth
+                        if selectionPanelResizeOriginWidth == nil {
+                            selectionPanelResizeOriginWidth = originWidth
+                        }
+
+                        let safeMaximum = min(availableWidth, SelectionPanelLayout.maxWidth)
+                        let safeMinimum = min(SelectionPanelLayout.minWidth, safeMaximum)
+                        let proposedWidth = originWidth + value.translation.width
+                        let clampedWidth = min(max(proposedWidth, safeMinimum), safeMaximum)
+                        var t = Transaction()
+                        t.animation = nil
+                        withTransaction(t) {
+                            liveSelectionPanelWidth = clampedWidth
+                            isSelectionPanelResizing = true
+                        }
+                    }
+                    .onEnded { _ in
+                        if let live = liveSelectionPanelWidth {
+                            storedSelectionPanelWidth = Double(live)
+                        }
+                        liveSelectionPanelWidth = nil
+                        selectionPanelResizeOriginWidth = nil
+                        isSelectionPanelResizing = false
+                    }
+            )
     }
 
     private func selectionBadge(_ label: String, tint: Color) -> some View {
@@ -811,6 +925,10 @@ public struct OfficeSceneView: View {
                 .font(Theme.mono(9, weight: .bold))
                 .foregroundColor(tint)
                 .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .allowsTightening(true)
+                .truncationMode(.middle)
+                .contentTransition(.numericText())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.sp3)

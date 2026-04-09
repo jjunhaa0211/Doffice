@@ -114,12 +114,26 @@ extension SessionManager {
     internal func availableAutomationCharacter(for role: WorkerJob, sourceId: String) -> WorkerCharacter? {
         let registry = CharacterRegistry.shared
         let occupiedIds = occupiedCharacterIds()
-        return registry.hiredCharacters(for: role).first { character in
+
+        // 1) 해당 역할에 배정된 고용 캐릭터 중 사용 가능한 캐릭터 찾기
+        if let match = registry.hiredCharacters(for: role).first(where: { character in
             if reusableAutomationTab(for: sourceId, role: role, preferredCharacterId: character.id) != nil {
                 return true
             }
             return !occupiedIds.contains(character.id)
+        }) {
+            return match
         }
+
+        // 2) 해당 역할 캐릭터가 없으면, 빈 고용 캐릭터에 역할을 임시 배정
+        if let fallback = registry.hiredCharacters.first(where: {
+            !$0.isOnVacation && !occupiedIds.contains($0.id)
+        }) {
+            registry.setJobRole(role, for: fallback.id)
+            return registry.character(with: fallback.id)
+        }
+
+        return nil
     }
 
     internal func reusableAutomationTab(
@@ -698,13 +712,13 @@ extension SessionManager {
             : nil
         var launchedAny = false
 
-        if let reporterCharacter,
-           !tabs.contains(where: {
-               $0.projectPath == sourceTab.projectPath &&
-               $0.workerJob == .reporter &&
-               $0.isProcessing &&
-               $0.automationSourceTabId == sourceTab.id
-           }) {
+        // 질문(소스 탭)당 보고서는 1개만: 이미 보고서가 존재하거나 생성 중이면 스킵
+        let alreadyHasReport = sourceTab.automationReportPath != nil ||
+            tabs.contains(where: {
+                $0.workerJob == .reporter &&
+                $0.automationSourceTabId == sourceTab.id
+            })
+        if let reporterCharacter, !alreadyHasReport {
             let reportPath = makeReportPath(for: sourceTab)
             ensureReportDirectoryExists(for: reportPath)
             let reporterPrompt = buildReporterPrompt(

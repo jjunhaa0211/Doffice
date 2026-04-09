@@ -340,6 +340,7 @@ public class SessionManager: ObservableObject, SessionProviding {
         let registry = CharacterRegistry.shared
         let occupiedIds = occupiedCharacterIds()
 
+        // 고용된 개발자 중 비어있는 캐릭터만 반환
         let hiredDevelopers = registry.hiredCharacters(for: .developer).filter {
             !$0.isOnVacation && !occupiedIds.contains($0.id)
         }
@@ -347,18 +348,39 @@ public class SessionManager: ObservableObject, SessionProviding {
             return hired
         }
 
-        let unlockedAvailable = registry.availableCharacters.filter {
-            registry.isUnlocked($0)
+        // 개발자 역할이 아닌 고용된 캐릭터 중에서도 찾기
+        let hiredAny = registry.hiredCharacters.filter {
+            !$0.isOnVacation && !occupiedIds.contains($0.id)
         }
+        if let hired = hiredAny.randomElement() {
+            return hired
+        }
+
+        // 모든 고용 캐릭터가 바쁘면 → 미고용 캐릭터 중 자동 고용
         guard registry.hiredCharacters.count < CharacterRegistry.maxHiredCount else {
             return nil
+        }
+        let alreadyHiredIds = Set(registry.hiredCharacters.map(\.id))
+        let unlockedAvailable = registry.availableCharacters.filter {
+            registry.isUnlocked($0) && !alreadyHiredIds.contains($0.id)
         }
         guard let candidate = unlockedAvailable.randomElement() else {
             return nil
         }
 
         registry.hire(candidate.id)
-        registry.setJobRole(.developer, for: candidate.id)
+
+        // 자동 고용 토스트 알림
+        let hiredName = registry.character(with: candidate.id)?.name ?? candidate.name
+        NotificationCenter.default.post(
+            name: .dofficeRoleNotice,
+            object: nil,
+            userInfo: [
+                "role": "info",
+                "summary": String(format: NSLocalizedString("session.auto.hire", comment: "New developer hired"), hiredName)
+            ]
+        )
+
         return registry.character(with: candidate.id)
     }
 

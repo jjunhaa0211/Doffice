@@ -123,6 +123,10 @@ public class OfficeCharacterController: ObservableObject {
             if tab.officeSeatLockReason != nil {
                 return .writing
             }
+            // 인수(handover) 중인 automation 탭은 읽기/리뷰 상태로 표시
+            if tab.automationSourceTabId != nil && !tab.isCompleted && tab.claudeActivity == .idle {
+                return .reading
+            }
             return tab.claudeActivity
         }
 
@@ -252,7 +256,8 @@ public class OfficeCharacterController: ObservableObject {
                 }
 
                 let wasActive = character.isActive
-                character.isActive = tab.officeSeatLockReason != nil || tab.claudeActivity != .idle || tab.isProcessing
+                // 인수(handover) 중인 automation 탭도 활성으로 표시
+                character.isActive = tab.officeSeatLockReason != nil || tab.claudeActivity != .idle || tab.isProcessing || (tab.automationSourceTabId != nil && !tab.isCompleted)
 
                 if character.isActive && !wasActive {
                     onBecameActive(&character)
@@ -899,7 +904,19 @@ public class OfficeCharacterController: ObservableObject {
         if let groupId = tab.groupId, !groupId.isEmpty {
             return "group:\(groupId)"
         }
+        // 인수(handover): automation 탭은 소스 탭과 같은 자리에 앉음
+        if let sourceId = tab.automationSourceTabId {
+            return "auto:\(sourceId)"
+        }
+        // 소스 탭: 자신에게 연결된 automation 탭이 있으면 auto 그룹 사용
+        if hasAutomationChildren(tab.id) {
+            return "auto:\(tab.id)"
+        }
         return "solo:\(tab.id)"
+    }
+
+    private func hasAutomationChildren(_ tabId: String) -> Bool {
+        SessionManager.shared.tabs.contains { $0.automationSourceTabId == tabId }
     }
 
     private func seatGroupKey(forRosterCharacter character: WorkerCharacter) -> String {

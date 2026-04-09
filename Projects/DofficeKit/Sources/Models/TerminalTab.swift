@@ -35,6 +35,14 @@ public class TerminalTab: ObservableObject, Identifiable {
         let message: String
     }
 
+    struct QueuedPromptRequest {
+        let prompt: String
+        let permissionOverride: PermissionMode?
+        let bypassWorkflowRouting: Bool
+        let presentationStyle: StreamBlock.PresentationStyle
+        let appendUserBlock: Bool
+    }
+
     public let id: String
     public var projectName: String
     public var projectPath: String
@@ -46,6 +54,7 @@ public class TerminalTab: ObservableObject, Identifiable {
     public var blocks: [StreamBlock] = []
     private var blockUpdateThrottleTimer: Timer?
     private var blockUpdatePending = false
+    private var lastBlockNotifyTime: CFAbsoluteTime = 0
 
     /// 블록 변경을 UI에 반영 — 스트리밍 중에는 최대 10fps로 throttle
     public func notifyBlocksChanged() {
@@ -56,6 +65,7 @@ public class TerminalTab: ObservableObject, Identifiable {
                     guard let self = self else { return }
                     if self.blockUpdatePending {
                         self.blockUpdatePending = false
+                        self.lastBlockNotifyTime = CFAbsoluteTimeGetCurrent()
                         self.objectWillChange.send()
                     }
                 }
@@ -64,6 +74,7 @@ public class TerminalTab: ObservableObject, Identifiable {
             blockUpdateThrottleTimer?.invalidate()
             blockUpdateThrottleTimer = nil
             blockUpdatePending = false
+            lastBlockNotifyTime = CFAbsoluteTimeGetCurrent()
             objectWillChange.send()
         }
     }
@@ -84,11 +95,11 @@ public class TerminalTab: ObservableObject, Identifiable {
     @Published public var isRunning: Bool = true
 
     // 모델/CLI 설정
-    public var selectedModel: ClaudeModel = .sonnet
-    public var effortLevel: EffortLevel = .medium
-    public var outputMode: OutputMode = .full
-    public var codexSandboxMode: CodexSandboxMode = .workspaceWrite
-    public var codexApprovalPolicy: CodexApprovalPolicy = .onRequest
+    @Published public var selectedModel: ClaudeModel = .sonnet
+    @Published public var effortLevel: EffortLevel = .medium
+    @Published public var outputMode: OutputMode = .full
+    @Published public var codexSandboxMode: CodexSandboxMode = .workspaceWrite
+    @Published public var codexApprovalPolicy: CodexApprovalPolicy = .onRequest
 
     // 상태
     @Published public var claudeActivity: ClaudeActivity = .idle
@@ -183,6 +194,8 @@ public class TerminalTab: ObservableObject, Identifiable {
     var toolUseContexts: [String: ToolUseContext] = [:]
     var pendingPermissionDenial: PermissionDenialCandidate?
     var lastPermissionFingerprint: String?
+    var activeResponsePresentationStyle: StreamBlock.PresentationStyle = .normal
+    var queuedPromptRequests: [QueuedPromptRequest] = []
     @Published public var scrollTrigger: Int = 0          // 스크롤 트리거
     var budgetStopIssued = false
 
@@ -215,7 +228,7 @@ public class TerminalTab: ObservableObject, Identifiable {
     public var automatedRevisionCount: Int = 0
 
     // ── 고급 CLI 옵션 ──
-    public var permissionMode: PermissionMode = .bypassPermissions
+    @Published public var permissionMode: PermissionMode = .bypassPermissions
     public var systemPrompt: String = ""
     public var maxBudgetUSD: Double = 0       // 0 = 무제한
     public var allowedTools: String = ""       // 쉼표 구분

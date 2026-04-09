@@ -38,6 +38,7 @@ extension TerminalTab {
         content: String = "",
         presentationStyle: StreamBlock.PresentationStyle? = nil
     ) -> StreamBlock {
+        dispatchPrecondition(condition: .onQueue(.main))
         // toolEnd가 오면 직전 toolUse 블록을 완료 처리
         if case .toolEnd = type {
             if let toolIdx = blocks.lastIndex(where: {

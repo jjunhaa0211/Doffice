@@ -233,6 +233,7 @@ extension TerminalTab {
     // MARK: - Codex Stream Event Handler
 
     func handleCodexStreamEvent(_ json: [String: Any]) {
+        dispatchPrecondition(condition: .onQueue(.main))
         guard isRunning, !json.isEmpty else { return }
         let type = json["type"] as? String ?? ""
 

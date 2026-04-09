@@ -57,7 +57,9 @@ public class TerminalTab: ObservableObject, Identifiable {
     private var lastBlockNotifyTime: CFAbsoluteTime = 0
 
     /// 블록 변경을 UI에 반영 — 스트리밍 중에는 최대 10fps로 throttle
+    /// - Important: 반드시 메인 스레드에서 호출해야 합니다.
     public func notifyBlocksChanged() {
+        dispatchPrecondition(condition: .onQueue(.main))
         if isProcessing {
             blockUpdatePending = true
             if blockUpdateThrottleTimer == nil {

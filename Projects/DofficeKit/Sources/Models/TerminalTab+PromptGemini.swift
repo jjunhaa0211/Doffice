@@ -194,6 +194,7 @@ extension TerminalTab {
     // MARK: - Gemini Stream Event Handler
 
     func handleGeminiStreamEvent(_ json: [String: Any]) {
+        dispatchPrecondition(condition: .onQueue(.main))
         guard isRunning, !json.isEmpty else { return }
         let type = json["type"] as? String ?? ""
 

@@ -46,6 +46,7 @@ extension TerminalTab {
     }
 
     func enforceTokenBudgetIfNeeded() {
+        dispatchPrecondition(condition: .onQueue(.main))
         // 슬립워크 예산 체크
         if let budget = sleepWorkTokenBudget, sleepWorkTask != nil {
             let used = tokensUsed - sleepWorkStartTokens
@@ -323,6 +324,7 @@ extension TerminalTab {
     // MARK: - Stream Event Handler (핵심 파서)
 
     func handleStreamEvent(_ json: [String: Any]) {
+        dispatchPrecondition(condition: .onQueue(.main))
         guard isRunning else { return }
         // 비정상 데이터로 인한 크래시 방지
         guard !json.isEmpty else { return }

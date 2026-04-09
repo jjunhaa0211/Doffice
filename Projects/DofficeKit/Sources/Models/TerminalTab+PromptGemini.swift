@@ -139,6 +139,13 @@ extension TerminalTab {
         outPipe.fileHandleForReading.readabilityHandler = nil
         errPipe.fileHandleForReading.readabilityHandler = nil
 
+        // Flush remaining text in buffer (content without trailing newline)
+        let remainingText: String = bufferQueue.sync {
+            let leftover = textBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+            textBuffer = ""
+            return leftover
+        }
+
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             if self.cancelledProcessIds.contains(procId) {
@@ -148,13 +155,38 @@ extension TerminalTab {
             let isStillCurrentProcess = self.currentProcess.map { ObjectIdentifier($0) == procId } ?? true
             guard isStillCurrentProcess else { return }
 
+            // Flush remaining buffered text
+            if !remainingText.isEmpty {
+                let cleaned = remainingText
+                    .replacingOccurrences(of: "\u{1B}\\[[0-9;]*[a-zA-Z]", with: "", options: .regularExpression)
+                let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty && trimmed != ">" && trimmed != " >" {
+                    let content = trimmed.hasPrefix("✦") ? String(trimmed.dropFirst()).trimmingCharacters(in: .whitespaces) : cleaned
+                    if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        if let blockId = responseBlockId,
+                           let idx = self.blocks.lastIndex(where: { $0.id == blockId }) {
+                            self.blocks[idx].content += "\n" + content
+                        } else {
+                            self.blocks.append(StreamBlock(type: .text, content: content))
+                        }
+                    }
+                }
+            }
+
             self.currentProcess = nil
             self.currentOutPipe = nil
             self.currentErrPipe = nil
             if self.isProcessing {
                 self.isProcessing = false
                 self.claudeActivity = self.claudeActivity == .error ? .error : .done
+                self.appendBlock(.completion(cost: 0, duration: nil), content: "완료")
+                self.completedPromptCount += 1
                 self.finalizeParallelTasks(as: self.claudeActivity == .error ? .failed : .completed)
+                self.finalizePromptHistory()
+                self.generateSummary()
+                self.sendCompletionNotification()
+                self.seenToolUseIds.removeAll()
+                self.clearPromptDecorations()
             }
         }
     }
@@ -268,6 +300,7 @@ extension TerminalTab {
             generateSummary()
             sendCompletionNotification()
             seenToolUseIds.removeAll()
+            clearPromptDecorations()
 
             NotificationCenter.default.post(
                 name: .dofficeTabCycleCompleted,

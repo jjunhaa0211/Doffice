@@ -269,8 +269,10 @@ extension TerminalTab {
             claudeActivity = .done
             completedPromptCount += 1
             finalizeParallelTasks(as: .completed)
+            finalizePromptHistory()
             generateSummary()
             sendCompletionNotification()
+            clearPromptDecorations()
             PluginHost.shared.fireEvent(.onSessionComplete, context: ["tabId": id])
             NotificationCenter.default.post(
                 name: .dofficeTabCycleCompleted,

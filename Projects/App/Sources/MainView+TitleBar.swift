@@ -34,7 +34,7 @@ extension MainView {
             Color.clear.frame(width: 68, height: 1)
 
             chromeIconButton(vm.sidebarCollapsed ? "sidebar.left" : "sidebar.leading", help: vm.sidebarCollapsed ? NSLocalizedString("main.sidebar.open", comment: "") : NSLocalizedString("main.sidebar.close", comment: "")) {
-                withAnimation(.easeInOut(duration: 0.2)) { vm.sidebarCollapsed.toggle() }
+                withAnimation(chromeAnimation) { vm.sidebarCollapsed.toggle() }
             }
 
             // 앱 이름
@@ -87,8 +87,20 @@ extension MainView {
 
             Spacer()
 
-            // 업데이트 배지
-            if updater.hasUpdate {
+            // 업데이트 배지 (진행률 포함)
+            if let progress = updater.downloadProgress {
+                Button(action: { vm.showUpdateSheet = true }) {
+                    HStack(spacing: 4) {
+                        ProgressView(value: progress)
+                            .frame(width: 32)
+                            .tint(Theme.accent)
+                        Text("\(Int(progress * 100))%").font(Theme.chrome(9, weight: .medium)).foregroundColor(Theme.accent)
+                    }
+                    .padding(.horizontal, Theme.sp2).padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: Theme.cornerSmall).fill(Theme.accentBg(Theme.accent)))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.cornerSmall).stroke(Theme.accentBorder(Theme.accent), lineWidth: 1))
+                }.buttonStyle(.plain).help(NSLocalizedString("update.state.downloading", comment: ""))
+            } else if updater.hasUpdate {
                 Button(action: { vm.showUpdateSheet = true }) {
                     HStack(spacing: 4) {
                         AppStatusDot(color: Theme.green, size: 6)

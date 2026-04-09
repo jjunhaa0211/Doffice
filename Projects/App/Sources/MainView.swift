@@ -2,11 +2,74 @@ import SwiftUI
 import DesignSystem
 import DofficeKit
 
+private struct AppResizeHandle: View {
+    enum Direction {
+        case horizontal
+        case vertical
+    }
+
+    let direction: Direction
+    let isActive: Bool
+
+    var body: some View {
+        ZStack {
+            Color.clear
+
+            if direction == .horizontal {
+                Rectangle()
+                    .fill(lineColor)
+                    .frame(width: 1)
+                    .frame(maxHeight: .infinity)
+
+                Capsule()
+                    .fill(gripColor)
+                    .frame(width: 4, height: 32)
+            } else {
+                Rectangle()
+                    .fill(lineColor)
+                    .frame(height: 1)
+                    .frame(maxWidth: .infinity)
+
+                Capsule()
+                    .fill(gripColor)
+                    .frame(width: 32, height: 4)
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            if hovering {
+                cursor.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var cursor: NSCursor {
+        direction == .horizontal ? .resizeLeftRight : .resizeUpDown
+    }
+
+    private var lineColor: Color {
+        isActive ? Theme.accent.opacity(0.55) : Theme.border.opacity(0.9)
+    }
+
+    private var gripColor: Color {
+        isActive ? Theme.accent : Theme.textDim.opacity(0.55)
+    }
+}
+
 struct MainView: View {
     @EnvironmentObject var manager: SessionManager
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @StateObject var vm = MainViewModel()
-    @State var sidebarWidth: CGFloat = AppConstants.Layout.preferredSidebarWidth
+    @AppStorage("sidebarWidth") private var storedSidebarWidth: Double = Double(AppConstants.Layout.preferredSidebarWidth)
+    @State private var liveSidebarWidth: CGFloat?
+    @State private var sidebarResizeOriginWidth: CGFloat?
+    @State private var isSidebarResizing = false
+    @State private var liveSplitTopHeight: CGFloat?
+    @State private var splitResizeOriginHeight: CGFloat?
+    @State private var isSplitResizing = false
     @State var viewModeBeforeEdit: Int?
     @Environment(\.openWindow) var openWindow
 
@@ -19,7 +82,11 @@ struct MainView: View {
     var sessionNotifications: SessionNotificationManager { vm.sessionNotifications }
 
     var chromeAnimation: Animation {
-        reduceMotion ? .linear(duration: 0.01) : .easeInOut(duration: 0.2)
+        reduceMotion ? .linear(duration: 0.01) : .easeInOut(duration: 0.18)
+    }
+
+    var sidebarWidth: CGFloat {
+        liveSidebarWidth ?? CGFloat(storedSidebarWidth)
     }
 
     @ViewBuilder
@@ -36,18 +103,24 @@ struct MainView: View {
 
                 HStack(spacing: 0) {
                     if !vm.sidebarCollapsed {
-                        SidebarView(forceCompact: forceCompactSidebar)
-                            .frame(width: effectiveSidebarWidth)
-                            .clipped()
-                            .transition(.move(edge: .leading))
+                        HStack(spacing: 0) {
+                            SidebarView(forceCompact: forceCompactSidebar)
+                                .frame(width: effectiveSidebarWidth)
+                                .clipped()
+                                .geometryGroup()
+                                .transition(.move(edge: .leading).combined(with: .opacity))
+                                .transaction { t in if isSidebarResizing { t.animation = nil } }
 
-                        Rectangle().fill(Theme.border).frame(width: 1)
+                            sidebarResizeHandle(
+                                totalWidth: geometry.size.width,
+                                currentWidth: effectiveSidebarWidth
+                            )
+                        }
                     }
 
                     ZStack {
                         if let panelId = vm.activePluginPanelId,
                            let panel = pluginHost.panels.first(where: { $0.id == panelId }) {
-                            // 플러그인 패널 표시
                             VStack(spacing: 0) {
                                 pluginPanelHeader(panel)
                                 PluginPanelView(htmlURL: panel.htmlURL, pluginName: panel.pluginName)
@@ -66,14 +139,16 @@ struct MainView: View {
                             }
                         }
                     }
+                    .geometryGroup()
+                    .transaction { t in if isSidebarResizing { t.animation = nil } }
                 }
+                .environment(\.isResizing, isSidebarResizing || isSplitResizing)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             statusBar
         }
         .background(Theme.bg)
-        .compositingGroup()
         .ignoresSafeArea(.all, edges: .top)
         .background(WindowConfigurator())
     }
@@ -193,8 +268,12 @@ struct MainView: View {
                 DispatchQueue.global(qos: .userInitiated).async {
                     ClaudeInstallChecker.shared.check()
                     CodexInstallChecker.shared.check()
+                    GeminiInstallChecker.shared.check()
                     DispatchQueue.main.async { [vm] in
-                        if !ClaudeInstallChecker.shared.isInstalled && !CodexInstallChecker.shared.isInstalled {
+                        let noneInstalled = !ClaudeInstallChecker.shared.isInstalled
+                            && !CodexInstallChecker.shared.isInstalled
+                            && !GeminiInstallChecker.shared.isInstalled
+                        if noneInstalled {
                             vm.showClaudeNotInstalledAlert = true
                         }
                     }
@@ -293,52 +372,132 @@ struct MainView: View {
 
     // MARK: - Split View (기본 모드: 오피스 + 터미널)
 
+    private func sidebarResizeHandle(totalWidth: CGFloat, currentWidth: CGFloat) -> some View {
+        AppResizeHandle(direction: .horizontal, isActive: isSidebarResizing)
+            .frame(width: 10)
+            .background(Theme.bgCard)
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        let originWidth = sidebarResizeOriginWidth ?? currentWidth
+                        if sidebarResizeOriginWidth == nil {
+                            sidebarResizeOriginWidth = originWidth
+                        }
+
+                        let proposedWidth = originWidth + value.translation.width
+                        let clampedWidth = vm.protectedSidebarWidth(
+                            totalWidth: totalWidth,
+                            sidebarWidth: proposedWidth
+                        )
+                        var t = Transaction()
+                        t.animation = nil
+                        withTransaction(t) {
+                            liveSidebarWidth = clampedWidth
+                            isSidebarResizing = true
+                        }
+                    }
+                    .onEnded { _ in
+                        if let live = liveSidebarWidth {
+                            storedSidebarWidth = Double(live)
+                        }
+                        liveSidebarWidth = nil
+                        sidebarResizeOriginWidth = nil
+                        isSidebarResizing = false
+                    }
+            )
+    }
+
+    private func splitResizeHandle(totalHeight: CGFloat, currentHeight: CGFloat) -> some View {
+        AppResizeHandle(direction: .vertical, isActive: isSplitResizing)
+            .frame(height: 10)
+            .background(Theme.bgCard)
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        let originHeight = splitResizeOriginHeight ?? currentHeight
+                        if splitResizeOriginHeight == nil {
+                            splitResizeOriginHeight = originHeight
+                        }
+
+                        let clamped = vm.protectedSplitTopHeight(
+                            totalHeight: totalHeight,
+                            proposedHeight: originHeight + value.translation.height
+                        )
+                        var t = Transaction()
+                        t.animation = nil
+                        withTransaction(t) {
+                            liveSplitTopHeight = clamped
+                            isSplitResizing = true
+                        }
+                    }
+                    .onEnded { _ in
+                        if let live = liveSplitTopHeight {
+                            vm.updateSplitTopHeight(live, totalHeight: totalHeight)
+                        }
+                        liveSplitTopHeight = nil
+                        splitResizeOriginHeight = nil
+                        isSplitResizing = false
+                    }
+            )
+    }
+
     private var splitView: some View {
-        VStack(spacing: 0) {
-            ZStack(alignment: .bottomTrailing) {
-                OfficeSceneView()
+        GeometryReader { geometry in
+            let topHeight = liveSplitTopHeight ?? vm.currentSplitTopHeight(totalHeight: geometry.size.height)
+            let isExpanded = topHeight > (AppConstants.Layout.officeCollapsedHeight + AppConstants.Layout.officeExpandedHeight) / 2
 
-                // 오피스 시점 + 확장/축소 버튼
-                HStack(spacing: 3) {
-                    // 전체 맵 ↔ 포커스 시점 토글
-                    Button(action: {
-                        withAnimation(chromeAnimation) {
-                            settings.officeViewMode = settings.officeViewMode == "grid" ? "side" : "grid"
-                        }
-                    }) {
-                        Image(systemName: settings.officeViewMode == "grid" ? "scope" : "rectangle.expand.vertical")
-                            .font(.system(size: Theme.iconSize(10), weight: .bold))
-                            .foregroundColor(Theme.textDim.opacity(0.6))
-                            .frame(width: 26, height: 20)
-                            .background(RoundedRectangle(cornerRadius: 5).fill(Theme.bgCard.opacity(0.7)))
-                            .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.border.opacity(0.3), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                    .help(settings.officeViewMode == "grid" ? NSLocalizedString("main.office.focus.toggle", comment: "") : NSLocalizedString("main.office.grid.toggle", comment: ""))
+            VStack(spacing: 0) {
+                ZStack(alignment: .bottomTrailing) {
+                    OfficeSceneView()
+                        .geometryGroup()
 
-                    // 확장/축소
-                    Button(action: {
-                        withAnimation(chromeAnimation) {
-                            vm.officeExpanded.toggle()
+                    // 오피스 시점 + 확장/축소 버튼
+                    HStack(spacing: 3) {
+                        // 전체 맵 ↔ 포커스 시점 토글
+                        Button(action: {
+                            withAnimation(chromeAnimation) {
+                                settings.officeViewMode = settings.officeViewMode == "grid" ? "side" : "grid"
+                            }
+                        }) {
+                            Image(systemName: settings.officeViewMode == "grid" ? "scope" : "rectangle.expand.vertical")
+                                .font(.system(size: Theme.iconSize(10), weight: .bold))
+                                .foregroundColor(Theme.textDim.opacity(0.6))
+                                .frame(width: 26, height: 20)
+                                .background(RoundedRectangle(cornerRadius: 5).fill(Theme.bgCard.opacity(0.7)))
+                                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.border.opacity(0.3), lineWidth: 1))
                         }
-                    }) {
-                        Image(systemName: vm.officeExpanded ? "chevron.up.2" : "chevron.down.2")
-                            .font(.system(size: Theme.iconSize(10), weight: .bold))
-                            .foregroundColor(Theme.textDim.opacity(0.5))
-                            .frame(width: 26, height: 20)
-                            .background(RoundedRectangle(cornerRadius: 5).fill(Theme.bgCard.opacity(0.7)))
-                            .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.border.opacity(0.3), lineWidth: 1))
+                        .buttonStyle(.plain)
+                        .help(settings.officeViewMode == "grid" ? NSLocalizedString("main.office.focus.toggle", comment: "") : NSLocalizedString("main.office.grid.toggle", comment: ""))
+
+                        // 확장/축소
+                        Button(action: {
+                            withAnimation(chromeAnimation) {
+                                vm.toggleSplitTopHeight(totalHeight: geometry.size.height)
+                            }
+                        }) {
+                            Image(systemName: isExpanded ? "chevron.up.2" : "chevron.down.2")
+                                .font(.system(size: Theme.iconSize(10), weight: .bold))
+                                .foregroundColor(Theme.textDim.opacity(0.5))
+                                .frame(width: 26, height: 20)
+                                .background(RoundedRectangle(cornerRadius: 5).fill(Theme.bgCard.opacity(0.7)))
+                                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.border.opacity(0.3), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .help(isExpanded ? NSLocalizedString("main.office.shrink", comment: "") : NSLocalizedString("main.office.expand", comment: ""))
                     }
-                    .buttonStyle(.plain)
-                    .help(vm.officeExpanded ? NSLocalizedString("main.office.shrink", comment: "") : NSLocalizedString("main.office.expand", comment: ""))
+                    .padding(4)
                 }
-                .padding(4)
-            }
-            .frame(height: vm.officeHeight)
-            .clipped()
+                .frame(height: topHeight)
+                .clipped()
+                .transaction { t in if isSplitResizing { t.animation = nil } }
 
-            Rectangle().fill(Theme.border).frame(height: 1)
-            TerminalAreaView()
+                splitResizeHandle(totalHeight: geometry.size.height, currentHeight: topHeight)
+
+                TerminalAreaView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .geometryGroup()
+                    .transaction { t in if isSplitResizing { t.animation = nil } }
+            }
         }
     }
 

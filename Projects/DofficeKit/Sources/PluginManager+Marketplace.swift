@@ -10,14 +10,29 @@ extension PluginManager {
         plugins.compactMap { plugin in
             guard plugin.enabled else { return nil }
 
-            if let bundledID = Self.bundledPluginID(from: plugin.source),
-               let bundledPath = Self.resolvedBundledRuntimePath(id: bundledID) {
-                return bundledPath
+            if let bundledID = Self.bundledPluginID(from: plugin.source) {
+                if let bundledPath = Self.resolvedBundledRuntimePath(id: bundledID) {
+                    return bundledPath
+                }
+                CrashLogger.shared.warning("PluginManager: Bundled plugin '\(plugin.name)' (\(bundledID)) path not resolved — plugin will not load")
+                return nil
             }
 
-            guard FileManager.default.fileExists(atPath: plugin.localPath) else { return nil }
+            guard FileManager.default.fileExists(atPath: plugin.localPath) else {
+                CrashLogger.shared.warning("PluginManager: Plugin '\(plugin.name)' path missing — \(plugin.localPath)")
+                return nil
+            }
             return plugin.localPath
         }
+    }
+
+    /// 플러그인의 실제 디스크 경로를 해석. 경로가 유효하지 않으면 nil 반환.
+    public func resolvedPath(for plugin: PluginEntry) -> String? {
+        if let bundledID = Self.bundledPluginID(from: plugin.source) {
+            return Self.resolvedBundledRuntimePath(id: bundledID)
+        }
+        let path = plugin.localPath
+        return FileManager.default.fileExists(atPath: path) ? path : nil
     }
 
     // MARK: - 마켓플레이스 (레지스트리)

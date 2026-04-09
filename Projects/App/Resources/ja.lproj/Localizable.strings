@@ -152,7 +152,7 @@
 "toast.pull.requested" = "プルリクエスト済み";
 
 /* Claude */
-"claude.not.installed" = "Claude Code未インストール";
+"claude.not.installed" = "AIエージェント未インストール";
 "claude.install.guide" = "以下のコマンドでインストールしてください:";
 
 /* Office view */
@@ -411,6 +411,8 @@
 "terminal.project.name.a11y" = "プロジェクト名";
 "terminal.config.execution" = "実行設定";
 "terminal.config.execution.subtitle" = "モデル、推論強度、権限モードを同じ場所で管理します。";
+"terminal.agent.not.installed" = "未インストール";
+"terminal.agent.none.installed" = "利用可能なAIエージェントがありません。1つ以上インストールしてください。";
 "terminal.config.model" = "モデル";
 "terminal.config.model.recommended" = "推奨";
 "terminal.config.permission" = "権限";
@@ -1345,6 +1347,8 @@
 "overlay.notif.error" = "%@ エラー";
 "overlay.notif.approval.needed" = "%@ 承認が必要";
 "overlay.notif.approval.waiting" = "%@ の実行承認を待っています";
+"overlay.notif.arrival" = "%@ 出勤!";
+"overlay.notif.arrival.detail" = "%@ として参加しました";
 
 /* OnboardingView */
 "onboard.skip" = "スキップ";
@@ -1423,6 +1427,11 @@
 "update.close" = "閉じる";
 "update.retry" = "リトライ";
 "update.ok" = "確認";
+"update.skip.version" = "このバージョンをスキップ";
+"update.error.timeout" = "サーバーの応答がタイムアウトしました。しばらくしてから再試行してください。";
+"update.error.network" = "インターネット接続を確認してください。";
+"update.error.disk" = "ディスク容量が不足しています。";
+"update.bundle.corrupted" = "ダウンロードされたアプリバンドルが破損しています。";
 
 /* MenuBarWidget */
 "menubar.a11y" = "ドフィス";
@@ -2423,6 +2432,11 @@
 "plugin.error.install.failed" = "インストール失敗: %@";
 "plugin.error.tap.failed" = "タップ追加失敗: %@";
 "plugin.error.path.not.found" = "インストールパスが見つかりません。";
+"plugin.path.missing" = "プラグインパスが見つかりません";
+"plugin.path.missing.detail" = "パスが存在しません: %@";
+"plugin.reinstall" = "再インストール";
+"plugin.reinstall.manual" = "ローカルプラグインは自動再インストールできません。手動でフォルダを再指定してください。";
+"plugin.open.folder" = "プラグインフォルダを開く";
 "plugin.error.invalid.tap" = "無効なtap形式です。user/tap/formula形式を使用してください。";
 "plugin.error.invalid.url" = "無効なURLです。";
 "plugin.error.download.failed" = "ダウンロード失敗: %@";
@@ -2557,7 +2571,7 @@
 "theme.custom.preview" = "Dofficeカスタムテーマプレビュー";
 
 /* Claude Install */
-"claude.install.message" = "Claude Code CLIがインストールされていません。\n\nターミナルで以下のコマンドを実行してインストールしてください:\n\nnpm install -g @anthropic-ai/claude-code\n\nすでにインストール済みでこのメッセージが表示される場合:\n• PATHが正しく設定されていない可能性があります\n• ターミナルで'which claude'を実行してパスを確認してください\n• nvm/fnmなどのバージョンマネージャを使用している場合、シェルプロファイル(.zshrc)に初期化コードがあるか確認してください\n\nインストール後「再試行」ボタンを押してください。";
+"claude.install.message" = "AIエージェント（Claude、Codex、Gemini）がインストールされていません。\n\nターミナルで以下のいずれかをインストールしてください:\n\n• Claude: npm install -g @anthropic-ai/claude-code\n• Codex: npm install -g @openai/codex\n• Gemini: npm install -g @google/gemini-cli\n\nすでにインストール済みでこのメッセージが表示される場合:\n• PATHが正しく設定されていない可能性があります\n• nvm/fnmなどのバージョンマネージャを使用している場合、シェルプロファイル(.zshrc)に初期化コードがあるか確認してください\n\nインストール後「再試行」ボタンを押してください。";
 
 /* App Quit */
 "quit.running.title" = "実行中のタスクが%d件あります";

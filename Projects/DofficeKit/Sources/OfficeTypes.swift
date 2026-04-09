@@ -218,6 +218,25 @@ public enum OfficeSocialMode: Equatable {
     case brainstorming
     case coffee
     case highFive
+    case arguing         // 열띤 토론 (화이트보드 앞)
+    case napping         // 같이 졸기 (소파 근처)
+    case dancing         // 축하 댄스 (완료 전파)
+    case snacking        // 간식 나눠먹기 (커피머신/냉장고 근처)
+    case photoTime       // 셀카/사진 찍기 (가끔 발생하는 레어 이벤트)
+    case flirting        // 사내연애 (높은 친밀도)
+    case pettingCat      // 고양이 쓰다듬기
+}
+
+/// 캐릭터가 가구와 상호작용할 때의 시각적 피드백 타입
+public enum FurnitureInteractionType: Equatable {
+    case drinkingCoffee      // ☕ 커피 마시기
+    case drinkingWater       // 💧 물 마시기
+    case readingBook         // 📚 책 읽기
+    case relaxingOnSofa      // 😴 소파에서 쉬기
+    case usingPrinter        // 🖨️ 프린터 사용
+    case checkingWhiteboard  // 📋 화이트보드 확인
+    case throwingTrash       // 🗑️ 쓰레기 버리기
+    case wateringPlant       // 🌿 식물 물주기
 }
 
 public enum OfficeDestinationPurpose: Equatable {
@@ -273,6 +292,16 @@ public struct OfficeCharacter {
     public var socialFocusTile: TileCoord? = nil
     public var recentBreakTargets: [TileCoord] = []
 
+    // 가구 상호작용 시각 피드백
+    public var furnitureInteraction: FurnitureInteractionType? = nil
+    public var furnitureInteractionTimer: Double = 0
+
+    // 축하 전파
+    public var celebrationReactTimer: Double = 0
+
+    // 고양이와의 상호작용
+    public var pettingCatTimer: Double = 0
+
     // 다중 세션 순회 (비개발자 병렬 작업)
     public var patrolSeatIds: [String] = []   // 순회할 좌석 ID 목록
     public var patrolIndex: Int = 0            // 현재 순회 인덱스
@@ -304,6 +333,79 @@ public struct OfficeCharacter {
         self.seatId = seatId; self.moveProgress = moveProgress; self.isActive = isActive
         self.activity = activity; self.destinationPurpose = destinationPurpose; self.stateHoldTimer = stateHoldTimer
         self.seatTimer = seatTimer
+    }
+}
+
+// MARK: - Office Cat (사무실 고양이)
+
+public struct OfficeCat {
+    public var pixelX: CGFloat
+    public var pixelY: CGFloat
+    public var tileCol: Int
+    public var tileRow: Int
+    public var dir: Direction = .down
+    public var frame: Int = 0
+    public var frameTimer: Double = 0
+    public var moveProgress: CGFloat = 0
+    public var path: [TileCoord] = []
+    public var state: CatState = .idle
+    public var stateTimer: Double = 3.0
+    public var targetCharacterKey: String? = nil  // 다가가려는 캐릭터
+    public var isOnFurniture: Bool = false
+
+    public var tileCoord: TileCoord { TileCoord(col: tileCol, row: tileRow) }
+    public var zY: CGFloat { pixelY + OfficeConstants.tileSize / 2 }
+
+    public enum CatState: Equatable {
+        case idle           // 가만히 앉아있기
+        case walking        // 돌아다니기
+        case sleeping       // 잠자기 (가구 위에서)
+        case playing        // 장난치기
+        case approaching    // 캐릭터에게 다가가기
+        case beingPetted    // 쓰다듬받기
+        case stretching     // 기지개
+    }
+
+    public init(pixelX: CGFloat, pixelY: CGFloat, tileCol: Int, tileRow: Int) {
+        self.pixelX = pixelX
+        self.pixelY = pixelY
+        self.tileCol = tileCol
+        self.tileRow = tileRow
+    }
+}
+
+// MARK: - Character Relationship (캐릭터 간 친밀도)
+
+/// 캐릭터 쌍의 친밀도를 추적 (소셜 상호작용마다 증가)
+public class RelationshipTracker {
+    public static let shared = RelationshipTracker()
+
+    /// 친밀도 저장: "charA_charB" → 점수 (0~100)
+    private var affinities: [String: Int] = [:]
+
+    /// 친밀도 임계값
+    public static let flirtThreshold = 30     // 이 이상이면 flirting 가능
+    public static let coupleThreshold = 60    // 이 이상이면 커플 이벤트
+
+    private func key(for a: String, _ b: String) -> String {
+        a < b ? "\(a)_\(b)" : "\(b)_\(a)"
+    }
+
+    public func affinity(between a: String, and b: String) -> Int {
+        affinities[key(for: a, b)] ?? 0
+    }
+
+    public func increaseAffinity(between a: String, and b: String, by amount: Int = 1) {
+        let k = key(for: a, b)
+        affinities[k] = min(100, (affinities[k] ?? 0) + amount)
+    }
+
+    /// 가장 친밀한 쌍 반환
+    public func bestCouple() -> (a: String, b: String, score: Int)? {
+        guard let best = affinities.max(by: { $0.value < $1.value }), best.value >= Self.coupleThreshold else { return nil }
+        let parts = best.key.split(separator: "_")
+        guard parts.count == 2 else { return nil }
+        return (String(parts[0]), String(parts[1]), best.value)
     }
 }
 
@@ -377,13 +479,15 @@ public enum OfficeConstants {
     public static let relaxedWanderMovesMax: Int = 7
     public static let relaxedSeatRestMin: Double = 1.5
     public static let relaxedSeatRestMax: Double = 4.0
-    public static let socialInteractionMin: Double = 2.5
-    public static let socialInteractionMax: Double = 5.5
-    public static let socialCooldownMin: Double = 4.0
-    public static let socialCooldownMax: Double = 8.5
-    public static let socialEventCooldownMin: Double = 1.4
-    public static let socialEventCooldownMax: Double = 3.2
-    public static let socialScanInterval: Double = 1.5
+    public static let socialInteractionMin: Double = 2.0
+    public static let socialInteractionMax: Double = 6.0
+    public static let socialCooldownMin: Double = 2.5
+    public static let socialCooldownMax: Double = 6.0
+    public static let socialEventCooldownMin: Double = 0.8
+    public static let socialEventCooldownMax: Double = 2.2
+    public static let socialScanInterval: Double = 1.0
+    public static let celebrationReactDelay: Double = 0.6
+    public static let celebrationReactRange: Int = 5
     public static let recentBreakTargetLimit: Int = 3
     public static let fps: Double = 24.0
     public static let charSittingOffset: CGFloat = 3    // 앉을 때 Y 오프셋

@@ -87,11 +87,18 @@ public struct NewTabSheet: View {
     }
 
     func providerSubtitle(_ provider: AgentProvider) -> String {
+        let checker = provider.installChecker
+        let version = checker.version
+        let base: String
         switch provider {
-        case .claude: return "Claude Code CLI"
-        case .codex: return "Codex CLI"
-        case .gemini: return "Gemini CLI"
+        case .claude: base = "Claude Code CLI"
+        case .codex: base = "Codex CLI"
+        case .gemini: base = "Gemini CLI"
         }
+        if checker.isInstalled, !version.isEmpty {
+            return "\(base) · \(version)"
+        }
+        return base
     }
 
     func providerSymbol(_ provider: AgentProvider) -> String {
@@ -144,6 +151,10 @@ public struct NewTabSheet: View {
         .onAppear {
             isCreatingSessions = false
             bootstrapFromLastDraftIfNeeded()
+            // 현재 선택된 프로바이더가 미설치면 설치된 프로바이더로 전환
+            if !selectedProvider.installChecker.isInstalled {
+                selectedModel = AgentProvider.firstInstalled.defaultModel
+            }
         }
         .alert(
             unavailableProviderAlert?.selectionUnavailableTitle ?? "",

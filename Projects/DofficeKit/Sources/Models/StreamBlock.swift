@@ -6,6 +6,11 @@ import SwiftUI
 
 /// 실시간 이벤트 블록 - 각 블록은 UI에서 독립적으로 렌더링됨
 public struct StreamBlock: Identifiable {
+    public enum PresentationStyle: String, Equatable {
+        case normal
+        case secret
+    }
+
     public let id = UUID()
     public let timestamp = Date()
     public let blockType: BlockType
@@ -13,6 +18,7 @@ public struct StreamBlock: Identifiable {
     public var isComplete: Bool = false
     public var isError: Bool = false
     public var exitCode: Int?
+    public var presentationStyle: PresentationStyle = .normal
 
     public enum BlockType: Equatable {
         case sessionStart(model: String, sessionId: String)
@@ -29,9 +35,10 @@ public struct StreamBlock: Identifiable {
         case userPrompt                 // 사용자 입력
     }
 
-    public init(type: BlockType, content: String = "") {
+    public init(type: BlockType, content: String = "", presentationStyle: PresentationStyle = .normal) {
         self.blockType = type
         self.content = content
+        self.presentationStyle = presentationStyle
     }
 
     public mutating func append(_ text: String) {

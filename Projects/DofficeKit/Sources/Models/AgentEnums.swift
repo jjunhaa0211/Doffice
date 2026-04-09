@@ -117,6 +117,11 @@ public enum AgentProvider: String, CaseIterable, Identifiable {
         return installChecker.isInstalled
     }
 
+    /// 설치된 프로바이더 중 첫 번째를 반환. 모두 미설치면 `.claude` 폴백.
+    public static var firstInstalled: AgentProvider {
+        allCases.first { $0.installChecker.isInstalled } ?? .claude
+    }
+
     public var shellLabel: String {
         switch self {
         case .claude: return "claude"

@@ -8,8 +8,10 @@ import DesignSystem
 public class OfficeCharacterController: ObservableObject {
     @Published public var characters: [String: OfficeCharacter] = [:]
     @Published public var celebrationTimer: Double = 0
+    @Published public var officeCat: OfficeCat?
     public let map: OfficeMap
     private let registry = CharacterRegistry.shared
+    private let relationships = RelationshipTracker.shared
     private var walkableTiles: [TileCoord] = []
     private var pantryAndMeetingTiles: [TileCoord] = []
     private var socialHotspotTiles: [TileCoord] = []
@@ -20,6 +22,7 @@ public class OfficeCharacterController: ObservableObject {
     private var seatAssignmentsByGroup: [String: String] = [:]
     private var socialEventCooldown: Double = 0
     private var socialScanCooldown: Double = 0
+    private var catSpawnTimer: Double = 30.0  // 30초 후 고양이 출현
 
     public init(map: OfficeMap) {
         self.map = map
@@ -546,6 +549,21 @@ public class OfficeCharacterController: ObservableObject {
             if ch.stateHoldTimer > 0 {
                 ch.stateHoldTimer = max(0, ch.stateHoldTimer - deltaTime)
             }
+            // 가구 상호작용 타이머
+            if ch.furnitureInteractionTimer > 0 {
+                ch.furnitureInteractionTimer -= deltaTime
+                if ch.furnitureInteractionTimer <= 0 {
+                    ch.furnitureInteraction = nil
+                }
+            }
+            // 축하 전파 타이머
+            if ch.celebrationReactTimer > 0 {
+                ch.celebrationReactTimer -= deltaTime
+            }
+            // 고양이 쓰다듬기 타이머
+            if ch.pettingCatTimer > 0 {
+                ch.pettingCatTimer -= deltaTime
+            }
             advanceAmbientPresence(id: id, character: &ch, dt: deltaTime)
 
             switch ch.state {
@@ -650,8 +668,12 @@ public class OfficeCharacterController: ObservableObject {
 
         if socialScanCooldown <= 0 {
             updateAmbientInteractions()
+            spreadCelebration()
             socialScanCooldown = OfficeConstants.socialScanInterval
         }
+
+        // 고양이 시스템
+        updateOfficeCat(dt: deltaTime)
     }
 
     // MARK: - Walking
@@ -745,14 +767,16 @@ public class OfficeCharacterController: ObservableObject {
             rememberBreakTarget(target, for: &ch)
             ch.state = .onBreak
             ch.wanderTimer = breakStayDuration()
+            // 가구 근처에 도착하면 상호작용 시각 피드백 설정
+            assignFurnitureInteraction(for: &ch, at: target)
         }
     }
 
     private func startWander(_ ch: inout OfficeCharacter) {
         guard !walkableTiles.isEmpty else { return }
 
-        // 30% 확률로 가구 이벤트 시도
-        if !ch.isActive, Double.random(in: 0...1) < 0.3 {
+        // 50% 확률로 가구 이벤트 시도 (더 자주 상호작용)
+        if !ch.isActive, Double.random(in: 0...1) < 0.5 {
             let interactions = map.availableInteractions()
             if let (furniture, event) = interactions.randomElement(),
                let tile = map.interactionTile(for: furniture) {
@@ -1150,13 +1174,7 @@ public class OfficeCharacterController: ObservableObject {
     }
 
     private func colorToHex(_ color: Color) -> String {
-        guard let converted = NSColor(color).usingColorSpace(.sRGB) else { return "5B9CF6" }
-        return String(
-            format: "%02X%02X%02X",
-            Int(converted.redComponent * 255),
-            Int(converted.greenComponent * 255),
-            Int(converted.blueComponent * 255)
-        )
+        color.hexString
     }
 
     // MARK: - Helpers
@@ -1250,7 +1268,7 @@ public class OfficeCharacterController: ObservableObject {
         guard socialEventCooldown <= 0 else { return }
 
         let activeSocialParticipants = characters.values.filter { $0.socialTimer > 0 }.count
-        guard activeSocialParticipants < 4 else { return }
+        guard activeSocialParticipants < 8 else { return }
 
         let candidates = characters
             .filter { canStartSocialInteraction($0.value) }
@@ -1303,6 +1321,11 @@ public class OfficeCharacterController: ObservableObject {
     private func startSocialInteraction(between lhsId: String, and rhsId: String) {
         guard var lhs = characters[lhsId], var rhs = characters[rhsId] else { return }
 
+        // 친밀도 증가
+        let lhsName = lhs.rosterCharacterId ?? lhsId
+        let rhsName = rhs.rosterCharacterId ?? rhsId
+        relationships.increaseAffinity(between: lhsName, and: rhsName, by: Int.random(in: 1...3))
+
         let scenario = socialScenario(for: lhs, rhs)
         let duration = socialInteractionDuration()
 
@@ -1346,30 +1369,67 @@ public class OfficeCharacterController: ObservableObject {
         let zone = map.zoneAt(lhs.tileCoord) ?? map.zoneAt(rhs.tileCoord)
         let recentTiles = lhs.recentBreakTargets + rhs.recentBreakTargets
 
+        // 축하 전파: 한 쪽이 최근 축하 반응 중이면 dancing
+        if lhs.celebrationReactTimer > 0 || rhs.celebrationReactTimer > 0 {
+            return (.dancing, nil)
+        }
+
+        // 친밀도 기반 사내연애 이벤트
+        let lhsName = lhs.rosterCharacterId ?? lhs.seatGroupKey
+        let rhsName = rhs.rosterCharacterId ?? rhs.seatGroupKey
+        let affinity = relationships.affinity(between: lhsName, and: rhsName)
+        if affinity >= RelationshipTracker.flirtThreshold, Int.random(in: 0..<100) < min(affinity / 2, 40) {
+            return (.flirting, nil)
+        }
+
+        // 고양이가 근처에 있으면 같이 쓰다듬기
+        if let cat = officeCat, cat.state != .sleeping,
+           lhs.tileCoord.distance(to: cat.tileCoord) <= 3 || rhs.tileCoord.distance(to: cat.tileCoord) <= 3 {
+            if Int.random(in: 0..<100) < 25 {
+                return (.pettingCat, nil)
+            }
+        }
+
+        // 소파 근처에서 둘 다 onBreak → 같이 졸기 (20% 확률)
+        if lhs.state == .onBreak && rhs.state == .onBreak,
+           let sofaTile = bestInteractionTile(for: [.sofa], from: lhs.tileCoord, avoiding: recentTiles),
+           max(lhs.tileCoord.distance(to: sofaTile), rhs.tileCoord.distance(to: sofaTile)) <= 3,
+           Int.random(in: 0..<100) < 20 {
+            return (.napping, sofaTile)
+        }
+
+        // 팬트리에서 커피머신/워터쿨러 근처 → coffee 또는 snacking
         if zone == .pantry,
            let focusTile = bestInteractionTile(for: [.coffeeMachine, .waterCooler], from: lhs.tileCoord, avoiding: recentTiles),
            max(lhs.tileCoord.distance(to: focusTile), rhs.tileCoord.distance(to: focusTile)) <= 5 {
-            return (.coffee, focusTile)
+            return (Int.random(in: 0..<100) < 40 ? .snacking : .coffee, focusTile)
         }
 
+        // 미팅룸에서 화이트보드 앞 → brainstorming 또는 arguing
         if zone == .meetingRoom,
            let focusTile = bestInteractionTile(for: [.roundTable, .whiteboard], from: lhs.tileCoord, avoiding: recentTiles),
            max(lhs.tileCoord.distance(to: focusTile), rhs.tileCoord.distance(to: focusTile)) <= 5 {
-            return (.brainstorming, focusTile)
+            return (Int.random(in: 0..<100) < 30 ? .arguing : .brainstorming, focusTile)
         }
 
+        // 가까이 있으면 하이파이브
         if lhs.tileCoord.distance(to: rhs.tileCoord) <= 1, Int.random(in: 0..<100) < 35 {
             return (.highFive, nil)
+        }
+
+        // 레어 이벤트: 사진 찍기 (3% 확률)
+        if Int.random(in: 0..<100) < 3 {
+            return (.photoTime, nil)
         }
 
         let options: [OfficeSocialMode]
         switch zone {
         case .pantry:
-            options = [.chatting, .greeting, .highFive]
+            options = [.chatting, .greeting, .highFive, .snacking]
         case .meetingRoom:
-            options = [.brainstorming, .chatting, .greeting]
+            options = [.brainstorming, .chatting, .greeting, .arguing]
         default:
-            options = [.greeting, .chatting, .highFive]
+            options = [.greeting, .chatting, .highFive, .dancing]
         }
         return (options.randomElement() ?? .chatting, nil)
     }
@@ -1584,6 +1644,249 @@ public class OfficeCharacterController: ObservableObject {
     private func shouldKeepRoamingOffSeat(_ character: OfficeCharacter) -> Bool {
         guard character.isRosterOnly else { return false }
         return registry.character(with: character.rosterCharacterId)?.isOnVacation == true
+    }
+
+    // MARK: - Office Cat System
+
+    private func updateOfficeCat(dt: Double) {
+        // 고양이 스폰
+        if officeCat == nil {
+            catSpawnTimer -= dt
+            if catSpawnTimer <= 0 {
+                spawnOfficeCat()
+                catSpawnTimer = Double.random(in: 60...180) // 다음 스폰까지
+            }
+            return
+        }
+
+        guard var cat = officeCat else { return }
+        cat.frameTimer += dt
+        cat.stateTimer -= dt
+
+        switch cat.state {
+        case .idle:
+            if cat.stateTimer <= 0 {
+                // 다음 행동 결정
+                let roll = Int.random(in: 0..<100)
+                if roll < 25 {
+                    // 가구 위에서 잠자기
+                    if let sofaTile = bestInteractionTile(for: [.sofa, .rug], from: cat.tileCoord) {
+                        catStartWalking(&cat, to: sofaTile)
+                        cat.state = .walking
+                        cat.isOnFurniture = true
+                    } else {
+                        cat.stateTimer = Double.random(in: 2...5)
+                    }
+                } else if roll < 55 {
+                    // 근처 캐릭터에게 다가가기
+                    if let targetKey = nearestIdleCharacter(from: cat.tileCoord) {
+                        cat.targetCharacterKey = targetKey
+                        if let targetChar = characters[targetKey] {
+                            let path = map.findPath(from: cat.tileCoord, to: targetChar.tileCoord)
+                            if !path.isEmpty {
+                                cat.path = path
+                                cat.state = .approaching
+                            } else {
+                                cat.stateTimer = Double.random(in: 2...4)
+                            }
+                        }
+                    } else {
+                        cat.stateTimer = Double.random(in: 2...5)
+                    }
+                } else if roll < 75 {
+                    // 기지개
+                    cat.state = .stretching
+                    cat.stateTimer = Double.random(in: 1.5...3.0)
+                } else {
+                    // 돌아다니기
+                    if let target = randomCatWanderTarget(from: cat.tileCoord) {
+                        catStartWalking(&cat, to: target)
+                    } else {
+                        cat.stateTimer = Double.random(in: 2...4)
+                    }
+                }
+            }
+
+        case .walking:
+            advanceCatWalking(&cat, dt: dt)
+            if cat.path.isEmpty {
+                if cat.isOnFurniture {
+                    cat.state = .sleeping
+                    cat.stateTimer = Double.random(in: 8...20)
+                } else {
+                    cat.state = .idle
+                    cat.stateTimer = Double.random(in: 3...8)
+                    cat.isOnFurniture = false
+                }
+            }
+
+        case .sleeping:
+            if cat.stateTimer <= 0 {
+                cat.state = .stretching
+                cat.stateTimer = Double.random(in: 1.5...2.5)
+                cat.isOnFurniture = false
+            }
+
+        case .playing:
+            if cat.frameTimer >= 0.2 {
+                cat.frameTimer = 0
+                cat.frame = (cat.frame + 1) % 4
+            }
+            if cat.stateTimer <= 0 {
+                cat.state = .idle
+                cat.stateTimer = Double.random(in: 3...6)
+            }
+
+        case .approaching:
+            advanceCatWalking(&cat, dt: dt)
+            if cat.path.isEmpty {
+                cat.state = .beingPetted
+                cat.stateTimer = Double.random(in: 3...6)
+                // 근처 캐릭터가 쓰다듬기 반응
+                if let targetKey = cat.targetCharacterKey, var targetChar = characters[targetKey] {
+                    targetChar.pettingCatTimer = cat.stateTimer
+                    characters[targetKey] = targetChar
+                }
+            }
+
+        case .beingPetted:
+            if cat.stateTimer <= 0 {
+                cat.state = .idle
+                cat.stateTimer = Double.random(in: 5...10)
+                cat.targetCharacterKey = nil
+            }
+
+        case .stretching:
+            if cat.stateTimer <= 0 {
+                cat.state = .idle
+                cat.stateTimer = Double.random(in: 3...7)
+            }
+        }
+
+        officeCat = cat
+    }
+
+    private func spawnOfficeCat() {
+        let spawnTiles = pantryAndMeetingTiles.isEmpty ? walkableTiles : pantryAndMeetingTiles
+        guard let spawn = spawnTiles.randomElement() else { return }
+        let center = tileCenter(spawn)
+        officeCat = OfficeCat(pixelX: center.x, pixelY: center.y, tileCol: spawn.col, tileRow: spawn.row)
+    }
+
+    private func catStartWalking(_ cat: inout OfficeCat, to target: TileCoord) {
+        let path = map.findPath(from: cat.tileCoord, to: target)
+        guard !path.isEmpty else { return }
+        cat.path = path
+        cat.state = .walking
+        cat.frame = 0
+        cat.moveProgress = 0
+    }
+
+    private func advanceCatWalking(_ cat: inout OfficeCat, dt: Double) {
+        guard !cat.path.isEmpty else { return }
+        let next = cat.path[0]
+        let tx = CGFloat(next.col) * OfficeConstants.tileSize + OfficeConstants.tileSize / 2
+        let ty = CGFloat(next.row) * OfficeConstants.tileSize + OfficeConstants.tileSize / 2
+        let dx = tx - cat.pixelX
+        let dy = ty - cat.pixelY
+        let dist = sqrt(dx * dx + dy * dy)
+        let speed = OfficeConstants.walkSpeed * 0.6  // 고양이는 천천히
+        let step = max(0.5, speed * CGFloat(dt))
+
+        if dist <= step {
+            cat.pixelX = tx; cat.pixelY = ty
+            cat.tileCol = next.col; cat.tileRow = next.row
+            cat.path.removeFirst()
+        } else {
+            cat.pixelX += dx / dist * step
+            cat.pixelY += dy / dist * step
+        }
+
+        let moved = hypot(dx, dy)
+        cat.moveProgress += moved / OfficeConstants.tileSize
+        if cat.moveProgress > 64 { cat.moveProgress.formTruncatingRemainder(dividingBy: 4) }
+        cat.frame = Int((cat.moveProgress * 4).rounded(.down)) % 4
+
+        if abs(dx) > abs(dy) { cat.dir = dx > 0 ? .right : .left }
+        else { cat.dir = dy > 0 ? .down : .up }
+    }
+
+    private func nearestIdleCharacter(from origin: TileCoord) -> String? {
+        characters
+            .filter { !$0.value.isActive && !isWalkingState($0.value.state) && $0.value.socialTimer <= 0 }
+            .min(by: { $0.value.tileCoord.distance(to: origin) < $1.value.tileCoord.distance(to: origin) })?.key
+    }
+
+    private func randomCatWanderTarget(from origin: TileCoord) -> TileCoord? {
+        let candidates = walkableTiles.filter { $0.distance(to: origin) >= 3 && $0.distance(to: origin) <= 12 }
+        return candidates.randomElement()
+    }
+
+    // MARK: - Furniture Interaction Visual Feedback
+
+    /// 가구 근처에 도착했을 때 어떤 가구인지 파악하여 시각적 상호작용 타입을 설정
+    private func assignFurnitureInteraction(for ch: inout OfficeCharacter, at tile: TileCoord) {
+        let nearbyFurniture = map.furniture.first { furniture in
+            let interactionPts = interactionTiles(for: furniture)
+            return interactionPts.contains(tile)
+        }
+
+        guard let furniture = nearbyFurniture else {
+            ch.furnitureInteraction = nil
+            return
+        }
+
+        switch furniture.type {
+        case .coffeeMachine:
+            ch.furnitureInteraction = .drinkingCoffee
+            ch.furnitureInteractionTimer = 3.0
+        case .waterCooler:
+            ch.furnitureInteraction = .drinkingWater
+            ch.furnitureInteractionTimer = 2.5
+        case .bookshelf:
+            ch.furnitureInteraction = .readingBook
+            ch.furnitureInteractionTimer = 4.0
+        case .sofa:
+            ch.furnitureInteraction = .relaxingOnSofa
+            ch.furnitureInteractionTimer = 5.0
+        case .printer:
+            ch.furnitureInteraction = .usingPrinter
+            ch.furnitureInteractionTimer = 2.0
+        case .whiteboard:
+            ch.furnitureInteraction = .checkingWhiteboard
+            ch.furnitureInteractionTimer = 3.5
+        case .trashBin:
+            ch.furnitureInteraction = .throwingTrash
+            ch.furnitureInteractionTimer = 1.5
+        case .plant:
+            ch.furnitureInteraction = .wateringPlant
+            ch.furnitureInteractionTimer = 2.0
+        default:
+            ch.furnitureInteraction = nil
+        }
+    }
+
+    // MARK: - Celebration Spread
+
+    /// celebrating 상태인 캐릭터 근처의 비활성 캐릭터들이 반응하도록 트리거
+    private func spreadCelebration() {
+        let celebrators = characters.filter { $0.value.state == .celebrating && $0.value.stateHoldTimer > 0.5 }
+        guard !celebrators.isEmpty else { return }
+
+        for (_, celebrator) in celebrators {
+            for (id, var ch) in characters {
+                guard !ch.isActive,
+                      ch.socialTimer <= 0,
+                      ch.celebrationReactTimer <= 0,
+                      !isWalkingState(ch.state),
+                      ch.tileCoord.distance(to: celebrator.tileCoord) <= OfficeConstants.celebrationReactRange else { continue }
+
+                // 근처 비활성 캐릭터가 축하에 반응
+                ch.celebrationReactTimer = Double.random(in: 2.0...4.0)
+                face(&ch, toward: celebrator.tileCoord)
+                characters[id] = ch
+            }
+        }
     }
 
     private func mergedTiles(_ groups: [TileCoord]...) -> [TileCoord] {

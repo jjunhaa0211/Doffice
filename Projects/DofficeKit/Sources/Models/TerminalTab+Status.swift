@@ -113,7 +113,9 @@ extension TerminalTab {
 
     public var latestUserPromptText: String? {
         blocks.reversed().first {
-            if case .userPrompt = $0.blockType { return true }
+            if case .userPrompt = $0.blockType {
+                return $0.presentationStyle == .normal
+            }
             return false
         }?.content
     }

@@ -34,28 +34,52 @@ public final class EventStreamViewModel: ObservableObject {
 
     public static let filterToolNames = ["Bash", "Read", "Write", "Edit", "Grep", "Glob"]
 
-    // MARK: - Computed Blocks
+    // MARK: - Computed Blocks (Memoized)
+
+    private var cachedFilteredBlocks: [StreamBlock] = []
+    private var cacheKey: FilterCacheKey = .empty
+
+    private struct FilterCacheKey: Equatable {
+        var blockCount: Int = 0
+        var outputMode: OutputMode = .full
+        var filterToolTypes: Set<String> = []
+        var lastBlockId: UUID?
+        static let empty = FilterCacheKey()
+    }
 
     public func filteredBlocks(tab: TerminalTab) -> [StreamBlock] {
+        let key = FilterCacheKey(
+            blockCount: tab.blocks.count,
+            outputMode: tab.outputMode,
+            filterToolTypes: blockFilter.toolTypes,
+            lastBlockId: tab.blocks.last?.id
+        )
+        if key == cacheKey { return cachedFilteredBlocks }
+
+        let result: [StreamBlock]
         if tab.outputMode == .full && !blockFilter.isActive {
-            return tab.blocks
-        }
-        var blocks: [StreamBlock]
-        switch tab.outputMode {
-        case .full: blocks = tab.blocks
-        case .realtime: blocks = tab.blocks.filter { if case .sessionStart = $0.blockType { return false }; return true }
-        case .resultOnly:
-            blocks = tab.blocks.filter {
-                switch $0.blockType {
-                case .userPrompt, .thought, .completion, .error: return true
-                default: return false
+            result = tab.blocks
+        } else {
+            var blocks: [StreamBlock]
+            switch tab.outputMode {
+            case .full: blocks = tab.blocks
+            case .realtime: blocks = tab.blocks.filter { if case .sessionStart = $0.blockType { return false }; return true }
+            case .resultOnly:
+                blocks = tab.blocks.filter {
+                    switch $0.blockType {
+                    case .userPrompt, .thought, .completion, .error: return true
+                    default: return false
+                    }
                 }
             }
+            if blockFilter.isActive {
+                blocks = blocks.filter { blockFilter.matches($0) }
+            }
+            result = blocks
         }
-        if blockFilter.isActive {
-            blocks = blocks.filter { blockFilter.matches($0) }
-        }
-        return blocks
+        cacheKey = key
+        cachedFilteredBlocks = result
+        return result
     }
 
     // MARK: - Provider Selection

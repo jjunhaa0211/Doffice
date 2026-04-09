@@ -246,11 +246,23 @@ extension EventStreamView {
                 .padding(.bottom, 4)
 
                 if tab.isProcessing {
-                    Button(action: { tab.cancelProcessing() }) {
-                        Label("Stop", systemImage: "stop.fill").font(Theme.chrome(9, weight: .medium))
-                            .foregroundColor(Theme.red).padding(.horizontal, 8).padding(.vertical, 4)
-                            .background(Theme.red.opacity(0.1)).cornerRadius(5)
-                    }.buttonStyle(.plain).padding(.bottom, 4)
+                    HStack(spacing: 4) {
+                        Button(action: { tab.cancelProcessing() }) {
+                            Label(NSLocalizedString("block.action.stop", value: "Stop", comment: ""), systemImage: "stop.fill")
+                                .font(Theme.chrome(9, weight: .medium))
+                                .foregroundColor(Theme.red).padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Theme.red.opacity(0.1)).cornerRadius(5)
+                        }.buttonStyle(.plain)
+
+                        if tab.gitInfo.isGitRepo {
+                            Button(action: { tab.cancelAndRevert() }) {
+                                Label(NSLocalizedString("block.action.stop.revert", value: "Stop & Revert", comment: ""), systemImage: "arrow.uturn.backward")
+                                    .font(Theme.chrome(9, weight: .medium))
+                                    .foregroundColor(Theme.orange).padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Theme.orange.opacity(0.1)).cornerRadius(5)
+                            }.buttonStyle(.plain)
+                        }
+                    }.padding(.bottom, 4)
                 } else {
                     Button(action: { submit() }) {
                         Image(systemName: "arrow.up.circle.fill").font(.system(size: Theme.iconSize(20)))
@@ -311,9 +323,16 @@ extension EventStreamView {
             }
 
             if tab.isProcessing {
-                Button(action: { tab.cancelProcessing() }) {
-                    Image(systemName: "stop.fill").font(.system(size: Theme.iconSize(7))).foregroundColor(Theme.red)
-                }.buttonStyle(.plain).padding(.bottom, 4)
+                HStack(spacing: 3) {
+                    Button(action: { tab.cancelProcessing() }) {
+                        Image(systemName: "stop.fill").font(.system(size: Theme.iconSize(7))).foregroundColor(Theme.red)
+                    }.buttonStyle(.plain)
+                    if tab.gitInfo.isGitRepo {
+                        Button(action: { tab.cancelAndRevert() }) {
+                            Image(systemName: "arrow.uturn.backward").font(.system(size: Theme.iconSize(7))).foregroundColor(Theme.orange)
+                        }.buttonStyle(.plain)
+                    }
+                }.padding(.bottom, 4)
             } else {
                 Button(action: { submit() }) {
                     Image(systemName: "arrow.up.circle.fill").font(.system(size: Theme.iconSize(14)))

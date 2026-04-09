@@ -163,15 +163,15 @@ extension NewTabSheet {
                         ForEach(AgentProvider.allCases) { provider in
                             let installed = provider.installChecker.isInstalled
                             selectionChip(
-                                title: provider.displayName + (installed ? "" : " (미설치)"),
+                                title: installed ? provider.displayName : "\(provider.displayName) — \(NSLocalizedString("terminal.agent.not.installed", comment: "미설치"))",
                                 subtitle: installed ? providerSubtitle(provider) : provider.installCommand,
-                                symbol: providerSymbol(provider),
+                                symbol: installed ? providerSymbol(provider) : "arrow.down.circle",
                                 tint: installed ? providerChipTint(provider) : Theme.textMuted,
                                 selected: selectedProvider == provider
                             ) {
                                 selectProvider(provider)
                             }
-                            .opacity(installed ? 1.0 : 0.5)
+                            .opacity(installed ? 1.0 : 0.45)
                         }
                     }
                 }
@@ -488,6 +488,14 @@ extension NewTabSheet {
             .accessibilityLabel(NSLocalizedString("terminal.save.preset.a11y", comment: ""))
 
             Spacer()
+
+            if !selectedProvider.installChecker.isInstalled {
+                Text(NSLocalizedString("terminal.agent.none.installed", comment: ""))
+                    .font(Theme.mono(8))
+                    .foregroundColor(Theme.textDim)
+                    .lineLimit(1)
+            }
+
             Button(action: { handleCreateButtonTapped() }) {
                 HStack(spacing: 4) {
                     Image(systemName: "play.fill").font(.system(size: Theme.iconSize(9), weight: .bold))
@@ -499,7 +507,7 @@ extension NewTabSheet {
                 .appButtonSurface(tone: .accent, prominent: true)
             }
             .buttonStyle(.plain).keyboardShortcut(.return)
-            .disabled((projectPath.isEmpty && projectName.isEmpty) || isCreatingSessions)
+            .disabled((projectPath.isEmpty && projectName.isEmpty) || isCreatingSessions || !selectedProvider.installChecker.isInstalled)
             .accessibilityLabel(terminalCount > 1 ? String(format: NSLocalizedString("terminal.create.sessions.a11y", comment: ""), terminalCount) : NSLocalizedString("terminal.create.session.a11y", comment: ""))
         }.padding(.horizontal, 24).padding(.vertical, 12)
         .background(Theme.bg)

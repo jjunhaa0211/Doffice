@@ -16,15 +16,18 @@ public struct OfficeSpriteRenderer {
     public let selectedTabId: String?
     public let selectedFurnitureId: String?
     public var chromeScreenshots: [String: CGImage] = [:]  // tabId → chrome screenshot
+    public let officeCat: OfficeCat?
     /// Pre-built tab lookup table — avoids O(n) tabs.first(where:) per character
     internal let tabLookup: [String: TerminalTab]
 
     public init(map: OfficeMap, characters: [String: OfficeCharacter], tabs: [TerminalTab],
          frame: Int, dark: Bool, theme: BackgroundTheme,
-         selectedTabId: String?, selectedFurnitureId: String?) {
+         selectedTabId: String?, selectedFurnitureId: String?,
+         officeCat: OfficeCat? = nil) {
         self.init(map: map, characters: characters, tabs: tabs,
                   frame: frame, dark: dark, theme: theme,
                   selectedTabId: selectedTabId, selectedFurnitureId: selectedFurnitureId,
+                  officeCat: officeCat,
                   cachedPalette: OfficeScenePalette(theme: theme, dark: dark))
     }
 
@@ -32,6 +35,7 @@ public struct OfficeSpriteRenderer {
     public init(map: OfficeMap, characters: [String: OfficeCharacter], tabs: [TerminalTab],
          frame: Int, dark: Bool, theme: BackgroundTheme,
          selectedTabId: String?, selectedFurnitureId: String?,
+         officeCat: OfficeCat? = nil,
          cachedPalette: OfficeScenePalette) {
         self.map = map
         self.characters = characters
@@ -41,6 +45,7 @@ public struct OfficeSpriteRenderer {
         self.theme = theme
         self.selectedTabId = selectedTabId
         self.selectedFurnitureId = selectedFurnitureId
+        self.officeCat = officeCat
         self.palette = cachedPalette
         // Build O(1) tab lookup once instead of O(n) per character
         var lookup: [String: TerminalTab] = [:]
@@ -66,6 +71,38 @@ public struct OfficeSpriteRenderer {
     internal static let coffeeTexts1 = ["(⊃˘▽˘)⊃☕", "☕(⌐■_■)", "(´∀`)♨", "☕✧(◕‿◕✿)"]
     internal static let highFiveTexts0 = ["(つ≧▽≦)つ", "ε=ε=(ノ≧∇≦)ノ", "(ﾉ◕ヮ◕)ﾉ*:・゚✧", "( •̀ω•́ )σ"]
     internal static let highFiveTexts1 = ["⊂(◉‿◉)つ", "(ノ´ヮ`)ノ*: ・゚✧", "\\(★ω★)/", "(*≧▽≦)ノシ"]
+    internal static let arguingTexts0 = ["(ノಠ益ಠ)ノ", "(╬ Ò﹏Ó)", "ᕦ(ò_óˇ)ᕤ!", "( •̀ω•́ )☝"]
+    internal static let arguingTexts1 = ["(¬_¬\")", "(ー_ー゛)", "ψ(｀∇´)ψ", "(눈_눈)"]
+    internal static let nappingTexts0 = ["(-_-) zzZ", "(˘ω˘) zzz", "(-.-)Zzz..", "(¦3[▓▓]"]
+    internal static let nappingTexts1 = ["(∪｡∪)｡｡｡", "(´-﹃-`)Zz", "₍ᐢ..ᐢ₎zzz", "(˘εз˘)"]
+    internal static let dancingTexts0 = ["♪(┌・。・)┌", "♪ ₍₍(ง˘ω˘)ว⁾⁾♪", "┏(＾0＾)┛♪", "~(˘▽˘~)"]
+    internal static let dancingTexts1 = ["(~˘▽˘)~♪", "♪♪♪(∇⌒ヽ)", "ᕕ(⌐■_■)ᕗ♪", "└(^o^ )Ｘ"]
+    internal static let snackingTexts0 = ["🍩(◕ᴗ◕✿)", "🍪 ᵐᵐᵐ", "🍕(⌒▽⌒)", "( ˘ᴗ˘ )🧁"]
+    internal static let snackingTexts1 = ["(ᵔᴥᵔ)🍫", "🥤(◕‿◕)", "🍿(≧◡≦)", "🍜(˘ω˘)"]
+    internal static let photoTimeTexts0 = ["📸✧ᵕ̈", "🤳(◕‿◕✿)", "📸✌('ω'✌ )", "📷(⌐■_■)"]
+    internal static let photoTimeTexts1 = ["✌(◕‿-)✌", "(＾▽＾)📸", "✨📸✨", "✌('ω')✌"]
+    internal static let flirtingTexts0 = ["(⁄ ⁄•⁄ω⁄•⁄ ⁄)", "♡(◕‿◕✿)", "(˶ᵔ ᵕ ᵔ˶)♡", "(⸝⸝⸝´꒳`⸝⸝⸝)"]
+    internal static let flirtingTexts1 = ["(◍•ᴗ•◍)❤", "♡(⁰▿⁰)♡", "(≧◡≦)♡", "(*˘︶˘*).。.:*♡"]
+    internal static let pettingCatTexts0 = ["🐱♡", "(=^・ω・^=)", "ᓚᘏᗢ♡", "🐾(◕‿◕✿)"]
+    internal static let pettingCatTexts1 = ["🐈✧", "(ΦωΦ)♡", "ᓚᘏᗢ~", "🐱(˘ω˘)"]
+    // 고양이 전용 리액션
+    internal static let catReactions = ["ᓚᘏᗢ", "=^.^=", "🐾", "(=^‥^=)"]
+    internal static let catSleepReactions = ["ᓚᘏᗢzzz", "(=˘ω˘=)zzz", "₍˄·͈˶·͈˄₎zzz"]
+    internal static let catPettedReactions = ["ᓚᘏᗢ♡", "ᵖᵘʳʳ~♡", "(=^-ω-^=)♡", "ᓚᘏᗢ~nyaa"]
+    // 캐릭터가 고양이를 쓰다듬을 때 리액션
+    internal static let pettingReactions = ["🐱♡ᵃʷ~", "(◕‿◕)🐾", "ᓚᘏᗢ so soft", "🐈✧ᶜᵘᵗᵉ"]
+
+    // 가구 상호작용 전용 리액션
+    internal static let coffeeInteractionReactions = ["☕ᵃʰʰ~", "☕(˘ω˘)", "☕✧", "( ˘⌣˘)☕♨"]
+    internal static let waterInteractionReactions = ["💧ᵍˡᵘᵍ", "💦(◕‿◕)", "🥤ᵖᵘʰᵃ", "💧✧"]
+    internal static let bookInteractionReactions = ["📖(ᵔᴥᵔ)", "📚hmm..", "📖ᶠˡⁱᵖ", "📕✧"]
+    internal static let sofaInteractionReactions = ["(˘ω˘)~♡", "ᵃʰʰ~ ☁", "(-ω-)~♡", "✧ᶠˡᵘᶠᶠʸ"]
+    internal static let printerInteractionReactions = ["🖨ᵇʳʳ", "🖨..⏳", "📄✓!", "🖨✧ᵈᵒⁿᵉ"]
+    internal static let whiteboardInteractionReactions = ["📋hmm", "✏️(·_·)", "💡!", "📋✓"]
+    internal static let trashInteractionReactions = ["🗑ᵖᵒⁱ", "🗑✓", "( ˘▽˘)🗑", "🗑✧"]
+    internal static let plantInteractionReactions = ["🌿💧", "🌱✧", "🪴(◕‿◕)", "🌿ᵍʳᵒʷ"]
+    // 축하 반응 전용 리액션
+    internal static let celebrationReactReactions = ["👏✧", "🥳!", "\\(◕‿◕)/", "🎊✧"]
 
     // Pre-allocated activity reaction arrays to avoid per-frame allocation
     internal static let typingReactions = ["⌨️ ᵗᵃᵏ", "✎ ᵗᵃᵏ", "⌨ᵈᵃᵈᵃ", "⚡⌨⚡"]
@@ -170,6 +207,66 @@ public struct OfficeSpriteRenderer {
         ctx.translateBy(x: offsetX, y: offsetY)
         ctx.scaleBy(x: scale, y: scale)
         drawZSortedScene(ctx)
+        drawOfficeCat(ctx)
         drawOverlays(ctx, viewScale: scale)
+    }
+
+    private func drawOfficeCat(_ ctx: GraphicsContext) {
+        guard let cat = officeCat else { return }
+
+        let catEmoji: String
+        let catSize: CGFloat
+        switch cat.state {
+        case .sleeping:
+            catEmoji = "🐱💤"
+            catSize = 7
+        case .stretching:
+            let phase = (frame / 8) % 2
+            catEmoji = phase == 0 ? "🐱" : "🙀"
+            catSize = 7
+        case .beingPetted:
+            catEmoji = "😻"
+            catSize = 7
+        case .playing:
+            let phase = (frame / 6) % 3
+            catEmoji = ["🐱", "🙀", "😺"][phase]
+            catSize = 7
+        default:
+            catEmoji = "🐱"
+            catSize = 6.5
+        }
+
+        // 그림자
+        let shadowRect = CGRect(x: cat.pixelX - 4, y: cat.pixelY - 1, width: 8, height: 3)
+        ctx.fill(Path(ellipseIn: shadowRect), with: .color(Color.black.opacity(dark ? 0.15 : 0.08)))
+
+        // 고양이 이모지
+        ctx.draw(
+            Text(catEmoji).font(.system(size: catSize)),
+            at: CGPoint(x: cat.pixelX, y: cat.pixelY - 6)
+        )
+
+        // 고양이 리액션 버블
+        let cycle = frame % Int(OfficeConstants.fps * 5)
+        if cycle < Int(OfficeConstants.fps * 1.5) {
+            let reactions: [String]
+            let color: Color
+            switch cat.state {
+            case .sleeping:
+                reactions = Self.catSleepReactions
+                color = Color(hex: "8090B0")
+            case .beingPetted:
+                reactions = Self.catPettedReactions
+                color = Color(hex: "F08090")
+            default:
+                reactions = Self.catReactions
+                color = Color(hex: "E8B870")
+            }
+            let text = reactions[frame / 18 % reactions.count]
+            ctx.draw(
+                Text(text).font(.system(size: 4.5, weight: .medium)).foregroundColor(color),
+                at: CGPoint(x: cat.pixelX, y: cat.pixelY - 18)
+            )
+        }
     }
 }

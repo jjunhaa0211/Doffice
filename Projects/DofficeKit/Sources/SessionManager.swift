@@ -33,19 +33,18 @@ public class SessionManager: ObservableObject, SessionProviding {
     @Published public internal(set) var availableReportCount: Int = 0
     @Published public private(set) var totalTokensUsed: Int = 0
     @Published public private(set) var userVisibleTabCount: Int = 0
-
-    public var userVisibleTabs: [TerminalTab] {
-        tabs.filter { $0.automationSourceTabId == nil }
-    }
+    @Published public private(set) var userVisibleTabs: [TerminalTab] = []
 
     /// Recalculates cached `totalTokensUsed` from all tabs.
     public func updateTokenCount() {
         totalTokensUsed = tabs.reduce(0) { $0 + $1.tokensUsed }
     }
 
-    /// Recalculates cached `userVisibleTabCount`.
+    /// Recalculates cached `userVisibleTabCount` and `userVisibleTabs`.
     private func updateUserVisibleTabCount() {
-        userVisibleTabCount = tabs.filter { $0.automationSourceTabId == nil }.count
+        let visible = tabs.filter { $0.automationSourceTabId == nil }
+        userVisibleTabs = visible
+        userVisibleTabCount = visible.count
     }
 
     /// Convenience: update all tab-derived caches.
@@ -302,6 +301,21 @@ public class SessionManager: ObservableObject, SessionProviding {
             activeTabId = tab.id
         }
         workerIndex += 1
+
+        // 캐릭터가 배정된 세션이 추가되면 출근 알림 (복원 세션 제외)
+        if restoredSession == nil, let cid = characterId,
+           let character = CharacterRegistry.shared.character(with: cid) {
+            let tabId = tab.id
+            let workerName = character.name
+            let jobRole = character.jobRole
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .dofficeCharacterArrival,
+                    object: nil,
+                    userInfo: ["tabId": tabId, "workerName": workerName, "jobRole": jobRole]
+                )
+            }
+        }
 
         if autoStart {
             tab.start()

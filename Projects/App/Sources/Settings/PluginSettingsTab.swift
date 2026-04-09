@@ -751,6 +751,7 @@ extension SettingsView {
         let hasUpdate = pluginManager.hasUpdate(plugin)
         let badges = pluginManager.contributionSummary(for: plugin)
         let depIssues = pluginManager.validateDependencies(for: plugin.localPath)
+        let pathMissing = plugin.enabled && pluginManager.resolvedPath(for: plugin) == nil
 
         return VStack(spacing: 0) {
             HStack(spacing: 10) {
@@ -764,9 +765,9 @@ extension SettingsView {
                         .frame(width: 12)
                 }.buttonStyle(.plain)
 
-                Image(systemName: pluginTypeIcon(plugin.sourceType))
+                Image(systemName: pathMissing ? "exclamationmark.triangle.fill" : pluginTypeIcon(plugin.sourceType))
                     .font(.system(size: Theme.iconSize(14), weight: .bold))
-                    .foregroundColor(plugin.enabled ? Theme.accent : Theme.textDim)
+                    .foregroundColor(pathMissing ? Theme.orange : (plugin.enabled ? Theme.accent : Theme.textDim))
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
@@ -795,6 +796,15 @@ extension SettingsView {
                                 .foregroundColor(Theme.orange)
                                 .help(depIssues.map { $0.localizedMessage }.joined(separator: "\n"))
                         }
+                    }
+                    if pathMissing {
+                        HStack(spacing: 4) {
+                            Image(systemName: "folder.badge.questionmark")
+                                .font(.system(size: 9))
+                            Text(NSLocalizedString("plugin.path.missing", comment: ""))
+                                .font(Theme.mono(8, weight: .medium))
+                        }
+                        .foregroundColor(Theme.orange)
                     }
                     HStack(spacing: 6) {
                         Text("v\(plugin.version)")
@@ -912,6 +922,51 @@ extension SettingsView {
                         }
                     }
 
+                    // 경로 누락 상세 + 재설치 안내
+                    if pathMissing {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(String(format: NSLocalizedString("plugin.path.missing.detail", comment: ""), plugin.localPath))
+                                .font(Theme.mono(7))
+                                .foregroundColor(Theme.orange)
+                                .textSelection(.enabled)
+
+                            HStack(spacing: 8) {
+                                Button(action: {
+                                    pluginManager.reinstallIfPossible(plugin)
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.clockwise")
+                                            .font(.system(size: 9, weight: .bold))
+                                        Text(NSLocalizedString("plugin.reinstall", comment: ""))
+                                            .font(Theme.mono(8, weight: .bold))
+                                    }
+                                    .foregroundColor(Theme.accent)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent.opacity(0.1)))
+                                }
+                                .buttonStyle(.plain)
+
+                                #if os(macOS)
+                                Button(action: {
+                                    let dir = PluginManager.defaultPluginBaseDir()
+                                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: dir.path)
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "folder")
+                                            .font(.system(size: 9, weight: .bold))
+                                        Text(NSLocalizedString("plugin.open.folder", comment: ""))
+                                            .font(Theme.mono(8, weight: .bold))
+                                    }
+                                    .foregroundColor(Theme.textSecondary)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgCard))
+                                }
+                                .buttonStyle(.plain)
+                                #endif
+                            }
+                        }
+                    }
+
                     // 설치 정보
                     HStack(spacing: 10) {
                         Text(String(format: NSLocalizedString("plugin.detail.installed", comment: ""), plugin.installedAt.formatted(.dateTime.year().month().day())))
@@ -926,8 +981,8 @@ extension SettingsView {
         }
         .background(RoundedRectangle(cornerRadius: 10).fill(plugin.enabled ? Theme.bgSurface : Theme.bgSurface.opacity(0.4)))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(
-            hasUpdate ? Theme.green.opacity(0.4) : (plugin.enabled ? Theme.border.opacity(0.4) : Theme.border.opacity(0.2)),
-            lineWidth: hasUpdate ? 1.5 : 1
+            pathMissing ? Theme.orange.opacity(0.5) : (hasUpdate ? Theme.green.opacity(0.4) : (plugin.enabled ? Theme.border.opacity(0.4) : Theme.border.opacity(0.2))),
+            lineWidth: (pathMissing || hasUpdate) ? 1.5 : 1
         ))
     }
 

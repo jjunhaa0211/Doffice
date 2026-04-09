@@ -152,7 +152,7 @@
 "toast.pull.requested" = "Pull requested";
 
 /* Claude */
-"claude.not.installed" = "Claude Code Not Installed";
+"claude.not.installed" = "No AI Agent Installed";
 "claude.install.guide" = "Install with the following command:";
 
 /* Office view */
@@ -411,6 +411,8 @@
 "terminal.project.name.a11y" = "Project Name";
 "terminal.config.execution" = "Execution Settings";
 "terminal.config.execution.subtitle" = "Model, reasoning effort, and permission mode in one place.";
+"terminal.agent.not.installed" = "Not Installed";
+"terminal.agent.none.installed" = "No AI agents available. Please install at least one.";
 "terminal.config.model" = "Model";
 "terminal.config.model.recommended" = "Recommended";
 "terminal.config.permission" = "Permissions";
@@ -1345,6 +1347,8 @@
 "overlay.notif.error" = "%@ Error";
 "overlay.notif.approval.needed" = "%@ Approval Needed";
 "overlay.notif.approval.waiting" = "Waiting for %@ execution approval";
+"overlay.notif.arrival" = "%@ has arrived!";
+"overlay.notif.arrival.detail" = "Joined as %@";
 
 /* OnboardingView */
 "onboard.skip" = "Skip";
@@ -1423,6 +1427,11 @@
 "update.close" = "Close";
 "update.retry" = "Retry";
 "update.ok" = "OK";
+"update.skip.version" = "Skip This Version";
+"update.error.timeout" = "Server response timed out. Please try again later.";
+"update.error.network" = "Please check your internet connection.";
+"update.error.disk" = "Not enough disk space.";
+"update.bundle.corrupted" = "Downloaded app bundle is corrupted.";
 
 /* MenuBarWidget */
 "menubar.a11y" = "Doffice";
@@ -2423,6 +2432,11 @@
 "plugin.error.install.failed" = "Install failed: %@";
 "plugin.error.tap.failed" = "Tap failed: %@";
 "plugin.error.path.not.found" = "Install path not found.";
+"plugin.path.missing" = "Plugin path not found";
+"plugin.path.missing.detail" = "Path does not exist: %@";
+"plugin.reinstall" = "Reinstall";
+"plugin.reinstall.manual" = "Local plugins cannot be reinstalled automatically. Please re-select the folder manually.";
+"plugin.open.folder" = "Open Plugin Folder";
 "plugin.error.invalid.tap" = "Invalid tap format. Use user/tap/formula.";
 "plugin.error.invalid.url" = "Invalid URL.";
 "plugin.error.download.failed" = "Download failed: %@";
@@ -2557,7 +2571,7 @@
 "theme.custom.preview" = "Doffice custom theme preview";
 
 /* Claude Install */
-"claude.install.message" = "Claude Code CLI is not installed.\n\nPlease install it by running the following command in your terminal:\n\nnpm install -g @anthropic-ai/claude-code\n\nIf you already installed it but still see this message:\n• Your PATH may not be configured correctly\n• Run 'which claude' in your terminal to check the path\n• If you use a version manager (nvm/fnm), make sure your shell profile (.zshrc) includes its initialization code\n\nPress 'Retry' after installing.";
+"claude.install.message" = "No AI agents (Claude, Codex, Gemini) are installed.\n\nInstall at least one by running in your terminal:\n\n• Claude: npm install -g @anthropic-ai/claude-code\n• Codex: npm install -g @openai/codex\n• Gemini: npm install -g @google/gemini-cli\n\nIf you already installed one but still see this message:\n• Your PATH may not be configured correctly\n• If you use a version manager (nvm/fnm), make sure your shell profile (.zshrc) includes its initialization code\n\nPress 'Retry' after installing.";
 
 /* App Quit */
 "quit.running.title" = "%d tasks are still running";

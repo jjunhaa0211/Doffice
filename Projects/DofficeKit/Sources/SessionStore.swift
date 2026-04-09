@@ -103,21 +103,27 @@ public struct SavedChatBlock: Codable {
     public let content: String
     public let toolName: String?
     public let timestamp: Date
+    public let presentationStyle: String?
 
     public init(block: StreamBlock) {
+        self.timestamp = block.timestamp
+        self.presentationStyle = block.presentationStyle.rawValue
+
         switch block.blockType {
         case .userPrompt: self.type = "user"
         case .thought: self.type = "thought"
         case .completion: self.type = "completion"
-        case .toolUse(let name, _): self.type = "tool"; self.toolName = name; self.content = block.content; self.timestamp = block.timestamp; return
+        case .toolUse(let name, _):
+            self.type = "tool"; self.toolName = name; self.content = block.content; return
         case .text: self.type = "text"
-        case .error(let msg): self.type = "error"; self.toolName = nil; self.content = msg.isEmpty ? block.content : msg; self.timestamp = block.timestamp; return
-        case .status(let msg): self.type = "status"; self.toolName = nil; self.content = msg; self.timestamp = block.timestamp; return
+        case .error(let msg):
+            self.type = "error"; self.toolName = nil; self.content = msg.isEmpty ? block.content : msg; return
+        case .status(let msg):
+            self.type = "status"; self.toolName = nil; self.content = msg; return
         default: self.type = "text"
         }
         self.toolName = nil
         self.content = block.content
-        self.timestamp = block.timestamp
     }
 
     public func toBlock() -> StreamBlock {
@@ -131,7 +137,8 @@ public struct SavedChatBlock: Codable {
         case "status": blockType = .status(message: content)
         default: blockType = .text
         }
-        var block = StreamBlock(type: blockType, content: content)
+        let style = presentationStyle.flatMap(StreamBlock.PresentationStyle.init(rawValue:)) ?? .normal
+        var block = StreamBlock(type: blockType, content: content, presentationStyle: style)
         block.isComplete = true
         return block
     }
@@ -294,14 +301,7 @@ public class SessionStore {
     }
 
     private func colorToHex(_ color: Color) -> String {
-        let nsColor = NSColor(color)
-        let resolved = nsColor.usingColorSpace(.sRGB) ??
-            nsColor.usingColorSpace(.deviceRGB) ??
-            NSColor(srgbRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
-        let r = Int(resolved.redComponent * 255)
-        let g = Int(resolved.greenComponent * 255)
-        let b = Int(resolved.blueComponent * 255)
-        return String(format: "%02x%02x%02x", r, g, b)
+        color.hexString
     }
 
     private func loadHistory() -> SessionHistory {

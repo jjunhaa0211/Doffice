@@ -30,6 +30,13 @@ public class UpdateChecker: ObservableObject {
 
     /// 바이너리 버전 불일치로 건너뛴 태그 (같은 태그를 반복 다운로드하지 않기 위함)
     private static let skippedTagKey = "doffice.skippedTagVersion"
+    /// 사용자가 의도적으로 건너뛴 버전
+    private static let userSkippedVersionKey = "doffice.userSkippedVersion"
+
+    /// 업데이트 준비 완료 시 호출되는 콜백 (UI 레이어에서 시트 자동 표시용)
+    public var onReadyToInstall: (() -> Void)?
+    /// 앱 종료 시 자동 설치를 위한 콜백
+    public var onInstallOnQuit: (() -> Void)?
 
     public var hasUpdate: Bool {
         switch state {
@@ -42,6 +49,12 @@ public class UpdateChecker: ObservableObject {
 
     public var isChecking: Bool { state == .checking }
 
+    /// 다운로드 진행률 (타이틀바 표시용)
+    public var downloadProgress: Double? {
+        if case .downloading(let progress) = state { return progress }
+        return nil
+    }
+
     // GitHub repo 정보
     private let owner = "jjunhaa0211"
     private let repo = "Doffice"
@@ -51,8 +64,89 @@ public class UpdateChecker: ObservableObject {
     private var downloadSession: URLSession?
     private var downloadedAppURL: URL?
 
+    // 재시도 관련
+    private var retryCount = 0
+    private var retryTimer: Timer?
+
+    // 주기적 재체크 타이머
+    private var recheckTimer: Timer?
+
+    // Rate limit 해제 시점
+    private var rateLimitResetDate: Date?
+
+    // 사용자가 현재 세션에서 "나중에"를 눌렀는지
+    private var userDismissedThisSession = false
+
+    // 상수 (DofficeKit은 App 모듈의 AppConstants에 접근 불가 → 자체 정의)
+    private static let recheckInterval: TimeInterval = 4 * 60 * 60   // 4시간
+    private static let retryBaseDelay: TimeInterval = 5.0
+    private static let downloadTimeout: TimeInterval = 300            // 5분
+    private static let maxRetries: Int = 3
+
     public init() {
         currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        setupPeriodicRecheck()
+        setupSleepWakeObserver()
+    }
+
+    deinit {
+        recheckTimer?.invalidate()
+        retryTimer?.invalidate()
+    }
+
+    // MARK: - 주기적 재체크 & 슬립 복귀 감지
+
+    private func setupPeriodicRecheck() {
+        recheckTimer = Timer.scheduledTimer(withTimeInterval: Self.recheckInterval, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.checkForUpdatesIfIdle()
+            }
+        }
+    }
+
+    private func setupSleepWakeObserver() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // 슬립 해제 후 10초 대기 (네트워크 안정화) 후 재체크
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                self?.checkForUpdatesIfIdle()
+            }
+        }
+    }
+
+    /// idle/noUpdate/failed 상태에서만 체크 (다운로드/설치 중에는 방해하지 않음)
+    private func checkForUpdatesIfIdle() {
+        switch state {
+        case .idle, .noUpdate, .failed: checkForUpdates()
+        default: break
+        }
+    }
+
+    // MARK: - 사용자 "이 버전 건너뛰기"
+
+    public func skipThisVersion() {
+        guard !latestVersion.isEmpty else { return }
+        PersistenceService.shared.set(latestVersion, forKey: Self.userSkippedVersionKey)
+        PersistenceService.shared.synchronize()
+        cancelDownload()
+        state = .noUpdate
+        print("[도피스] 사용자가 v\(latestVersion) 건너뛰기 선택")
+    }
+
+    /// 사용자가 현재 세션에서 "나중에" 버튼을 눌렀을 때 호출
+    public func dismissForThisSession() {
+        userDismissedThisSession = true
+    }
+
+    // MARK: - 앱 종료 시 자동 설치
+
+    /// 앱 종료 전 호출 — readyToInstall 상태면 자동으로 설치 진행
+    public func installOnQuitIfReady() {
+        guard state == .readyToInstall, downloadedAppURL != nil else { return }
+        installAndRestart()
     }
 
     // MARK: - 버전 확인
@@ -63,8 +157,21 @@ public class UpdateChecker: ObservableObject {
         case .idle, .noUpdate, .available, .failed: break
         default: return
         }
-        state = .checking
 
+        // Rate limit 중이면 스킵
+        if let resetDate = rateLimitResetDate, Date() < resetDate {
+            print("[도피스] Rate limit 대기 중 (해제: \(resetDate))")
+            state = .noUpdate
+            return
+        }
+
+        state = .checking
+        retryCount = 0
+
+        performCheckRequest()
+    }
+
+    private func performCheckRequest() {
         let urlString = "https://api.github.com/repos/\(owner)/\(repo)/releases/latest"
         guard let url = URL(string: urlString) else {
             state = .idle
@@ -79,16 +186,22 @@ public class UpdateChecker: ObservableObject {
             DispatchQueue.main.async {
                 guard let self else { return }
 
+                // Rate limit 체크 (403 또는 429)
+                if let httpResponse = response as? HTTPURLResponse,
+                   (httpResponse.statusCode == 403 || httpResponse.statusCode == 429) {
+                    self.handleRateLimit(response: httpResponse)
+                    return
+                }
+
                 if let error {
-                    print("[도피스] 업데이트 확인 실패: \(error.localizedDescription)")
-                    self.state = .failed(message: String(format: NSLocalizedString("update.network.error", comment: ""), error.localizedDescription))
+                    self.handleCheckError(error.localizedDescription)
                     return
                 }
 
                 guard let data,
                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                       let tagName = json["tag_name"] as? String else {
-                    self.state = .failed(message: NSLocalizedString("update.parse.error", comment: ""))
+                    self.handleCheckError(NSLocalizedString("update.parse.error", comment: ""))
                     return
                 }
 
@@ -128,6 +241,14 @@ public class UpdateChecker: ObservableObject {
                     }
                 }
 
+                // 사용자가 건너뛴 버전인지 확인
+                let userSkipped = PersistenceService.shared.string(forKey: Self.userSkippedVersionKey) ?? ""
+                if version == userSkipped {
+                    self.state = .noUpdate
+                    print("[도피스] 사용자가 건너뛴 버전: v\(version)")
+                    return
+                }
+
                 // 바이너리 버전 불일치로 이미 건너뛴 태그인지 확인
                 let skippedTag = PersistenceService.shared.string(forKey: Self.skippedTagKey) ?? ""
                 if version == skippedTag {
@@ -137,6 +258,7 @@ public class UpdateChecker: ObservableObject {
                     self.state = .available
                     print("[도피스] 업데이트 발견: v\(self.currentVersion) → v\(version)")
                     // 백그라운드 자동 다운로드 시작
+                    self.retryCount = 0
                     self.performUpdate()
                 } else {
                     self.state = .noUpdate
@@ -144,6 +266,77 @@ public class UpdateChecker: ObservableObject {
                 }
             }
         }.resume()
+    }
+
+    // MARK: - Rate Limit 처리
+
+    private func handleRateLimit(response: HTTPURLResponse) {
+        if let resetTimestamp = response.value(forHTTPHeaderField: "X-RateLimit-Reset"),
+           let timestamp = TimeInterval(resetTimestamp) {
+            rateLimitResetDate = Date(timeIntervalSince1970: timestamp)
+            print("[도피스] GitHub API rate limit — 해제 시점: \(rateLimitResetDate!)")
+        } else {
+            // 헤더 없으면 1시간 후 재시도
+            rateLimitResetDate = Date().addingTimeInterval(3600)
+        }
+        // 사용자에게 에러를 보여주지 않고 조용히 처리
+        state = .noUpdate
+    }
+
+    // MARK: - 에러 처리 & 재시도
+
+    private func handleCheckError(_ message: String) {
+        retryCount += 1
+        if retryCount <= Self.maxRetries {
+            let delay = Self.retryBaseDelay * pow(3.0, Double(retryCount - 1))  // 5s → 15s → 45s
+            print("[도피스] 업데이트 확인 실패 (\(retryCount)/\(Self.maxRetries)), \(delay)초 후 재시도: \(message)")
+            state = .checking  // 재시도 중에는 checking 상태 유지
+            retryTimer?.invalidate()
+            retryTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.performCheckRequest()
+                }
+            }
+        } else {
+            print("[도피스] 업데이트 확인 최종 실패: \(message)")
+            state = .failed(message: friendlyErrorMessage(message))
+            retryCount = 0
+        }
+    }
+
+    private func handleDownloadError(_ message: String) {
+        retryCount += 1
+        if retryCount <= Self.maxRetries {
+            let delay = Self.retryBaseDelay * pow(3.0, Double(retryCount - 1))
+            print("[도피스] 다운로드 실패 (\(retryCount)/\(Self.maxRetries)), \(delay)초 후 재시도: \(message)")
+            state = .downloading(progress: 0)  // 재시도 중에는 downloading 상태 유지
+            retryTimer?.invalidate()
+            retryTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.performUpdate()
+                }
+            }
+        } else {
+            print("[도피스] 다운로드 최종 실패: \(message)")
+            state = .failed(message: friendlyErrorMessage(message))
+            retryCount = 0
+        }
+    }
+
+    /// 기술적 에러 메시지를 사용자 친화적 메시지로 변환
+    private func friendlyErrorMessage(_ technical: String) -> String {
+        let lowered = technical.lowercased()
+        if lowered.contains("timed out") || lowered.contains("timeout") {
+            return NSLocalizedString("update.error.timeout", comment: "서버 응답 시간 초과")
+        }
+        if lowered.contains("not connected") || lowered.contains("network") || lowered.contains("internet") {
+            return NSLocalizedString("update.error.network", comment: "인터넷 연결 확인")
+        }
+        if lowered.contains("no space") || lowered.contains("disk") {
+            return NSLocalizedString("update.error.disk", comment: "디스크 공간 부족")
+        }
+        // 기본: 원본 메시지 사용하되 간결하게
+        return technical
     }
 
     // MARK: - 다운로드 & 설치
@@ -170,7 +363,9 @@ public class UpdateChecker: ObservableObject {
 
         // 이전 세션이 있으면 정리 (URLSession은 delegate를 강하게 참조하므로 반드시 invalidate)
         downloadSession?.invalidateAndCancel()
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForResource = Self.downloadTimeout  // 5분 타임아웃
+        let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
         downloadSession = session
         downloadTask = session.downloadTask(with: url)
         downloadTask?.resume()
@@ -183,19 +378,25 @@ public class UpdateChecker: ObservableObject {
         downloadDelegate = nil
         downloadSession?.invalidateAndCancel()
         downloadSession = nil
+        retryTimer?.invalidate()
+        retryCount = 0
         state = .available
     }
 
     private func handleDownloadComplete(tempURL: URL?, error: Error?) {
         if let error {
-            state = .failed(message: String(format: NSLocalizedString("update.download.failed", comment: ""), error.localizedDescription))
+            // 사용자 취소는 재시도하지 않음
+            if (error as NSError).code == NSURLErrorCancelled { return }
+            handleDownloadError(error.localizedDescription)
             return
         }
         guard let tempURL else {
-            state = .failed(message: NSLocalizedString("update.file.not.found", comment: ""))
+            handleDownloadError(NSLocalizedString("update.file.not.found", comment: ""))
             return
         }
 
+        // 다운로드 성공 — 재시도 카운터 초기화
+        retryCount = 0
         state = .extracting
         print("[도피스] 다운로드 완료, 압축 해제 중...")
 
@@ -223,8 +424,14 @@ public class UpdateChecker: ObservableObject {
                     self.downloadedAppURL = appURL
                     self.state = .readyToInstall
                     print("[도피스] 설치 준비 완료: \(appURL.path)")
+
+                    // 콜백으로 UI에 알림 (사용자가 이번 세션에서 dismiss하지 않은 경우만)
+                    if !self.userDismissedThisSession {
+                        self.onReadyToInstall?()
+                    }
+
                 case .failure(let error):
-                    self.state = .failed(message: String(format: NSLocalizedString("update.extract.failed", comment: ""), error.localizedDescription))
+                    self.handleDownloadError(error.localizedDescription)
                 case .none:
                     self.state = .failed(message: NSLocalizedString("update.unknown.error", comment: ""))
                 }
@@ -288,7 +495,7 @@ public class UpdateChecker: ObservableObject {
 
         // 새 앱 번들이 실제로 존재하는지 확인
         guard FileManager.default.fileExists(atPath: newAppURL.appendingPathComponent("Contents/MacOS").path) else {
-            state = .failed(message: "다운로드된 앱 번들이 손상되었습니다.")
+            state = .failed(message: NSLocalizedString("update.bundle.corrupted", comment: "다운로드된 앱 번들이 손상되었습니다."))
             return
         }
 
@@ -296,6 +503,7 @@ public class UpdateChecker: ObservableObject {
 
         // 실제 설치 시 건너뛴 태그 기록 초기화
         PersistenceService.shared.removeObject(forKey: Self.skippedTagKey)
+        PersistenceService.shared.removeObject(forKey: Self.userSkippedVersionKey)
         PersistenceService.shared.synchronize()
 
         let currentAppURL = Bundle.main.bundleURL
@@ -404,6 +612,8 @@ public class UpdateChecker: ObservableObject {
         downloadSession?.invalidateAndCancel()
         downloadSession = nil
         downloadedAppURL = nil
+        retryTimer?.invalidate()
+        retryCount = 0
         state = .idle
     }
 
@@ -661,22 +871,21 @@ public struct UpdateSheet: View {
         switch updater.state {
         case .available:
             HStack(spacing: 10) {
-                Button(action: { dismiss() }) {
+                Button(action: {
+                    updater.dismissForThisSession()
+                    dismiss()
+                }) {
                     Text(NSLocalizedString("update.later", comment: "")).font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
                         .padding(.horizontal, 16).padding(.vertical, 8)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.4), lineWidth: 1))
                 }.buttonStyle(.plain).keyboardShortcut(.escape)
 
-                Button(action: { updater.openReleasePage() }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "safari").font(.system(size: Theme.iconSize(9)))
-                        Text(NSLocalizedString("update.manual.download", comment: "")).font(Theme.mono(10))
-                    }
-                    .foregroundStyle(Theme.accentBackground)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.accent.opacity(0.08)))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.accent.opacity(0.3), lineWidth: 1))
+                Button(action: { updater.skipThisVersion(); dismiss() }) {
+                    Text(NSLocalizedString("update.skip.version", comment: "")).font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border.opacity(0.4), lineWidth: 1))
                 }.buttonStyle(.plain)
 
                 Button(action: { updater.performUpdate() }) {
@@ -700,7 +909,10 @@ public struct UpdateSheet: View {
 
         case .readyToInstall:
             HStack(spacing: 10) {
-                Button(action: { dismiss() }) {
+                Button(action: {
+                    updater.dismissForThisSession()
+                    dismiss()
+                }) {
                     Text(NSLocalizedString("update.apply.on.quit", comment: "")).font(Theme.mono(10)).foregroundColor(Theme.textSecondary)
                         .padding(.horizontal, 16).padding(.vertical, 8)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bgSurface))

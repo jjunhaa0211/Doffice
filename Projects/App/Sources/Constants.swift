@@ -11,11 +11,14 @@ enum AppConstants {
     enum Layout {
         static let minimumSidebarWidth: CGFloat = 196
         static let preferredSidebarWidth: CGFloat = 216
+        static let maximumSidebarWidth: CGFloat = 420
         static let minimumPrimaryContentWidth: CGFloat = 880
         static let compactBreakpointWidth: CGFloat = 1240
         static let compactSidebarThreshold: CGFloat = 204
         static let officeExpandedHeight: CGFloat = 380
         static let officeCollapsedHeight: CGFloat = 240
+        static let minimumSplitTopHeight: CGFloat = 132
+        static let minimumTerminalHeight: CGFloat = 240
         static let stripHeight: CGFloat = 140
     }
 
@@ -28,6 +31,10 @@ enum AppConstants {
         static let installCheckDelay: TimeInterval = 1.0
         static let dailyRewardDelay: TimeInterval = 1.5
         static let updateCheckDelay: TimeInterval = 2.0
+        static let updateRecheckInterval: TimeInterval = 4 * 60 * 60   // 4시간
+        static let updateRetryBaseDelay: TimeInterval = 5.0
+        static let updateDownloadTimeout: TimeInterval = 300            // 5분
+        static let updateMaxRetries: Int = 3
         static let billingCheckDelay: TimeInterval = 3.0
         static let autoSaveInterval: TimeInterval = 15
     }

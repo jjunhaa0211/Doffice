@@ -1367,8 +1367,7 @@ extension OfficeSpriteRenderer {
     }
 
     internal static func colorToHex(_ color: Color) -> String {
-        guard let c = NSColor(color).usingColorSpace(.sRGB) else { return "5B9CF6" }
-        return String(format: "%02X%02X%02X", Int(c.redComponent * 255), Int(c.greenComponent * 255), Int(c.blueComponent * 255))
+        color.hexString
     }
 
     internal static func normalizedHex(_ hex: String) -> String {

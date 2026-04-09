@@ -494,6 +494,17 @@ final class SessionNotificationManager: ObservableObject {
                 self?.handleCompletion(tabId: tabId)
             }
             .store(in: &cancellables)
+
+        // 캐릭터 출근 알림
+        NotificationCenter.default.publisher(for: .dofficeCharacterArrival)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notif in
+                guard let workerName = notif.userInfo?["workerName"] as? String,
+                      let jobRole = notif.userInfo?["jobRole"] as? WorkerJob,
+                      let tabId = notif.userInfo?["tabId"] as? String else { return }
+                self?.postArrival(workerName: workerName, jobRole: jobRole, tabId: tabId)
+            }
+            .store(in: &cancellables)
     }
 
     func post(_ notification: SessionNotification) {
@@ -535,6 +546,16 @@ final class SessionNotificationManager: ObservableObject {
             detail: message,
             symbol: "exclamationmark.triangle.fill",
             tint: Theme.red,
+            tabId: tabId
+        ))
+    }
+
+    func postArrival(workerName: String, jobRole: WorkerJob, tabId: String) {
+        post(SessionNotification(
+            title: String(format: NSLocalizedString("overlay.notif.arrival", comment: ""), workerName),
+            detail: String(format: NSLocalizedString("overlay.notif.arrival.detail", comment: ""), jobRole.displayName),
+            symbol: "figure.walk.arrival",
+            tint: Theme.accent,
             tabId: tabId
         ))
     }

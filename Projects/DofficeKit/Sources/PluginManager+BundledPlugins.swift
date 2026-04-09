@@ -430,6 +430,15 @@ extension PluginManager {
 
     static func resolvedBundledRuntimePath(id: String) -> String? {
         let fm = FileManager.default
+
+        // 1) 사용자가 마켓에서 설치한 경로 (~/Library/Application Support/Doffice/Plugins/<id>)
+        let installedPath = defaultPluginBaseDir().appendingPathComponent(id)
+        if fm.fileExists(atPath: installedPath.path),
+           fm.fileExists(atPath: installedPath.appendingPathComponent("plugin.json").path) {
+            return installedPath.path
+        }
+
+        // 2) 앱 번들 리소스 및 워크스페이스 plugins/ 디렉토리
         let seeds = [
             Bundle.main.resourceURL,
             Bundle.main.bundleURL,

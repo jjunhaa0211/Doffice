@@ -35,6 +35,7 @@ final class MainViewModel: ObservableObject {
     // MARK: - Persisted View State (AppStorage)
 
     @AppStorage("officeExpanded") var officeExpanded = true
+    @AppStorage("splitViewTopHeight") var splitViewTopHeight: Double = Double(AppConstants.Layout.officeExpandedHeight)
     @AppStorage("viewMode") var viewModeRaw: Int = 1
     @AppStorage("sidebarCollapsed") var sidebarCollapsed = false
 
@@ -42,10 +43,6 @@ final class MainViewModel: ObservableObject {
 
     enum ViewMode: Int { case split = 0, office = 1, terminal = 2, strip = 3 }
     var viewMode: ViewMode { ViewMode(rawValue: viewModeRaw) ?? .split }
-
-    var officeHeight: CGFloat {
-        officeExpanded ? AppConstants.Layout.officeExpandedHeight : AppConstants.Layout.officeCollapsedHeight
-    }
 
     // MARK: - Dependencies (read-only references)
 
@@ -56,10 +53,13 @@ final class MainViewModel: ObservableObject {
     let effectEngine = PluginEffectEngine.shared
     let sessionNotifications = SessionNotificationManager.shared
 
+    private var cancellables = Set<AnyCancellable>()
+
     // MARK: - Initialization
 
     /// 앱 시작 시 호출 — 세션 복원, CLI 체크, 플러그인 로드, 업데이트 체크 등을 순차 실행
     func initialize(manager: SessionManager) {
+        seedPersistedLayoutStateIfNeeded()
         settings.ensureCoffeeSupportPreset()
 
         if manager.userVisibleTabs.isEmpty {
@@ -74,7 +74,11 @@ final class MainViewModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + AppConstants.Timing.installCheckDelay) { [weak self] in
             ClaudeInstallChecker.shared.check()
             CodexInstallChecker.shared.check()
-            if !ClaudeInstallChecker.shared.isInstalled && !CodexInstallChecker.shared.isInstalled {
+            GeminiInstallChecker.shared.check()
+            let noneInstalled = !ClaudeInstallChecker.shared.isInstalled
+                && !CodexInstallChecker.shared.isInstalled
+                && !GeminiInstallChecker.shared.isInstalled
+            if noneInstalled {
                 self?.showClaudeNotInstalledAlert = true
             }
         }
@@ -90,6 +94,28 @@ final class MainViewModel: ObservableObject {
                     self?.showDailyReward = true
                 }
             }
+        }
+
+        // 업데이트 준비 완료 시 자동으로 시트 표시
+        updater.onReadyToInstall = { [weak self] in
+            guard let self else { return }
+            // 다른 시트가 열려있지 않을 때만 자동 표시
+            let anySheetOpen = self.showSettings || self.showBugReport || self.showUpdateSheet
+                || self.showActionCenter || self.showCommandPalette
+            if !anySheetOpen {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    self.showUpdateSheet = true
+                }
+            }
+        }
+
+        // 앱 종료 시 readyToInstall이면 자동 설치
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.updater.installOnQuitIfReady()
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + AppConstants.Timing.updateCheckDelay) { [weak self] in
@@ -168,13 +194,56 @@ final class MainViewModel: ObservableObject {
 
     // MARK: - Layout Helpers
 
+    func seedPersistedLayoutStateIfNeeded() {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: "splitViewTopHeight") == nil {
+            splitViewTopHeight = Double(
+                officeExpanded ? AppConstants.Layout.officeExpandedHeight : AppConstants.Layout.officeCollapsedHeight
+            )
+        }
+    }
+
     func protectedSidebarWidth(totalWidth: CGFloat, sidebarWidth: CGFloat) -> CGFloat {
-        let requestedWidth = max(sidebarWidth, AppConstants.Layout.preferredSidebarWidth)
-        let safeMaximum = max(AppConstants.Layout.minimumSidebarWidth, totalWidth - AppConstants.Layout.minimumPrimaryContentWidth)
+        let requestedWidth = max(sidebarWidth, AppConstants.Layout.minimumSidebarWidth)
+        let safeMaximum = max(
+            AppConstants.Layout.minimumSidebarWidth,
+            min(
+                AppConstants.Layout.maximumSidebarWidth,
+                totalWidth - AppConstants.Layout.minimumPrimaryContentWidth
+            )
+        )
         return min(requestedWidth, safeMaximum)
     }
 
     func shouldForceCompactSidebar(totalWidth: CGFloat, sidebarWidth: CGFloat) -> Bool {
         totalWidth < AppConstants.Layout.compactBreakpointWidth || sidebarWidth <= AppConstants.Layout.compactSidebarThreshold
+    }
+
+    func protectedSplitTopHeight(totalHeight: CGFloat, proposedHeight: CGFloat) -> CGFloat {
+        let safeMaximum = max(
+            AppConstants.Layout.minimumSplitTopHeight,
+            totalHeight - AppConstants.Layout.minimumTerminalHeight
+        )
+        let requestedHeight = max(proposedHeight, AppConstants.Layout.minimumSplitTopHeight)
+        return min(requestedHeight, safeMaximum)
+    }
+
+    func currentSplitTopHeight(totalHeight: CGFloat) -> CGFloat {
+        protectedSplitTopHeight(totalHeight: totalHeight, proposedHeight: CGFloat(splitViewTopHeight))
+    }
+
+    func updateSplitTopHeight(_ proposedHeight: CGFloat, totalHeight: CGFloat) {
+        let clampedHeight = protectedSplitTopHeight(totalHeight: totalHeight, proposedHeight: proposedHeight)
+        splitViewTopHeight = Double(clampedHeight)
+        officeExpanded = clampedHeight > (AppConstants.Layout.officeCollapsedHeight + AppConstants.Layout.officeExpandedHeight) / 2
+    }
+
+    func toggleSplitTopHeight(totalHeight: CGFloat) {
+        let midpoint = (AppConstants.Layout.officeCollapsedHeight + AppConstants.Layout.officeExpandedHeight) / 2
+        let currentHeight = currentSplitTopHeight(totalHeight: totalHeight)
+        let targetHeight = currentHeight <= midpoint
+            ? AppConstants.Layout.officeExpandedHeight
+            : AppConstants.Layout.officeCollapsedHeight
+        updateSplitTopHeight(targetHeight, totalHeight: totalHeight)
     }
 }

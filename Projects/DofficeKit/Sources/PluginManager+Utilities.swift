@@ -56,6 +56,39 @@ extension PluginManager {
         }
     }
 
+    // MARK: - 재설치 (경로 누락 시)
+
+    public func reinstallIfPossible(_ plugin: PluginEntry) {
+        // 번들 플러그인: 인라인 데이터로 재생성
+        if let bundledID = Self.bundledPluginID(from: plugin.source) {
+            // 번들 레지스트리에서 해당 항목 찾기
+            let catalog = Self.bundledRegistryCatalog()
+            if let item = catalog.first(where: { $0.id == bundledID }) {
+                installBundledPlugin(item, bundledID: bundledID)
+                return
+            }
+        }
+
+        // URL 플러그인: source에서 재다운로드
+        if plugin.sourceType == .rawURL,
+           let url = URL(string: plugin.source),
+           url.scheme == "https" || url.scheme == "http" {
+            install(source: plugin.source)
+            return
+        }
+
+        // brew 플러그인: 재설치
+        #if os(macOS)
+        if plugin.sourceType == .brewFormula || plugin.sourceType == .brewTap {
+            install(source: plugin.source)
+            return
+        }
+        #endif
+
+        // 로컬: 경로를 찾을 수 없으므로 사용자에게 안내
+        finishWithError(NSLocalizedString("plugin.reinstall.manual", comment: ""))
+    }
+
     // MARK: - 토글
 
     public func toggleEnabled(_ plugin: PluginEntry) {
@@ -113,7 +146,7 @@ extension PluginManager {
 
     // MARK: - Shell Helpers
 
-    static func defaultPluginBaseDir() -> URL {
+    public static func defaultPluginBaseDir() -> URL {
         #if os(macOS)
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("DofficePlugins")

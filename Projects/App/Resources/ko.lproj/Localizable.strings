@@ -152,7 +152,7 @@
 "toast.pull.requested" = "풀 요청됨";
 
 /* Claude */
-"claude.not.installed" = "Claude Code 미설치";
+"claude.not.installed" = "AI 에이전트 미설치";
 "claude.install.guide" = "터미널에서 아래 명령어로 설치해주세요:";
 
 /* Office view */
@@ -411,6 +411,8 @@
 "terminal.project.name.a11y" = "프로젝트 이름";
 "terminal.config.execution" = "실행 설정";
 "terminal.config.execution.subtitle" = "모델, 추론 강도, 권한 모드를 같은 규칙으로 정리했습니다.";
+"terminal.agent.not.installed" = "미설치";
+"terminal.agent.none.installed" = "사용 가능한 AI 에이전트가 없습니다. 하나 이상 설치해주세요.";
 "terminal.config.model" = "모델";
 "terminal.config.model.recommended" = "기본 추천";
 "terminal.config.permission" = "권한";
@@ -1345,6 +1347,8 @@
 "overlay.notif.error" = "%@ 오류";
 "overlay.notif.approval.needed" = "%@ 승인 필요";
 "overlay.notif.approval.waiting" = "%@ 실행 승인을 기다리고 있습니다";
+"overlay.notif.arrival" = "%@ 출근!";
+"overlay.notif.arrival.detail" = "%@ 역할로 합류했습니다";
 
 /* OnboardingView */
 "onboard.skip" = "건너뛰기";
@@ -1423,6 +1427,11 @@
 "update.close" = "닫기";
 "update.retry" = "재시도";
 "update.ok" = "확인";
+"update.skip.version" = "이 버전 건너뛰기";
+"update.error.timeout" = "서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
+"update.error.network" = "인터넷 연결을 확인해주세요.";
+"update.error.disk" = "디스크 공간이 부족합니다.";
+"update.bundle.corrupted" = "다운로드된 앱 번들이 손상되었습니다.";
 
 /* MenuBarWidget */
 "menubar.a11y" = "도피스";
@@ -2421,6 +2430,11 @@
 "plugin.error.install.failed" = "설치 실패: %@";
 "plugin.error.tap.failed" = "탭 추가 실패: %@";
 "plugin.error.path.not.found" = "설치 경로를 찾을 수 없습니다.";
+"plugin.path.missing" = "플러그인 경로를 찾을 수 없음";
+"plugin.path.missing.detail" = "경로가 존재하지 않습니다: %@";
+"plugin.reinstall" = "재설치";
+"plugin.reinstall.manual" = "로컬 플러그인은 자동 재설치가 불가합니다. 수동으로 폴더를 다시 지정해주세요.";
+"plugin.open.folder" = "플러그인 폴더 열기";
 "plugin.error.invalid.tap" = "잘못된 tap 형식입니다. user/tap/formula 형식을 사용하세요.";
 "plugin.error.invalid.url" = "잘못된 URL입니다.";
 "plugin.error.download.failed" = "다운로드 실패: %@";
@@ -2555,7 +2569,7 @@
 "theme.custom.preview" = "도피스 커스텀 테마 미리보기";
 
 /* Claude Install */
-"claude.install.message" = "Claude Code CLI가 설치되어 있지 않습니다.\n\n터미널에서 아래 명령어로 설치해주세요:\n\nnpm install -g @anthropic-ai/claude-code\n\n이미 설치했는데 이 메시지가 보인다면:\n• PATH가 설정되지 않았을 수 있습니다\n• 터미널에서 'which claude'를 실행해 경로를 확인하세요\n• nvm/fnm 등 버전 매니저를 사용 중이라면 셸 프로파일(.zshrc)에 초기화 코드가 있는지 확인하세요\n\n설치 후 '재시도' 버튼을 눌러주세요.";
+"claude.install.message" = "사용 가능한 AI 에이전트(Claude, Codex, Gemini)가 하나도 설치되어 있지 않습니다.\n\n아래 중 하나를 터미널에서 설치해주세요:\n\n• Claude: npm install -g @anthropic-ai/claude-code\n• Codex: npm install -g @openai/codex\n• Gemini: npm install -g @google/gemini-cli\n\n이미 설치했는데 이 메시지가 보인다면:\n• PATH가 설정되지 않았을 수 있습니다\n• nvm/fnm 등 버전 매니저를 사용 중이라면 셸 프로파일(.zshrc)에 초기화 코드가 있는지 확인하세요\n\n설치 후 '재시도' 버튼을 눌러주세요.";
 
 /* App Quit */
 "quit.running.title" = "진행 중인 작업이 %d개 있습니다";

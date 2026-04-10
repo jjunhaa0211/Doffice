@@ -75,7 +75,8 @@ extension EventStreamView {
             selectedCommandIndex = min(commands.count - 1, selectedCommandIndex + 1)
             return .handled
         } else if key.key == .tab {
-            let idx = min(selectedCommandIndex, commands.count - 1)
+            let idx = min(selectedCommandIndex, max(0, commands.count - 1))
+            guard idx < commands.count else { return .ignored }
             inputText = "/\(commands[idx].name) "
             return .handled
         }

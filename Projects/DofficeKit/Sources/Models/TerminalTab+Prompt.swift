@@ -87,7 +87,7 @@ extension TerminalTab {
         presentationStyle: StreamBlock.PresentationStyle = .normal,
         appendUserBlock: Bool = true
     ) {
-        guard !prompt.isEmpty else { return }
+        guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         PluginHost.shared.fireEvent(.onPromptSubmit)
 
         // Raw terminal mode: PTY에 직접 전송

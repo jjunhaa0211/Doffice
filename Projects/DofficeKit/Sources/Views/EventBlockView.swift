@@ -139,7 +139,7 @@ public struct EventBlockView: View {
     // MARK: - AI Thought
 
     private var thoughtBlock: some View {
-        let accentColor = isSecret ? Theme.purple : Theme.purple
+        let accentColor: Color = Theme.purple
         let barColors: [Color] = isSecret
             ? [Theme.purple.opacity(0.8), Theme.purple.opacity(0.4)]
             : [Theme.purple.opacity(0.6), Theme.accent.opacity(0.4)]

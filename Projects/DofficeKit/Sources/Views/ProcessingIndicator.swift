@@ -13,7 +13,8 @@ public struct ProcessingIndicator: View {
     public var roleColor: Color?
     @StateObject private var settings = AppSettings.shared
     @State private var dotPhase = 0
-    public let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
+
+    private let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
 
     public var body: some View {
         HStack(spacing: 6) {

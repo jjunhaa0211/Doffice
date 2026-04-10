@@ -489,20 +489,22 @@ extension EventStreamView {
             }
             tab.startSleepWork(task: task, tokenBudget: budget)
         },
-        SlashCommand("btw", "사이드 질문 (Claude 전용)", usage: "<질문>", category: NSLocalizedString("slash.category.general", comment: "")) { tab, _, args in
+        SlashCommand("btw", NSLocalizedString("slash.cmd.btw", value: "사이드 질문 (Claude 전용)", comment: ""), usage: "<질문>", category: NSLocalizedString("slash.category.general", comment: "")) { tab, _, args in
             guard tab.provider == .claude else {
-                tab.appendBlock(.status(message: "⚠️ /btw는 Claude 모드에서만 사용할 수 있습니다."))
+                tab.appendBlock(.status(message: NSLocalizedString("slash.btw.claude.only", value: "⚠️ /btw는 Claude 모드에서만 사용할 수 있습니다.", comment: "")))
                 return
             }
-            let question = args.joined(separator: " ")
+            let question = args.joined(separator: " ").trimmingCharacters(in: .whitespaces)
             guard !question.isEmpty else {
-                tab.appendBlock(.status(message: "💡 사용법: /btw <질문>\n진행 중인 작업에 대해 사이드로 질문할 수 있습니다."))
+                tab.appendBlock(.status(message: NSLocalizedString("slash.btw.usage", value: "💡 사용법: /btw <질문>\n진행 중인 작업에 대해 사이드로 질문할 수 있습니다.", comment: "")))
                 return
             }
-            // 자동 추가된 "/btw ..." userPrompt 블록을 secret 스타일 블록으로 교체
+            // 자동 추가된 "/btw ..." userPrompt 블록을 secret 스타일로 교체
             if let lastIdx = tab.blocks.indices.last,
                case .userPrompt = tab.blocks[lastIdx].blockType {
                 tab.blocks[lastIdx].presentationStyle = .secret
+                // 표시 내용에서 "/btw " 접두사 제거하여 질문만 표시
+                tab.blocks[lastIdx].content = question
             }
             tab.sendPrompt(
                 question,

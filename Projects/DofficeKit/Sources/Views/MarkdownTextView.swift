@@ -17,9 +17,15 @@ public struct MarkdownTextView: View {
     private static let boldRegex = try? NSRegularExpression(pattern: "\\*\\*(.+?)\\*\\*")
     private static let codeRegex = try? NSRegularExpression(pattern: "`([^`]+)`")
 
+    /// Maximum number of block-level elements rendered before truncation.
+    private static let maxRenderedBlocks = 500
+
     public var body: some View {
+        let parsed = parseBlocks()
+        let truncated = parsed.count > Self.maxRenderedBlocks
+        let blocks = truncated ? Array(parsed.prefix(Self.maxRenderedBlocks)) : parsed
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(parseBlocks().enumerated()), id: \.offset) { _, mdBlock in
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, mdBlock in
                 switch mdBlock {
                 case .heading(let level, let content):
                     Text(content)
@@ -43,6 +49,12 @@ public struct MarkdownTextView: View {
                     inlineMarkdown(content)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+            }
+            if truncated {
+                Text("⋯ \(parsed.count - Self.maxRenderedBlocks) more blocks")
+                    .font(Theme.mono(compact ? 10 : 11))
+                    .foregroundColor(Theme.textMuted)
+                    .padding(.top, 4)
             }
         }
     }
@@ -102,9 +114,24 @@ public struct MarkdownTextView: View {
     // MARK: - Inline markdown (bold, code, italic)
 
     private func inlineMarkdown(_ text: String) -> Text {
+        // Fast path: skip regex work when no markdown syntax is present
+        if !text.contains("**") && !text.contains("`") {
+            return Text(text)
+                .font(Theme.mono(compact ? 11 : 12))
+                .foregroundColor(Theme.textSecondary)
+        }
+
         var result = Text("")
         let nsText = text as NSString
         var pos = 0
+
+        // Cache font/color values used repeatedly in the loop
+        let plainFont = Theme.mono(compact ? 11 : 12)
+        let plainColor = Theme.textSecondary
+        let boldFont = Theme.mono(compact ? 11 : 12, weight: .bold)
+        let boldColor = Theme.textPrimary
+        let codeFont = Theme.mono(compact ? 10 : 11)
+        let codeColor = Theme.cyan
 
         while pos < nsText.length {
             let searchRange = NSRange(location: pos, length: nsText.length - pos)
@@ -133,22 +160,22 @@ public struct MarkdownTextView: View {
             guard let m = match else {
                 // No more matches — emit rest as plain text
                 let rest = nsText.substring(from: pos)
-                result = result + Text(rest).font(Theme.mono(compact ? 11 : 12)).foregroundColor(Theme.textSecondary)
+                result = result + Text(rest).font(plainFont).foregroundColor(plainColor)
                 break
             }
 
             // Emit text before the match
             if m.range.location > pos {
                 let before = nsText.substring(with: NSRange(location: pos, length: m.range.location - pos))
-                result = result + Text(before).font(Theme.mono(compact ? 11 : 12)).foregroundColor(Theme.textSecondary)
+                result = result + Text(before).font(plainFont).foregroundColor(plainColor)
             }
 
             // Emit the matched content (capture group 1)
             let inner = nsText.substring(with: m.range(at: 1))
             if isBold {
-                result = result + Text(inner).font(Theme.mono(compact ? 11 : 12, weight: .bold)).foregroundColor(Theme.textPrimary)
+                result = result + Text(inner).font(boldFont).foregroundColor(boldColor)
             } else {
-                result = result + Text(inner).font(Theme.mono(compact ? 10 : 11)).foregroundColor(Theme.cyan)
+                result = result + Text(inner).font(codeFont).foregroundColor(codeColor)
             }
 
             pos = m.range.location + m.range.length
@@ -207,6 +234,7 @@ public struct MarkdownTextView: View {
     private func parseBlocks() -> [MdBlock] {
         let lines = text.components(separatedBy: "\n")
         var blocks: [MdBlock] = []
+        blocks.reserveCapacity(min(lines.count, Self.maxRenderedBlocks + 1))
         var i = 0
 
         while i < lines.count {

@@ -8,6 +8,16 @@ import DesignSystem
 // MARK: - Terminal Tab (이벤트 스트림 기반)
 // ═══════════════════════════════════════════════════════
 
+/// ## Threading Contract
+///
+/// All `@Published` properties must be read and written on the **main thread**.
+/// Methods that mutate observable state — `appendBlock`, `notifyBlocksChanged`,
+/// `handleStreamEvent`, `handleCodexStreamEvent`, `handleGeminiStreamEvent`,
+/// `enforceTokenBudgetIfNeeded`, `cancelProcessing`, `forceStop`, `clearBlocks`
+/// — require the main thread and verify this via `dispatchPrecondition(.onQueue(.main))`.
+///
+/// Background work (process spawning, pipe `readabilityHandler`) dispatches
+/// results back to the main thread with `DispatchQueue.main.async`.
 public class TerminalTab: ObservableObject, Identifiable {
     static let maxRetainedBlocks = 420
     static let maxRetainedFileChanges = 240
@@ -110,6 +120,7 @@ public class TerminalTab: ObservableObject, Identifiable {
 
     // 상태
     @Published public var claudeActivity: ClaudeActivity = .idle
+    @Published public var activityDetail: String?
     @Published public var tokensUsed: Int = 0
     public var inputTokensUsed: Int = 0
     public var outputTokensUsed: Int = 0
